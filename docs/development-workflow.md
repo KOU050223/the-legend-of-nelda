@@ -86,8 +86,8 @@ Application
 └─ Zustand
 
 Quality
-├─ ESLint
-├─ Prettier
+├─ oxlint
+├─ oxfmt
 └─ TypeScript strict mode
 
 Test

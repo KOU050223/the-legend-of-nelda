@@ -664,8 +664,8 @@ Integration Testが追加された段階でCIへ組み込む。
 Phase 1では以下を導入する。
 
 - TypeScript strict mode
-- ESLint
-- Prettier
+- oxlint
+- oxfmt
 - Vitest
 
 可能な範囲で型安全性を維持する。
@@ -820,7 +820,7 @@ Issue #13を完了し、本格的な戦闘実装へ進む前に以下を満た�
 - [ ] Three.js / React Three Fiberが描画できる
 - [ ] 最小3D Sceneが表示できる
 - [ ] Vitestが実行できる
-- [ ] ESLint / Prettierが動作する
+- [ ] oxlint / oxfmtが動作する
 - [ ] Type Checkを実行できる
 - [ ] GitHub ActionsでTest / Buildを実行できる
 - [ ] `game` と `rendering` が分離された初期構成になっている
