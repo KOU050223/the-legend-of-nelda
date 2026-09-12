@@ -1,0 +1,4 @@
+# pnpm の supply-chain policy 用設定。
+# minimumReleaseAgeExclude は「公開直後のため既定では保留される版」を明示的に許可する。
+minimumReleaseAgeExclude:
+  - '@types/three@0.186.0'
