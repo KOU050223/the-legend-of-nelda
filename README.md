@@ -10,6 +10,7 @@ Phase 1 では **1人用ボス戦 PoC** を実装する。基準環境は Deskto
 - [`docs/technical-design.md`](./docs/technical-design.md) — 技術方針・アーキテクチャ
 - [`docs/development-workflow.md`](./docs/development-workflow.md) — 開発フロー
 - [`docs/testing-strategy.md`](./docs/testing-strategy.md) — テスト方針
+- [`docs/testing-guide.md`](./docs/testing-guide.md) — テストの書き方・追加方法
 - [`docs/dependency-policy.md`](./docs/dependency-policy.md) — 依存バージョン方針
 
 ---
@@ -116,6 +117,37 @@ Rendering / Audio / UI はそれを購読する。この分離により、Phase 
 
 各バージョンの選定理由と更新手順は
 [`docs/dependency-policy.md`](./docs/dependency-policy.md) を参照する。
+
+---
+
+## テスト
+
+```bash
+pnpm test          # 1回実行する
+pnpm test:watch    # watch モードで実行する
+```
+
+テストは対象と同じディレクトリへ `*.test.ts` として置く（例: `src/game/combat/judge.ts`
+に対して `src/game/combat/judge.test.ts`）。書き方・時間依存処理の扱い・境界値の
+テスト方法は [`docs/testing-guide.md`](./docs/testing-guide.md) を参照する。
+
+---
+
+## CI
+
+Pull Request と `main` への push で
+[GitHub Actions](./.github/workflows/ci.yml) が以下を順に実行する。
+
+```text
+install → lint → format:check → typecheck → test → build
+```
+
+失敗すると PR 上で CI が赤くなり、失敗した step 名から原因の種類が分かる。
+push 前にローカルで同じ順に流しておくとよい。
+
+```bash
+pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
+```
 
 ---
 

@@ -16,6 +16,9 @@ Phase 1 の1人用ボス戦PoCだけでなく、今後追加する以下の機�
 - 現実世界への覚醒イベント
 - センサー / IoT / 外部デバイス連携
 
+テストの具体的な書き方・実行方法は [`testing-guide.md`](./testing-guide.md) に分離する。
+本ドキュメントは「何をどこまでテストするか」の方針のみを扱う。
+
 個別Phaseの具体的なテストケースは、必要に応じて別ドキュメントへ分離する。
 
 例:
@@ -23,6 +26,7 @@ Phase 1 の1人用ボス戦PoCだけでなく、今後追加する以下の機�
 ```text
 docs/
 ├─ testing-strategy.md
+├─ testing-guide.md
 ├─ single-player-poc-spec.md
 └─ tests/
    ├─ phase1-single-player-test-spec.md
