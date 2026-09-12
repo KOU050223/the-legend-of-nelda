@@ -30,7 +30,10 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! gh issue edit --help 2>&1 | grep -q -- '--add-blocked-by'; then
+# Avoid `gh ... | grep -q` here because `set -o pipefail` can turn grep's
+# intentional early exit into a false failure when gh receives SIGPIPE.
+GH_ISSUE_EDIT_HELP="$(gh issue edit --help 2>&1)"
+if ! grep -q -- '--add-blocked-by' <<< "$GH_ISSUE_EDIT_HELP"; then
   echo "ERROR: Your GitHub CLI does not support native issue dependencies."
   echo "Update gh to a recent version and try again."
   exit 1
@@ -40,8 +43,12 @@ add_dependency() {
   issue="$1"
   blocker="$2"
 
-  if gh issue view "$issue" --repo "$REPO" --json blockedBy \
-      --jq '.blockedBy[].number' 2>/dev/null | grep -qx "$blocker"; then
+  current_blockers="$(
+    gh issue view "$issue" --repo "$REPO" --json blockedBy \
+      --jq '.blockedBy[].number' 2>/dev/null || true
+  )"
+
+  if grep -qx "$blocker" <<< "$current_blockers"; then
     echo "SKIP  #$issue is already blocked by #$blocker"
     return 0
   fi
