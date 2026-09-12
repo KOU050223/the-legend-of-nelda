@@ -1,16 +1,27 @@
 import type { PlayerAction } from '../types/player-action';
 import type { JudgeResult } from '../types/combat-state';
 
-/** 判定に必要な攻撃側の情報。 */
+/**
+ * 判定に必要な攻撃側の情報。
+ *
+ * 受付ウィンドウは着弾時刻からの符号付きオフセット (ms) で表す。
+ * 仕様上の受付幅は着弾前後で非対称なため (回避 -600ms〜+100ms /
+ * ガード -700ms〜+100ms、docs/tests/phase1-single-player-test-spec.md §5)、
+ * 単一の幅ではなく start / end を個別に持つ。
+ */
 export interface AttackTiming {
   /** この攻撃に対する正解入力。 */
   correctAction: PlayerAction;
   /** 着弾時刻 (ms)。 */
   hitAt: number;
-  /** 完全回避 / ジャストガードとみなす許容幅 (ms)。 */
-  perfectWindowMs: number;
-  /** 入力自体を受け付ける幅 (ms)。これを外れると MISS。 */
-  acceptWindowMs: number;
+  /** 入力受付の開始オフセット (ms)。着弾より前なので通常は負値。 */
+  acceptFromMs: number;
+  /** 入力受付の終了オフセット (ms)。着弾より後なので通常は正値。 */
+  acceptToMs: number;
+  /** 完全回避 / ジャストガードとみなす開始オフセット (ms)。通常は負値。 */
+  perfectFromMs: number;
+  /** 完全回避 / ジャストガードとみなす終了オフセット (ms)。通常は正値。 */
+  perfectToMs: number;
 }
 
 export interface JudgeInput {
@@ -25,9 +36,10 @@ export interface JudgeInput {
  * docs/technical-design.md §4 の resolvePlayerAction に相当する。
  */
 export function judgePlayerAction({ attack, action, inputAt }: JudgeInput): JudgeResult {
-  const diff = Math.abs(inputAt - attack.hitAt);
+  /** 着弾時刻からの符号付きオフセット。負なら着弾前、正なら着弾後。 */
+  const offset = inputAt - attack.hitAt;
 
-  if (diff > attack.acceptWindowMs) {
+  if (offset < attack.acceptFromMs || offset > attack.acceptToMs) {
     return 'MISS';
   }
 
@@ -35,7 +47,7 @@ export function judgePlayerAction({ attack, action, inputAt }: JudgeInput): Judg
     return 'HIT';
   }
 
-  if (diff > attack.perfectWindowMs) {
+  if (offset < attack.perfectFromMs || offset > attack.perfectToMs) {
     return 'HIT';
   }
 

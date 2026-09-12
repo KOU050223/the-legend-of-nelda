@@ -39,7 +39,7 @@ Nix 自体の導入は [Determinate Nix Installer](https://determinate.systems/n
 `.node-version` のバージョン（**24.19.0**）を nvm / fnm / mise 等で用意する。
 
 ```bash
-nvm use          # または fnm use / mise install
+nvm use $(cat .node-version)   # または fnm use / mise install
 corepack enable  # package.json の packageManager から pnpm 11.25.0 を用意する
 pnpm install
 pnpm dev

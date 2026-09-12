@@ -21,7 +21,7 @@
   },
   "overrides": [
     {
-      "files": ["src/game/**/*.ts"],
+      "files": ["src/game/**/*.{ts,tsx}"],
       "rules": {
         "no-restricted-imports": [
           "error",
