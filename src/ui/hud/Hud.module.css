@@ -1,0 +1,61 @@
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  color: #f2eefb;
+  font-family: system-ui, sans-serif;
+}
+
+.label {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  opacity: 0.8;
+}
+
+.bossBar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 40rem;
+  margin-inline: auto;
+  width: 100%;
+}
+
+.gauge {
+  height: 0.75rem;
+  border: 1px solid rgb(242 238 251 / 40%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.gaugeFill {
+  height: 100%;
+  background: linear-gradient(90deg, #c2496b, #e0794f);
+  transition: width 200ms ease-out;
+}
+
+.sleepiness {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lastAction {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  letter-spacing: 0.2em;
+  opacity: 0.65;
+}
