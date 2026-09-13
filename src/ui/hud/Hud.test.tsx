@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { INITIAL_BOSS_HP } from '@/game/config/combat-balance';
 import { useGameStore } from '@/store/game-store';
 
-import { Hud } from './Hud';
+import { Hud, type HudLayer } from './Hud';
 import styles from './Hud.module.css';
 
 /**
@@ -25,11 +25,20 @@ describe('Hud', () => {
   // setState は merge のため、このテストが読む項目を明示的に戻す。
   // 参照する項目を増やしたら、ここへも追加する。
   beforeEach(() => {
+    vi.useFakeTimers();
     useGameStore.setState({
+      combatState: 'INTRO',
       bossHp: INITIAL_BOSS_HP,
       sleepiness: 0,
       lastAction: null,
+      lastAttackId: null,
+      lastInputRejection: null,
+      lastResult: null,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('SLEEPINESSの値を表示する', () => {
@@ -65,5 +74,90 @@ describe('Hud', () => {
     ])('Boss HPが $bossHp なら幅 $width になる', ({ bossHp, width }) => {
       expect(renderGaugeFill(bossHp).style.width).toBe(width);
     });
+  });
+
+  describe('イベントフィードバック', () => {
+    it.each([
+      { lastResult: 'PERFECT_DODGE', message: 'PERFECT DODGE' },
+      { lastResult: 'JUST_GUARD', message: 'JUST GUARD' },
+      { lastResult: 'TOO_EARLY', message: 'TOO EARLY' },
+      { lastResult: 'MISS', message: 'HIT' },
+    ] as const)('$lastResult のとき $message を表示する', ({ lastResult, message }) => {
+      useGameStore.setState({ lastResult });
+
+      render(<Hud />);
+
+      expect(screen.getByText(message)).toBeInTheDocument();
+    });
+
+    it('あくび衝撃波の被弾ではDROWSY!を表示する', () => {
+      useGameStore.setState({ lastAttackId: 'YAWN_WAVE', lastResult: 'HIT' });
+
+      render(<Hud />);
+
+      expect(screen.getByText('DROWSY!')).toBeInTheDocument();
+    });
+
+    it('ふかふか布団の被弾ではGOOD NIGHTを表示する', () => {
+      useGameStore.setState({ lastAttackId: 'FLUFFY_FUTON', lastResult: 'HIT' });
+
+      render(<Hud />);
+
+      expect(screen.getByText('GOOD NIGHT')).toBeInTheDocument();
+    });
+
+    it('反撃Window外の攻撃ではWHIFFを表示する', () => {
+      useGameStore.setState({ lastInputRejection: 'WHIFF' });
+
+      render(<Hud />);
+
+      expect(screen.getByText('WHIFF')).toBeInTheDocument();
+    });
+
+    it('大ダウン中はCOUNTER!を表示する', () => {
+      useGameStore.setState({ combatState: 'BOSS_DOWN' });
+
+      render(<Hud />);
+
+      expect(screen.getByText('COUNTER!')).toBeInTheDocument();
+    });
+
+    it('イベント表示は所定時間後に消える', () => {
+      useGameStore.setState({ lastResult: 'PERFECT_DODGE' });
+
+      render(<Hud eventDurationMs={1_000} />);
+
+      void act(() => vi.advanceTimersByTime(1_000));
+
+      expect(screen.queryByText('PERFECT DODGE')).not.toBeInTheDocument();
+    });
+
+    it('同じイベントでも再発時には表示時間をリセットする', () => {
+      const { rerender } = render(<Hud eventDurationMs={1_000} />);
+
+      act(() => useGameStore.getState().recordResult('PERFECT_DODGE'));
+      void act(() => vi.advanceTimersByTime(1_000));
+      expect(screen.queryByText('PERFECT DODGE')).not.toBeInTheDocument();
+
+      act(() => useGameStore.getState().recordResult('PERFECT_DODGE'));
+      rerender(<Hud eventDurationMs={1_000} />);
+
+      expect(screen.getByText('PERFECT DODGE')).toBeInTheDocument();
+    });
+  });
+
+  it('無効にしたレイヤーを描画しない', () => {
+    const layers: Partial<Record<HudLayer, boolean>> = {
+      BOSS_HP: false,
+      SLEEPINESS: false,
+      ACTION_UI: false,
+      EVENT_UI: false,
+    };
+
+    render(<Hud layers={layers} />);
+
+    expect(screen.queryByText('SLEEP DEMON')).not.toBeInTheDocument();
+    expect(screen.queryByText('HORI SLEEPINESS')).not.toBeInTheDocument();
+    expect(screen.queryByText('READY')).not.toBeInTheDocument();
   });
 });
