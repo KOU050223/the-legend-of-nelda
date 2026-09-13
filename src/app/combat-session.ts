@@ -1,11 +1,13 @@
-import { createBossAttackController, type BossAttack } from '@/game/attacks/boss-attack';
-import { createFluffyFutonAttack } from '@/game/attacks/fluffy-futon';
-import { createPillowSweep } from '@/game/attacks/pillow-sweep';
-import { yawnWave } from '@/game/attacks/yawn-wave';
+import { createBossAttackController } from '@/game/attacks/boss-attack';
 import { createRealClock, type GameClock } from '@/game/clock';
 import { createCombatStateMachine } from '@/game/combat/state-machine';
 import { createCombatVitals } from '@/game/combat/vitals';
 import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
+import {
+  createAttackSequence,
+  type AttackSequence,
+  type SequenceStepDefinition,
+} from '@/game/sequence/attack-sequence';
 import type { PlayerAction } from '@/game/types';
 import { useGameStore } from '@/store/game-store';
 import { syncHudWithGameEvents } from '@/ui/hud/game-event-sync';
@@ -41,31 +43,12 @@ export interface CombatSessionOptions {
   frameLoop?: FrameLoop;
   /** 技の出し分けに使う乱数。テストから固定する。 */
   random?: () => number;
-}
-
-/**
- * Phase 1 の攻撃順。
- *
- * 出題の設計 (頻度・難易度カーブ・連携) は仕様がまだ定めていないため、
- * ここでは定義済みの3技を順に出すだけの暫定実装にする。HUD が実際の戦闘
- * イベントで動くことを確かめるための最小構成で、出題ロジックそのものは
- * 別Issueで詰める。
- */
-function createAttackRotation(random: () => number): () => BossAttack {
-  const factories: ReadonlyArray<() => BossAttack> = [
-    () => createPillowSweep({ random }),
-    () => yawnWave,
-    () => createFluffyFutonAttack({ random }),
-  ];
-
-  let next = 0;
-
-  return () => {
-    // 剰余で必ず範囲内に収まるが、配列アクセスの型を絞るために既定を置く。
-    const factory = factories[next % factories.length] ?? factories[0]!;
-    next += 1;
-    return factory();
-  };
+  /** チュートリアル順の差し替え。空配列を渡せばチュートリアルを飛ばせる。 */
+  tutorialSequence?: readonly SequenceStepDefinition[];
+  /** 本戦の攻撃順の差し替え (完了条件「本戦の攻撃順を設定から調整できる」)。 */
+  mainSequence?: readonly SequenceStepDefinition[];
+  /** 出題順そのものを差し替える。指定した場合 tutorialSequence / mainSequence は使わない。 */
+  sequence?: AttackSequence;
 }
 
 /**
@@ -79,6 +62,9 @@ export function createCombatSession({
   clock = createRealClock(),
   frameLoop = requestAnimationFrameLoop,
   random = Math.random,
+  tutorialSequence,
+  mainSequence,
+  sequence,
 }: CombatSessionOptions = {}): CombatSession {
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
@@ -99,7 +85,14 @@ export function createCombatSession({
   });
 
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
-  const nextAttack = createAttackRotation(random);
+  const attackSequence =
+    sequence ??
+    createAttackSequence({
+      random,
+      // exactOptionalPropertyTypes のため、未指定のキーは渡さずに既定へ任せる。
+      ...(tutorialSequence ? { tutorial: tutorialSequence } : {}),
+      ...(mainSequence ? { mainBattle: mainSequence } : {}),
+    });
 
   const stopLoop = frameLoop(() => {
     controller.update();
@@ -107,9 +100,23 @@ export function createCombatSession({
 
     // IDLE は次の技を待つ状態。戦闘が終わっていれば startAttack が false を
     // 返すのでここでは State だけを見る。
-    if (machine.state === 'IDLE') {
-      controller.start(nextAttack());
+    if (machine.state !== 'IDLE') {
+      return;
     }
+
+    const step = attackSequence.next();
+
+    // シーケンスの情報は攻撃そのものより先に流す。UI が補助表示を
+    // 切り替えてから予兆の Cue が届く順にしておくため。
+    eventBus.emit({
+      type: 'SEQUENCE_STEP_STARTED',
+      phase: step.phase,
+      assist: step.assist,
+      attackId: step.attackId,
+      stepIndex: step.index,
+    });
+
+    controller.start(step.attack);
   });
 
   return {

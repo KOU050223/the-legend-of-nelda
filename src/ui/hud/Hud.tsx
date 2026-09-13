@@ -21,6 +21,26 @@ function hitMessageFor(attackId: AttackId | null): string {
 }
 
 /**
+ * チュートリアルの操作補助表示。docs/single-player-poc-spec.md §16。
+ *
+ * 出すのは「この技に何で応じるか」だけで、左右どちらへ回避するかまでは
+ * 出さない。方向はボスのモーションと SE から読ませるのがこのゲームの
+ * 体験そのもので、答えを書いてしまうと枕薙ぎ払いの学習が成立しない。
+ */
+function assistMessageFor(attackId: AttackId | null): string | null {
+  switch (attackId) {
+    case 'PILLOW_SWEEP':
+      return '\u2190 / \u2192 DODGE';
+    case 'YAWN_WAVE':
+      return 'GUARD';
+    case 'FLUFFY_FUTON':
+      return '\u2190 / \u2192 DODGE \u2192 ATTACK';
+    default:
+      return null;
+  }
+}
+
+/**
  * 表示イベントを文言へ移す。入力はこの1つの値だけなので、
  * 別々の State を突き合わせて文言が変わることがない (UI-008)。
  */
@@ -93,10 +113,14 @@ export function Hud({
   const sleepiness = useGameStore((state) => state.sleepiness);
   const sleepinessMax = useGameStore((state) => state.sleepinessMax);
   const lastAction = useGameStore((state) => state.lastAction);
+  const lastAttackId = useGameStore((state) => state.lastAttackId);
+  const assistVisible = useGameStore((state) => state.assistVisible);
   const eventFeedback = useGameStore((state) => state.eventFeedback);
   const eventSequence = useGameStore((state) => state.eventSequence);
 
   const eventMessage = eventMessageFor(eventFeedback);
+  // 本戦の手では assistVisible が false なので、答えそのものは出ない (SEQ-004)。
+  const assistMessage = assistVisible ? assistMessageFor(lastAttackId) : null;
   // 上限は設定で変えられるため、表示は常に割合へ直してから丸める。
   const sleepinessPercent = Math.round(percentOf(sleepiness, sleepinessMax));
 
@@ -122,6 +146,10 @@ export function Hud({
             <span aria-hidden="true">%</span>
           </span>
         </div>
+      )}
+
+      {isLayerVisible('TUTORIAL_UI', layers) && assistMessage !== null && (
+        <p className={styles.tutorialAssist}>{assistMessage}</p>
       )}
 
       {isLayerVisible('EVENT_UI', layers) && eventMessage !== null && (

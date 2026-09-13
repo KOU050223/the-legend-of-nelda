@@ -21,6 +21,11 @@ export function syncHudWithGameEvents(eventBus: GameEventBus): () => void {
         // 前の演出を消さないと、表示が攻撃フェーズを跨いで残る (UI-008)。
         if (isAttackId(event.attackId)) store.recordAttack(event.attackId);
         return;
+      case 'SEQUENCE_STEP_STARTED':
+        // 補助表示の可否はシーケンスだけが決める。UI 側が
+        // 「チュートリアルかどうか」を技IDから推測しないための一方向転写。
+        store.recordSequenceStep({ phase: event.phase, assist: event.assist });
+        return;
       case 'JUDGED':
         store.recordResult(event.result);
         return;

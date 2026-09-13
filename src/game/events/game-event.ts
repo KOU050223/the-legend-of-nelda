@@ -1,3 +1,4 @@
+import type { SequencePhase } from '../sequence/attack-sequence';
 import type { CombatState, JudgeResult } from '../types/combat-state';
 import type { PlayerAction } from '../types/player-action';
 
@@ -32,6 +33,20 @@ export type InputRejectionReason = 'TOO_EARLY' | 'WHIFF';
  */
 export type GameEvent =
   | { type: 'ATTACK_STARTED'; attackId: string }
+  | {
+      /**
+       * シーケンスが1手進んだ。チュートリアルの補助表示は、UI がこの
+       * イベントだけを見て切り替える。UI から Attack Sequence を直接
+       * 引かせないための唯一の経路 (docs/technical-design.md §9)。
+       */
+      type: 'SEQUENCE_STEP_STARTED';
+      phase: SequencePhase;
+      /** 操作補助表示を出す手か (SEQ-003)。本戦では常に false (SEQ-004)。 */
+      assist: boolean;
+      attackId: string;
+      /** シーケンス全体を通した0始まりの通し番号。 */
+      stepIndex: number;
+    }
   | { type: 'ATTACK_VISUAL_CUE'; attackId: string; cue: string; durationMs?: number }
   | { type: 'ATTACK_AUDIO_CUE'; attackId: string; cue: string; durationMs?: number }
   | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
