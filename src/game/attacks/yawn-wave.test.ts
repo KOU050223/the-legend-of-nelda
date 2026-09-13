@@ -78,9 +78,10 @@ describe('あくび衝撃波', () => {
   it('正しいタイミングのガードをJUST GUARDとして扱う', () => {
     const { inputAt, judged, machine, runToJudge, vitals } = setup();
 
-    expect(inputAt(0, 'GUARD')).toBe('ACCEPTED');
+    const acceptance = inputAt(0, 'GUARD');
     runToJudge();
 
+    expect(acceptance).toBe('ACCEPTED');
     expect(judged()).toEqual(['JUST_GUARD']);
     expect(machine.state).toBe('COUNTER_WINDOW');
     expect(vitals.sleepiness).toBe(INITIAL_SLEEPINESS);
@@ -90,9 +91,10 @@ describe('あくび衝撃波', () => {
   it.each(['DODGE_LEFT', 'DODGE_RIGHT'] as const)('%s を入力すると失敗して被弾する', (action) => {
     const { inputAt, judged, machine, runToJudge, vitals } = setup();
 
-    expect(inputAt(0, action)).toBe('ACCEPTED');
+    const acceptance = inputAt(0, action);
     runToJudge();
 
+    expect(acceptance).toBe('ACCEPTED');
     expect(judged()).toEqual(['HIT']);
     expect(machine.state).toBe('HIT');
     expect(vitals.sleepiness).toBe(yawnWave.sleepinessDamage);
@@ -102,8 +104,10 @@ describe('あくび衝撃波', () => {
   it('ガード早押し (-710 ms) は成功せず、早押しとして弾く', () => {
     const { events, inputAt, judged, machine, runToJudge, vitals } = setup();
 
-    expect(inputAt(-710, 'GUARD')).toBe('TOO_EARLY');
+    const acceptance = inputAt(-710, 'GUARD');
     runToJudge();
+
+    expect(acceptance).toBe('TOO_EARLY');
 
     // 早押しは判定へ回らないので JUDGED を発行しない。採用された入力が
     // ないまま着弾するため、結果としては被弾する (INPUT-005)。
@@ -127,9 +131,10 @@ describe('あくび衝撃波', () => {
   ])('$label ($offsetMs ms) のガードは成功する', ({ offsetMs }) => {
     const { inputAt, judged, machine, runToJudge } = setup();
 
-    expect(inputAt(offsetMs, 'GUARD')).toBe('ACCEPTED');
+    const acceptance = inputAt(offsetMs, 'GUARD');
     runToJudge();
 
+    expect(acceptance).toBe('ACCEPTED');
     expect(judged()).toEqual(['JUST_GUARD']);
     expect(machine.state).toBe('COUNTER_WINDOW');
   });
@@ -158,14 +163,16 @@ describe('あくび衝撃波', () => {
     runToJudge();
     const openedAt = machine.stateDeadline! - yawnWave.counterWindowMs;
 
-    expect(yawnWave.counterWindowMs).toBe(2000);
-
-    // 閉じる直前はまだ反撃可能で、閉じたあとは COUNTER_WINDOW を抜けている。
+    // 閉じる直前と閉じたあとの2点を見る。反撃可能時間の長さは
+    // 「いつ閉じるか」でしか観測できないため。
     advanceTo(openedAt + yawnWave.counterWindowMs - 1);
-    expect(machine.state).toBe('COUNTER_WINDOW');
-
+    const beforeClose = machine.state;
     advanceTo(openedAt + yawnWave.counterWindowMs);
-    expect(machine.state).not.toBe('COUNTER_WINDOW');
+    const afterClose = machine.state;
+
+    expect(yawnWave.counterWindowMs).toBe(2000);
+    expect(beforeClose).toBe('COUNTER_WINDOW');
+    expect(afterClose).not.toBe('COUNTER_WINDOW');
   });
 
   // YAWN-009
@@ -174,11 +181,13 @@ describe('あくび衝撃波', () => {
 
     inputAt(0, 'GUARD');
     runToJudge();
+    const openedCounterWindow = machine.state;
 
-    expect(machine.state).toBe('COUNTER_WINDOW');
-    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    const acceptance = controller.submitAction('ATTACK');
     advanceTo(machine.stateDeadline!);
 
+    expect(openedCounterWindow).toBe('COUNTER_WINDOW');
+    expect(acceptance).toBe('ACCEPTED');
     expect(vitals.bossHp).toBe(INITIAL_BOSS_HP - 15);
   });
 
@@ -204,9 +213,10 @@ describe('あくび衝撃波', () => {
   it('Visual Cueを無効化しても攻撃判定は正常に進行する', () => {
     const { events, inputAt, judged, machine, runToJudge } = setup({ visual: false });
 
-    expect(inputAt(0, 'GUARD')).toBe('ACCEPTED');
+    const acceptance = inputAt(0, 'GUARD');
     runToJudge();
 
+    expect(acceptance).toBe('ACCEPTED');
     expect(events.some((event) => event.type === 'ATTACK_VISUAL_CUE')).toBe(false);
     expect(events.some((event) => event.type === 'ATTACK_AUDIO_CUE')).toBe(true);
     expect(judged()).toEqual(['JUST_GUARD']);

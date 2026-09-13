@@ -19,8 +19,15 @@ import { defineBossAttack, type BossAttack } from './boss-attack';
  */
 const TELEGRAPH_MS = 2000;
 
-/** ATTACK State に入ってから衝撃波が着弾するまでの時間。 */
-const HIT_AFTER_MS = 700;
+/**
+ * ATTACK State に入ってから衝撃波が着弾するまでの時間。
+ *
+ * ATTACK の滞在時間は `hitAfterMs + acceptToMs` で導出されるため
+ * (boss-attack.ts の toCombatAttack)、ここを 450ms に採ると 550ms になり、
+ * docs/single-player-poc-spec.md §15 の ATTACK 0.3〜0.6秒 に収まる。
+ * 同 §8 の発動 (約0.4〜0.5秒) とも揃う。
+ */
+const HIT_AFTER_MS = 450;
 
 /**
  * ガードの受付幅。docs/single-player-poc-spec.md §12。
