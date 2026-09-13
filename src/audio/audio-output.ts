@@ -1,4 +1,4 @@
-import { SOUND_MANIFEST, type SoundId } from './sound-manifest';
+import { SOUND_IDS, SOUND_MANIFEST, type SoundId } from './sound-manifest';
 
 /**
  * SE を実際に鳴らす口。docs/technical-design.md §15
@@ -38,20 +38,28 @@ export function createSilentAudioOutput(): AudioOutput {
  * 2回目以降の読み込みは走らない。
  */
 export function createHtmlAudioOutput(): AudioOutput {
-  /** 事前読み込み用。ここへ入れておくと初回再生で待たされない。 */
+  /**
+   * 事前読み込み用の要素。ここでは鳴らさず、読み込みを先に済ませるためだけに持つ。
+   *
+   * 生成時にまとめて作る。再生要求が来てから作ったのでは、その再生自体は
+   * 待たされるので事前読み込みにならない。SE は予兆の頭で鳴るため、
+   * その瞬間に数十KBを取りに行くと出音が遅れる。
+   */
   const preloaded = new Map<SoundId, HTMLAudioElement>();
+
+  for (const soundId of SOUND_IDS) {
+    const element = new Audio(SOUND_MANIFEST[soundId].src);
+    element.preload = 'auto';
+    preloaded.set(soundId, element);
+  }
 
   return {
     play(soundId, volume) {
       const definition = SOUND_MANIFEST[soundId];
       if (!definition) return;
 
-      if (!preloaded.has(soundId)) {
-        const element = new Audio(definition.src);
-        element.preload = 'auto';
-        preloaded.set(soundId, element);
-      }
-
+      // 読み込みは preloaded 側で済んでいるので、ここは同じURLを指すだけ。
+      // ブラウザのキャッシュに載っているため再取得は走らない。
       const instance = new Audio(definition.src);
       instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
 
