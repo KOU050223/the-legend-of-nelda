@@ -1,4 +1,12 @@
 import type { JudgeResult } from '../types/combat-state';
+import type { PlayerAction } from '../types/player-action';
+
+/**
+ * 入力が受理されなかった理由のうち、プレイヤーへ提示するもの。
+ * ロック中に捨てた入力は演出を持たないため含めない
+ * (docs/single-player-poc-spec.md §13 / UI-005 / UI-006)。
+ */
+export type InputRejectionReason = 'TOO_EARLY' | 'WHIFF';
 
 /**
  * Game Logic が発行するイベント。
@@ -18,6 +26,7 @@ export type GameEvent =
   | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
   | { type: 'ATTACK_ENDED'; attackId: string }
   | { type: 'JUDGED'; result: JudgeResult }
+  | { type: 'INPUT_REJECTED'; action: PlayerAction; reason: InputRejectionReason }
   | { type: 'BOSS_HP_CHANGED'; hp: number }
   | { type: 'SLEEPINESS_CHANGED'; value: number };
 

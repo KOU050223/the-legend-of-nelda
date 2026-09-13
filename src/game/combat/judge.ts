@@ -39,7 +39,14 @@ export function judgePlayerAction({ attack, action, inputAt }: JudgeInput): Judg
   /** 着弾時刻からの符号付きオフセット。負なら着弾前、正なら着弾後。 */
   const offset = inputAt - attack.hitAt;
 
-  if (offset < attack.acceptFromMs || offset > attack.acceptToMs) {
+  // 受付前と受付後を分ける。早すぎる入力は無効化して硬直させるだけだが、
+  // 遅すぎる入力は被弾する (docs/single-player-poc-spec.md §13 /
+  // INPUT-005 は TOO EARLY、INPUT-008 は被弾)。
+  if (offset < attack.acceptFromMs) {
+    return 'TOO_EARLY';
+  }
+
+  if (offset > attack.acceptToMs) {
     return 'MISS';
   }
 
