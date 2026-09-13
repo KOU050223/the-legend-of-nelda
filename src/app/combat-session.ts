@@ -77,14 +77,6 @@ export function createCombatSession({
   });
   controller = createBossAttackController({ clock, machine, vitals, eventBus });
 
-  // ゲージの分母は戦闘生成時の設定値。表示側が既定値を直接読むと、
-  // 上限を変えたときに割合がずれる。
-  useGameStore.getState().setVitalsMaximums({
-    bossHpMax: vitals.bossHpMax,
-    sleepinessMax: vitals.sleepinessMax,
-  });
-
-  const unsubscribeHud = syncHudWithGameEvents(eventBus);
   const attackSequence =
     sequence ??
     createAttackSequence({
@@ -93,6 +85,21 @@ export function createCombatSession({
       ...(tutorialSequence ? { tutorial: tutorialSequence } : {}),
       ...(mainSequence ? { mainBattle: mainSequence } : {}),
     });
+
+  // ゲージの分母は戦闘生成時の設定値。表示側が既定値を直接読むと、
+  // 上限を変えたときに割合がずれる。
+  useGameStore.getState().setVitalsMaximums({
+    bossHpMax: vitals.bossHpMax,
+    sleepinessMax: vitals.sleepinessMax,
+  });
+
+  // 進行の表示状態は戦闘ごとに初期化する。store はセッションより長く生きるので、
+  // 前の戦闘が本戦の途中や補助表示ありの手で終わっていると、その値のまま
+  // 次の INTRO が始まってしまう (仕様 §17 の 0〜5秒は登場演出で、
+  // 補助表示を出す区間ではない)。
+  useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
+
+  const unsubscribeHud = syncHudWithGameEvents(eventBus);
 
   const stopLoop = frameLoop(() => {
     controller.update();

@@ -98,11 +98,14 @@ export interface AttackSequence {
   /**
    * 次の1手を取り出して進める。
    *
-   * 本戦を出し切ったあとは末尾の手を繰り返す。仕様のタイムライン (§17) は
+   * 本戦を出し切ったあとは本戦の末尾の手を繰り返す。仕様のタイムライン (§17) は
    * 全成功で撃破できる長さだが、被弾が続くとボスHPを残したまま列を使い切る。
    * そこで停止すると IDLE のまま戦闘が動かなくなり、完了条件「最終ふかふか布団まで
    * 1戦を通して進行できる」も、敗北 (SLEEPINESS 100%) も成立しなくなるため、
    * 決着がつくまで最後の手を出し続ける。仕様に記述が無いための暫定判断。
+   *
+   * 繰り返すのは本戦の手だけで、チュートリアルは必ず出し切って本戦へ渡す
+   * (SEQ-002)。チュートリアルの手を繰り返すと本戦へ入れなくなる。
    */
   next(): SequenceStep;
   /** 現在の段。まだ1手も出していなければ先頭のステップの段を返す。 */
@@ -152,19 +155,25 @@ export function createAttackSequence({
   tutorial = DEFAULT_TUTORIAL_SEQUENCE,
   mainBattle = DEFAULT_MAIN_SEQUENCE,
 }: AttackSequenceOptions = {}): AttackSequence {
-  const steps: readonly SequenceStepDefinition[] = [...tutorial, ...mainBattle];
-
-  if (steps.length === 0) {
-    throw new Error('攻撃シーケンスが空です。チュートリアルか本戦のどちらかに1手以上必要です。');
+  // 本戦が空だと、チュートリアルを出し切ったあとに繰り返す手が
+  // チュートリアル側のものしか無くなり、本戦へ入れないまま止まる (SEQ-002)。
+  if (mainBattle.length === 0) {
+    throw new Error('本戦の攻撃順が空です。本戦には1手以上必要です。');
   }
+
+  const steps: readonly SequenceStepDefinition[] = [...tutorial, ...mainBattle];
 
   let index = 0;
 
-  /** index 番目の手。使い切ったあとは末尾の手を返し続ける。 */
+  /**
+   * index 番目の手。使い切ったあとは本戦の末尾の手を返し続ける。
+   * 繰り返しの対象を本戦に限ることで、チュートリアルは必ず有限回で終わる。
+   */
   function definitionAt(position: number): SequenceStepDefinition {
     const clamped = Math.min(position, steps.length - 1);
 
-    // noUncheckedIndexedAccess のための既定。clamped は必ず範囲内。
+    // noUncheckedIndexedAccess のための既定。clamped は必ず範囲内で、
+    // 末尾は本戦の最後の手 (mainBattle は空でないことを上で保証している)。
     return steps[clamped] ?? steps[steps.length - 1]!;
   }
 

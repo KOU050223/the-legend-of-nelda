@@ -227,4 +227,21 @@ describe('createCombatSession', () => {
     expect(startedAttacks).toContain('FLUFFY_FUTON');
     expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
   });
+
+  it('戦闘を作り直すと前の戦闘の補助表示が残らない', () => {
+    // store はセッションより長く生きるので、前の戦闘の進行状態が
+    // 次の INTRO へ持ち越されないことを見る。
+    useGameStore.setState({ sequencePhase: 'MAIN', assistVisible: true });
+
+    createCombatSession({
+      clock: createFakeClock(),
+      frameLoop: createManualLoop().loop,
+      random: () => 0,
+    });
+
+    expect(useGameStore.getState()).toMatchObject({
+      sequencePhase: 'TUTORIAL',
+      assistVisible: false,
+    });
+  });
 });

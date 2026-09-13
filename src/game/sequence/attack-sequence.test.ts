@@ -112,6 +112,22 @@ describe('createAttackSequence', () => {
     ]);
   });
 
+  it('使い切ったあと繰り返すのは本戦の手で、チュートリアルへ戻らない', () => {
+    // SEQ-002。チュートリアルの手を繰り返すと本戦へ入れなくなる。
+    const sequence = createAttackSequence({
+      random: fixedRandom(0),
+      tutorial: [{ slot: 'PILLOW_SWEEP', phase: 'TUTORIAL', assist: true }],
+      mainBattle: [{ slot: 'YAWN_WAVE', phase: 'MAIN', assist: false }],
+    });
+
+    expect(take(sequence, 4).map((step) => ({ id: step.attackId, phase: step.phase }))).toEqual([
+      { id: 'PILLOW_SWEEP', phase: 'TUTORIAL' },
+      { id: 'YAWN_WAVE', phase: 'MAIN' },
+      { id: 'YAWN_WAVE', phase: 'MAIN' },
+      { id: 'YAWN_WAVE', phase: 'MAIN' },
+    ]);
+  });
+
   it('同じ技が続いても攻撃方向は毎回引き直す', () => {
     // 完了条件「左右ランダムに発動する」。乱数を交互に返して向きが変わることを見る。
     let call = 0;
@@ -140,9 +156,11 @@ describe('createAttackSequence', () => {
     expect(sequence.next()).toMatchObject({ index: 0, attackId: 'PILLOW_SWEEP', assist: true });
   });
 
-  it('出題が1手も無い設定は組み立て時に弾く', () => {
+  it('本戦が空の設定は組み立て時に弾く', () => {
+    // 本戦が無いとチュートリアルの手を繰り返し続け、本戦へ入れない (SEQ-002)。
+    expect(() => createAttackSequence({ mainBattle: [] })).toThrow('本戦の攻撃順が空です');
     expect(() => createAttackSequence({ tutorial: [], mainBattle: [] })).toThrow(
-      '攻撃シーケンスが空です',
+      '本戦の攻撃順が空です',
     );
   });
 });
