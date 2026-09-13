@@ -15,7 +15,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deps:check": "pnpm outdated"
+    "deps:check": "pnpm outdated",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
