@@ -28,6 +28,9 @@ export function createSilentAudioOutput(): AudioOutput {
   };
 }
 
+/** 音の許可を取りにいくきっかけになる操作。 */
+const UNLOCK_EVENTS = ['keydown', 'pointerdown'] as const;
+
 /**
  * HTMLAudioElement による最小実装。Phase 1 は「通常のブラウザ Audio で構わない」
  * (docs/technical-design.md §15)。
@@ -61,32 +64,75 @@ export function createHtmlAudioOutput(): AudioOutput {
    */
   const playing = new Set<HTMLAudioElement>();
 
+  /**
+   * ブラウザが音を許可済みか。
+   *
+   * 戦闘は操作を待たずに自動で進むため、最初の予兆 SE は「ユーザー操作前の
+   * 自動再生」として拒否されうる。拒否は握り潰す (演出のために戦闘を止めない)
+   * ので、そのままでは最初の技だけ静かに無音になる。最初の操作で解除し、
+   * 鳴らせなかった Cue を取り返す。
+   */
+  let unlocked = false;
+
+  /** 解除待ちの再生要求。最新の1つだけを持つ。 */
+  let pending: { soundId: SoundId; volume: number } | null = null;
+
+  function unlock(): void {
+    if (unlocked) return;
+    unlocked = true;
+
+    const queued = pending;
+    pending = null;
+    if (queued) start(queued.soundId, queued.volume);
+  }
+
+  // 最初の操作で解除する。キーボードが主操作だが、どの経路でも拾えるよう
+  // ポインタ操作も見る。once なので解除後はリスナーが残らない。
+  for (const type of UNLOCK_EVENTS) {
+    window.addEventListener(type, unlock, { once: true, passive: true });
+  }
+
+  function start(soundId: SoundId, volume: number): void {
+    const definition = SOUND_MANIFEST[soundId];
+    if (!definition) return;
+
+    const instance = new Audio(definition.src);
+    instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
+
+    playing.add(instance);
+    instance.addEventListener('ended', () => playing.delete(instance), { once: true });
+
+    // 再生できない場面は普通に起きる (操作前の自動再生をブラウザが拒否する、
+    // テスト環境に音源が無い)。演出が鳴らないだけでゲームは続くので、
+    // ここで握り潰して戦闘ループへ例外を返さない。
+    // play() が Promise を返さない実装もあるため、戻り値の有無も見る。
+    try {
+      const played: unknown = instance.play();
+
+      if (played instanceof Promise) {
+        played.catch(() => {
+          playing.delete(instance);
+          // 操作前で拒否された可能性がある。最新の要求だけ残し、最初の操作で
+          // 鳴らし直す。古い Cue をあとからまとめて鳴らさないよう1つに絞る。
+          if (!unlocked) pending = { soundId, volume };
+        });
+      }
+    } catch {
+      playing.delete(instance);
+    }
+  }
+
   return {
     play(soundId, volume) {
-      const definition = SOUND_MANIFEST[soundId];
-      if (!definition) return;
-
-      // 読み込みは preloaded 側で済んでいるので、ここは同じURLを指すだけ。
-      // ブラウザのキャッシュに載っているため再取得は走らない。
-      const instance = new Audio(definition.src);
-      instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
-
-      playing.add(instance);
-      instance.addEventListener('ended', () => playing.delete(instance), { once: true });
-
-      // 再生できない場面は普通に起きる (操作前の自動再生をブラウザが拒否する、
-      // テスト環境に音源が無い)。演出が鳴らないだけでゲームは続くので、
-      // ここで握り潰して戦闘ループへ例外を返さない。
-      // play() が Promise を返さない実装もあるため、戻り値の有無も見る。
-      try {
-        const played: unknown = instance.play();
-        if (played instanceof Promise) played.catch(() => {});
-      } catch {
-        // 再生できないだけ。何もしない。
-      }
+      start(soundId, volume);
     },
 
     dispose() {
+      for (const type of UNLOCK_EVENTS) {
+        window.removeEventListener(type, unlock);
+      }
+      pending = null;
+
       for (const instance of playing) {
         instance.pause();
         instance.src = '';
