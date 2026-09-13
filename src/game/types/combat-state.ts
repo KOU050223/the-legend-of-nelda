@@ -10,6 +10,7 @@ export const COMBAT_STATES = [
   'HIT',
   'COUNTER_WINDOW',
   'DAMAGE',
+  'BOSS_DOWN',
   'BOSS_DEFEATED',
   'PLAYER_LOSE',
 ] as const;
