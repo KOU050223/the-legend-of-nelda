@@ -157,6 +157,13 @@ export interface CombatStateMachine {
    * ここでは「成立した反撃」だけを受ける。
    */
   registerCounter(): boolean;
+  /**
+   * 正解の防御入力を受けた時点で COUNTER_WINDOW を開く。
+   *
+   * 「正解入力からN秒以内」の技では、ATTACK の終了を待つと窓の前半が
+   * 操作不能になるため、入力を受けた時刻を起点にただちに遷移する。
+   */
+  openCounterWindow(startedAt?: number): boolean;
   onTransition(listener: CombatTransitionListener): () => void;
 }
 
@@ -398,6 +405,26 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
 
       transitionTo('DAMAGE');
 
+      // DAMAGE への遷移通知でダメージが同期的に適用される。HP 0 の場合は
+      // 大ダウンを開始せず、勝利 State へ直行する。
+      const ended = resolveBattleEnd();
+      if (ended) {
+        attack = null;
+        timings = baseTimings;
+        transitionTo(ended);
+      }
+
+      return true;
+    },
+
+    openCounterWindow(startedAt = clock.now()) {
+      // 正解の防御が入力されるのは予兆中または発動中だけ。ほかの State
+      // から遷移を許すと、古い入力で別サイクルを開き直せてしまう。
+      if (state !== 'TELEGRAPH' && state !== 'ATTACK') {
+        return false;
+      }
+
+      transitionTo('COUNTER_WINDOW', startedAt);
       return true;
     },
 

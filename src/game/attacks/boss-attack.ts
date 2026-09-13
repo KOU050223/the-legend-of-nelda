@@ -13,8 +13,9 @@ import {
 } from '../combat/state-machine';
 import type { CombatVitals } from '../combat/vitals';
 import type { GameClock } from '../clock';
-import { BOSS_DOWN_FOLLOW_UP_DAMAGE, type AttackId } from '../config/combat-balance';
+import { ATTACK_IDS, BOSS_DOWN_FOLLOW_UP_DAMAGE, type AttackId } from '../config/combat-balance';
 import type { GameEventBus } from '../events/game-event';
+import type { JudgeResult } from '../types/combat-state';
 import type { PlayerAction } from '../types/player-action';
 
 /** 攻撃が向かう方向。中央へ放つ攻撃は CENTER として表す。 */
@@ -22,6 +23,10 @@ export type AttackDirection = 'LEFT' | 'RIGHT' | 'CENTER';
 
 /** 個別技の実装前でもダミー技を載せられるよう、種別は拡張可能な文字列にする。 */
 export type AttackType = AttackId | 'DUMMY';
+
+function isAttackId(id: string): id is AttackId {
+  return (ATTACK_IDS as readonly string[]).includes(id);
+}
 
 /** 視覚・音声の情報提示を独立して切り替える設定。省略時は両方有効。 */
 export interface AttackCueSettings {
@@ -170,6 +175,28 @@ export function createBossAttackController({
   } | null = null;
   /** 判定へ回す防御入力。受付ウィンドウ内で受理できたものだけが入る。 */
   let submittedAction: { action: PlayerAction; inputAt: number } | null = null;
+  /** 正解入力の時点で COUNTER_WINDOW を開いた場合の判定結果。 */
+  let resolvedJudgement: JudgeResult | null = null;
+
+  function judgeSubmittedAction(
+    active: NonNullable<typeof activeAttack>,
+    submitted: NonNullable<typeof submittedAction>,
+  ): JudgeResult | null {
+    const hitAt = active.hitAt ?? scheduledHitAt(active.definition);
+    if (hitAt === null) {
+      return null;
+    }
+
+    active.hitAt = hitAt;
+    return judgePlayerAction({
+      attack: {
+        ...active.definition.hitTiming,
+        hitAt,
+        correctAction: active.definition.correctAction,
+      },
+      ...submitted,
+    });
+  }
 
   /**
    * ATTACK 遷移の通知が届く前に着弾予定時刻を求める。
@@ -265,12 +292,20 @@ export function createBossAttackController({
     }
 
     if (to === 'HIT') {
-      vitals.addSleepiness(attack.sleepinessDamage);
+      if (isAttackId(attack.id)) {
+        vitals.applyAttackSleepiness(attack.id);
+      } else {
+        vitals.addSleepiness(attack.sleepinessDamage);
+      }
       return;
     }
 
     if (to === 'DAMAGE') {
-      vitals.damageBoss(attack.damage);
+      if (isAttackId(attack.id)) {
+        vitals.applyCounterDamage(attack.id);
+      } else {
+        vitals.damageBoss(attack.damage);
+      }
       return;
     }
 
@@ -278,6 +313,7 @@ export function createBossAttackController({
       const finishedAttackId = attack.id;
       activeAttack = null;
       submittedAction = null;
+      resolvedJudgement = null;
       // 硬直はここで解かない。WHIFF / 早押しの硬直はサイクルの切れ目を跨いで
       // 効くのが仕様の意図で、境界でリセットすると硬直時間が観測できなくなる。
       eventBus.emit({ type: 'ATTACK_ENDED', attackId: finishedAttackId });
@@ -297,6 +333,7 @@ export function createBossAttackController({
         counterFrom: null,
       };
       submittedAction = null;
+      resolvedJudgement = null;
 
       eventBus.emit({ type: 'ATTACK_STARTED', attackId: attack.id });
       const started = machine.startAttack(toCombatAttack(attack));
@@ -316,7 +353,9 @@ export function createBossAttackController({
         // State を進めずダメージだけを足す。カウンター成立そのものの
         // ダメージを再発火させないため (FUTON-007 / FUTON-010)。
         if (machine.state === 'BOSS_DOWN') {
-          const followUp = inputGate.submitAttack(true);
+          const deadline = machine.stateDeadline;
+          const inBossDown = deadline !== null && clock.now() < deadline;
+          const followUp = inputGate.submitAttack(inBossDown);
 
           if (followUp === 'ACCEPTED' && activeAttack) {
             vitals.damageBoss(
@@ -353,6 +392,12 @@ export function createBossAttackController({
         return 'LOCKED';
       }
 
+      // 防御はサイクルにつき最初の受理だけを判定へ回す。入力ゲートのロックが
+      // ちょうど解除される受付終端でも、既存の正解入力を上書きさせない。
+      if (submittedAction) {
+        return 'LOCKED';
+      }
+
       // 受付開始は着弾時刻から逆算する。ATTACK へ入る前でも、TELEGRAPH の
       // 期限から着弾予定が分かるので、フレーム落ちで ATTACK 遷移の通知が
       // 遅れても受付開始の判断は変わらない。
@@ -365,6 +410,19 @@ export function createBossAttackController({
 
       if (acceptance === 'ACCEPTED') {
         submittedAction = { action, inputAt: clock.now() };
+
+        // 布団のように「正解入力から」反撃時間を測る技は、ATTACK の終了を
+        // 待たずに窓を開く。早い側で受理した回避でも全期間を反撃に使える。
+        if (active.definition.counterWindowFromCorrectInput) {
+          const result = judgeSubmittedAction(active, submittedAction);
+          if (result === 'PERFECT_DODGE' || result === 'JUST_GUARD') {
+            resolvedJudgement = result;
+            eventBus.emit({ type: 'JUDGED', result });
+            active.counterFrom = submittedAction.inputAt;
+            machine.openCounterWindow(submittedAction.inputAt);
+          }
+        }
+
         return acceptance;
       }
 
@@ -387,14 +445,8 @@ export function createBossAttackController({
         return 'FAILURE';
       }
 
-      const result = judgePlayerAction({
-        attack: {
-          ...activeAttack.definition.hitTiming,
-          hitAt: activeAttack.hitAt,
-          correctAction: activeAttack.definition.correctAction,
-        },
-        ...submittedAction,
-      });
+      const result =
+        resolvedJudgement ?? judgeSubmittedAction(activeAttack, submittedAction) ?? 'HIT';
       eventBus.emit({ type: 'JUDGED', result });
 
       if (result !== 'PERFECT_DODGE' && result !== 'JUST_GUARD') {

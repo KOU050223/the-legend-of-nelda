@@ -18,12 +18,12 @@ const HIT_TO_WINDOW_MS = 100;
 const PICK_LEFT = () => 0;
 const PICK_RIGHT = () => 0.99;
 
-function setup() {
+function setup(vitalsOptions: Parameters<typeof createCombatVitals>[0] = {}) {
   const clock = createFakeClock();
   const eventBus = createGameEventBus();
   const events: GameEvent[] = [];
   eventBus.subscribe((event) => events.push(event));
-  const vitals = createCombatVitals({ eventBus });
+  const vitals = createCombatVitals({ ...vitalsOptions, eventBus });
   let controller: ReturnType<typeof createBossAttackController>;
   const machine = createCombatStateMachine({
     clock,
@@ -45,7 +45,7 @@ function setup() {
   const transitions: string[] = [];
   machine.onTransition(({ to }) => transitions.push(to));
 
-  return { advance, controller, events, machine, transitions, vitals };
+  return { advance, clock, controller, events, machine, transitions, vitals };
 }
 
 /** 着弾時刻 (t = 0.0) まで進める。 */
@@ -162,7 +162,7 @@ describe('究極奥義・ふかふか布団', () => {
   it.each([
     { label: '0.80秒', afterDodgeMs: 800, acceptance: 'ACCEPTED', bossHp: 70 },
     { label: '0.81秒', afterDodgeMs: 801, acceptance: 'WHIFF', bossHp: 100 },
-  ])('回避成功後$labelの攻撃は $acceptance になる', ({ afterDodgeMs, acceptance, bossHp }) => {
+  ])('回避成功後 $label の攻撃は $acceptance になる', ({ afterDodgeMs, acceptance, bossHp }) => {
     for (const dodgeOffsetMs of [0, -300, -600]) {
       const { advance, controller, vitals } = setup();
 
@@ -177,6 +177,33 @@ describe('究極奥義・ふかふか布団', () => {
       expect(controller.submitAction('ATTACK')).toBe(acceptance);
       expect(vitals.bossHp).toBe(bossHp);
     }
+  });
+
+  it('受付開始時の回避から0.5秒後でもカウンターできる', () => {
+    const { advance, controller, machine, vitals } = setup();
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    // 着弾の0.6秒前は TELEGRAPH 中。時計を巻き戻さずにそこまで進める。
+    advance(TELEGRAPH_MS + HIT_AFTER_MS - 600);
+
+    expect(controller.submitAction('DODGE_LEFT')).toBe('ACCEPTED');
+    expect(machine.state).toBe('COUNTER_WINDOW');
+
+    advance(500);
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    expect(vitals.bossHp).toBe(70);
+  });
+
+  it('最初に受理した回避を受付終了時点の再入力で上書きしない', () => {
+    const { clock, controller } = setup();
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    clock.advance(TELEGRAPH_MS + HIT_AFTER_MS - 600);
+    expect(controller.submitAction('DODGE_LEFT')).toBe('ACCEPTED');
+
+    // 最初の回避から0.7秒後（受付終了 +0.1秒）に、update 前で別方向を押す。
+    clock.advance(700);
+    expect(controller.submitAction('DODGE_RIGHT')).toBe('LOCKED');
   });
 
   // FUTON-005 の帰結。窓が切れたあとは DAMAGE を経由せずサイクルが閉じる。
@@ -227,6 +254,33 @@ describe('究極奥義・ふかふか布団', () => {
     ]);
   });
 
+  it('カウンターでBoss HPが0になれば大ダウンへ入らず即座に勝利する', () => {
+    const { advance, controller, machine } = setup({ initialBossHp: 30 });
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
+
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    expect(machine.state).toBe('BOSS_DEFEATED');
+  });
+
+  it('ダメージ上書きをカウンターと被弾の両方へ適用する', () => {
+    const { advance, controller, vitals } = setup({
+      attackDamage: { FLUFFY_FUTON: { bossDamage: 20, sleepinessDamage: 50 } },
+    });
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    expect(vitals.bossHp).toBe(80);
+
+    advance(400);
+    advance(2800);
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    dodgeThenOpenWindow(advance, controller, 'DODGE_RIGHT');
+    expect(vitals.sleepiness).toBe(50);
+  });
+
   // FUTON-008
   // 仕様 §11 の「約2.5〜3秒反撃可能」。カウンター成立の DAMAGE (§15 の約0.4秒) を
   // 抜けたあとに BOSS_DOWN が続き、その間プレイヤーは追撃できる。
@@ -260,6 +314,20 @@ describe('究極奥義・ふかふか布団', () => {
 
     advance(1);
     expect(machine.state).toBe('IDLE');
+  });
+
+  it('update が遅れても大ダウン期限後の追撃を受理しない', () => {
+    const { advance, clock, controller, vitals } = setup();
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    advance(400);
+
+    // 次の update より先に非同期入力が到着した場合でも期限を超えていれば失敗する。
+    clock.advance(2800);
+    expect(controller.submitAction('ATTACK')).toBe('WHIFF');
+    expect(vitals.bossHp).toBe(70);
   });
 
   // FUTON-009
