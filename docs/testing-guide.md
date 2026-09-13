@@ -72,8 +72,16 @@ import { judgePlayerAction } from './judge';        // 同一ディレクトリ
 import type { PlayerAction } from '@/game/types';   // 別レイヤー
 ```
 
-なお `globals: true` だが、既存テストは `import { describe, expect, it } from 'vitest'`
-を明示している。どちらが正解か迷わせないため、**明示 import に揃える。**
+`globals: true` のため `describe` / `it` / `expect` は import なしでも動くが、
+**このプロジェクトでは `import { describe, expect, it } from 'vitest'` を明示する。**
+
+```ts
+import { describe, expect, it } from 'vitest';
+```
+
+グローバルを有効にしているのは、`@testing-library/jest-dom` の matcher 拡張が
+それを前提にしているため。テストコード側で import を省略してよいという意味ではない。
+どちらでも書ける状態はレビューで揺れるので、明示する側へ倒す。
 
 ---
 
@@ -126,11 +134,11 @@ AAA を並べるより、**仕様の表がそのままコードになる**方が
 ```ts
 describe('回避の受付ウィンドウ (着弾 -600ms 〜 +100ms)', () => {
   it.each([
-    { inputAt: 399, offset: '-601ms', expected: 'MISS' },
-    { inputAt: 400, offset: '-600ms', expected: 'HIT' },
-    { inputAt: 900, offset: '-100ms', expected: 'PERFECT_DODGE' },
-    { inputAt: 1100, offset: '+100ms', expected: 'PERFECT_DODGE' },
-    { inputAt: 1110, offset: '+110ms', expected: 'MISS' },
+    { inputAt: 399, offset: '-601ms', expected: 'MISS' }, // 受付開始の1ms手前
+    { inputAt: 400, offset: '-600ms', expected: 'HIT' }, // 受付開始ちょうど
+    { inputAt: 900, offset: '-100ms', expected: 'PERFECT_DODGE' }, // perfect 開始ちょうど
+    { inputAt: 1100, offset: '+100ms', expected: 'PERFECT_DODGE' }, // perfect 終了ちょうど
+    { inputAt: 1110, offset: '+110ms', expected: 'MISS' }, // 受付終了を過ぎている
   ])('正解入力が着弾 $offset なら $expected になる', ({ inputAt, expected }) => {
     const result = judgePlayerAction({ attack: dodgeAttack, action: 'DODGE_LEFT', inputAt });
 
@@ -147,6 +155,9 @@ describe('回避の受付ウィンドウ (着弾 -600ms 〜 +100ms)', () => {
 NG: '着弾$offsetなら$expectedになる'   → 「着弾undefined」
 OK: '着弾 $offset なら $expected になる'
 ```
+
+各行に「境界のどこを突いているか」を行末コメントで書く。値だけ並んでいると、
+後から表を触る人が境界のつもりの行を単なるサンプル値と誤解して動かしてしまう。
 
 表へ切り出すと軸が落ちやすい点に注意する。`judge.test.ts` では回避とガードで
 受付幅が違うため表を分け、さらに「不正解の入力」のように時刻が主題でない
@@ -293,24 +304,17 @@ window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
 
 ---
 
-# 13. CI
+# 13. push する前に
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) が Pull Request と
-`main` への push で走り、以下を順に実行する。
-
-```text
-install → lint → format:check → typecheck → test → build
-```
-
-いずれかが失敗すると PR 上で CI が赤くなり、失敗した step 名
-（`Unit test` / `Type check` など）から原因の種類が分かる。
-ログはその step を開いて確認する。
-
-push 前にローカルで同じ順に流せば、CI の失敗はほぼ避けられる。
+CI と同じ順でローカルに流せる。テストだけ通して push すると
+lint / format で落ちるため、まとめて確認する。
 
 ```bash
 pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
 ```
+
+CI の構成そのものは [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) と
+[`development-workflow.md`](./development-workflow.md) §8 を参照する。
 
 ---
 

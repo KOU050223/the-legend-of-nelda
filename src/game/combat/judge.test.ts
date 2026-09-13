@@ -24,13 +24,13 @@ describe('judgePlayerAction', () => {
   // 着弾は 1000ms。受付境界とその外側、perfect 境界とその外側を並べる。
   describe('回避の受付ウィンドウ (着弾 -600ms 〜 +100ms)', () => {
     it.each([
-      { inputAt: 399, offset: '-601ms', expected: 'MISS' },
-      { inputAt: 400, offset: '-600ms', expected: 'HIT' },
-      { inputAt: 899, offset: '-101ms', expected: 'HIT' },
-      { inputAt: 900, offset: '-100ms', expected: 'PERFECT_DODGE' },
-      { inputAt: 1000, offset: '±0ms', expected: 'PERFECT_DODGE' },
-      { inputAt: 1100, offset: '+100ms', expected: 'PERFECT_DODGE' },
-      { inputAt: 1110, offset: '+110ms', expected: 'MISS' },
+      { inputAt: 399, offset: '-601ms', expected: 'MISS' }, // 受付開始の1ms手前
+      { inputAt: 400, offset: '-600ms', expected: 'HIT' }, // 受付開始ちょうど
+      { inputAt: 899, offset: '-101ms', expected: 'HIT' }, // perfect の1ms手前
+      { inputAt: 900, offset: '-100ms', expected: 'PERFECT_DODGE' }, // perfect 開始ちょうど
+      { inputAt: 1000, offset: '±0ms', expected: 'PERFECT_DODGE' }, // 着弾ちょうど
+      { inputAt: 1100, offset: '+100ms', expected: 'PERFECT_DODGE' }, // perfect 終了ちょうど
+      { inputAt: 1110, offset: '+110ms', expected: 'MISS' }, // 受付終了を過ぎている
     ])('正解入力が着弾 $offset なら $expected になる', ({ inputAt, expected }) => {
       const result = judgePlayerAction({ attack: dodgeAttack, action: 'DODGE_LEFT', inputAt });
 
@@ -40,11 +40,11 @@ describe('judgePlayerAction', () => {
 
   describe('ガードの受付ウィンドウ (着弾 -700ms 〜 +100ms / 回避より広い)', () => {
     it.each([
-      { inputAt: 299, offset: '-701ms', expected: 'MISS' },
-      { inputAt: 300, offset: '-700ms', expected: 'HIT' },
-      { inputAt: 1000, offset: '±0ms', expected: 'JUST_GUARD' },
-      { inputAt: 1100, offset: '+100ms', expected: 'JUST_GUARD' },
-      { inputAt: 1110, offset: '+110ms', expected: 'MISS' },
+      { inputAt: 299, offset: '-701ms', expected: 'MISS' }, // 受付開始の1ms手前
+      { inputAt: 300, offset: '-700ms', expected: 'HIT' }, // 回避なら MISS になる時刻
+      { inputAt: 1000, offset: '±0ms', expected: 'JUST_GUARD' }, // 着弾ちょうど
+      { inputAt: 1100, offset: '+100ms', expected: 'JUST_GUARD' }, // perfect 終了ちょうど
+      { inputAt: 1110, offset: '+110ms', expected: 'MISS' }, // 受付終了を過ぎている
     ])('GUARDが着弾 $offset なら $expected になる', ({ inputAt, expected }) => {
       const result = judgePlayerAction({ attack: guardAttack, action: 'GUARD', inputAt });
 
