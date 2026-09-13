@@ -171,12 +171,53 @@ OK: '着弾 $offset なら $expected になる'
 （この制約は `.oxlintrc.json` の `no-restricted-imports` で lint が機械的に検証している）。
 そのため **Three.js も R3F も起動せずに関数として直接呼べる。**
 
+---
+
+# 7. テスト名は「保証したい動作」を書く
+
 テスト名は日本語で「**何をしたら、どうなるべきか**」が読み取れる形にする
 （[`testing-strategy.md`](./testing-strategy.md) §16）。
 
+実装の名前を書かない。判定基準は次の1つ。
+
+> **store を別のものに替えたら / 関数名を変えたら名前が嘘になるなら、
+> それは実装の名前になっている。**
+
+```ts
+// NG: 実装の名前
+it('storeのSLEEPINESSを表示する')     // Zustand をやめた時点で嘘になる
+it('setSleepinessが呼ばれる')          // 呼ばれても表示が壊れていれば意味がない
+it('judgePlayerActionがMISSを返す')    // 関数名を変えたら嘘になる
+
+// OK: 保証したい動作
+it('SLEEPINESSの値を表示する')
+it('入力がまだ無い場合はREADYを表示する')
+it('受付内でも不正解の入力はHITになる')
+```
+
+`SLEEPINESS` / `MISS` / `PlayerAction` のようなドメインの言葉は実装名ではないので、
+テスト名に入れてよい。禁止するのはライブラリ名・内部関数名・変数名、
+および「〜が呼ばれる」という**実装の呼び出しを主語にした書き方**。
+
+「〜が呼ばれる」が特に問題なのは、**呼ばれたことを保証しても、その結果
+ユーザーが何を得られるかを保証していない**ため。テストが通ったまま画面が
+壊れる余地が残る。
+
+`describe` にはテスト対象そのものを書く。ここは実装名でよい。
+**動作を書くのは `it` 側**で、この役割分担は変えない。
+
+```ts
+describe('judgePlayerAction', () => {                 // 対象 → 実装名でよい
+  it('受付内でも不正解の入力はHITになる', () => {});   // 動作 → 実装名は書かない
+});
+```
+
+この規約は `src/AGENTS.md` にも置いてある。`src/**` を編集する
+コーディングエージェントへ届かせるため。
+
 ---
 
-# 7. 時間に依存するテスト
+# 8. 時間に依存するテスト
 
 **実時間を待たない。** `setTimeout` や `await sleep(600)` をテストへ書かない。
 実行が遅くなり、CI で Flaky になる。
@@ -199,7 +240,7 @@ clock を使わず `inputAt: 1050` のように値を直接渡す方が単純で
 
 ---
 
-# 8. 境界値を必ず書く
+# 9. 境界値を必ず書く
 
 入力受付・HP・SLEEPINESS のような**幅を持つ仕様は、両端とその外側**をテストする。
 受付幅が `-600ms 〜 +100ms` なら、少なくとも次を書く。
@@ -216,7 +257,7 @@ clock を使わず `inputAt: 1050` のように値を直接渡す方が単純で
 
 ---
 
-# 9. ランダムを含む処理
+# 10. ランダムを含む処理
 
 `Math.random()` を実装から直接呼ばない。乱数源を注入し、テストでは固定値を返す。
 
@@ -229,7 +270,7 @@ const fixedRandom = () => 0.42;
 
 ---
 
-# 10. UI のテスト
+# 11. UI のテスト
 
 React Testing Library を使う。対象は**状態に応じた表示の切り替え**に絞り、
 レイアウトやフォントサイズなど見た目の細部は Manual Test で確認する
@@ -254,7 +295,7 @@ describe('Hud', () => {
     useGameStore.setState({ bossHp: INITIAL_BOSS_HP, sleepiness: 0, lastAction: null });
   });
 
-  it('storeのSLEEPINESSを表示する', () => {
+  it('SLEEPINESSの値を表示する', () => {
     useGameStore.setState({ sleepiness: 42 });
 
     render(<Hud />);
@@ -273,7 +314,7 @@ Three.js の Canvas を描画するコンポーネントは jsdom で動かな�
 
 ---
 
-# 11. DOM イベントのテスト
+# 12. DOM イベントのテスト
 
 Input Adapter のように `window` のイベントを購読する処理は、
 jsdom 上でイベントを発火して確認する。**購読解除まで検証する。**
@@ -293,7 +334,7 @@ window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
 
 ---
 
-# 12. バグを直すとき
+# 13. バグを直すとき
 
 1. バグを再現するテストを書く
 2. **失敗することを確認する**
@@ -304,7 +345,7 @@ window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
 
 ---
 
-# 13. push する前に
+# 14. push する前に
 
 CI と同じ順でローカルに流せる。テストだけ通して push すると
 lint / format で落ちるため、まとめて確認する。
@@ -318,7 +359,7 @@ CI の構成そのものは [`.github/workflows/ci.yml`](../.github/workflows/ci
 
 ---
 
-# 14. Definition of Done
+# 15. Definition of Done
 
 ロジックを変更する Issue / PR は、実装と同じ PR でテストまで終わらせる。
 チェック項目は [`testing-strategy.md`](./testing-strategy.md) §18 / §19 と

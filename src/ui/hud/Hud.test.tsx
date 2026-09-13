@@ -31,7 +31,7 @@ describe('Hud', () => {
     });
   });
 
-  it('storeのSLEEPINESSを表示する', () => {
+  it('SLEEPINESSの値を表示する', () => {
     useGameStore.setState({ sleepiness: 42 });
 
     render(<Hud />);
