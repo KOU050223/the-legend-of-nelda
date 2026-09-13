@@ -1,0 +1,59 @@
+# commit 前のローカルチェック。.github/workflows/ci.yml と対になる。
+# CI で落ちる項目を手元で先に潰すのが目的であり、CI の置き換えではない。
+#
+# 対象は「変更したファイルのみ」を原則とし、commit を止めないことを優先する。
+# CI の 5 step のうち、ここに置くのは Format / Lint / Type check / Test の 4 つ。
+# Build (vite build) は typecheck と検査内容が重複し、bundle 生成の分だけ遅いため
+# 手元では実行せず CI に任せる。
+#
+# 各 run は原則 package.json の script を呼ぶ。CI も同じ script を使うため、
+# オプションを変更しても CI と手元が自動で揃い、設定が二重管理にならない。
+# pnpm run <script> <path> は script の末尾へ引数を足すので、
+# 「変更ファイルのみ」も script 経由のまま渡せる。
+# test だけは例外で、理由は該当 job のコメントに書く。
+
+pre-commit:
+  # merge / rebase 中は競合解決そのものが目的であり、
+  # 途中状態のファイルで落として作業を止めない。
+  skip:
+    - merge
+    - rebase
+
+  jobs:
+    # format は staged file を書き換えるため、lint / test と並列にすると
+    # 同じファイルを同時に触って結果が不安定になる。先に単独で直列実行する。
+    - name: format
+      glob: '*.{ts,tsx}'
+      # CI の format:check と違い、手元では --write (既定) で直して stage し直す。
+      # 人間に手で直させるより速く、CI の format:check も同時に満たせる。
+      run: pnpm run format {staged_files}
+      stage_fixed: true
+
+    # format 確定後、残りは互いに独立なので並列実行する。
+    - name: verify
+      group:
+        parallel: true
+        jobs:
+          - name: lint
+            glob: '*.{ts,tsx}'
+            # --type-aware は CI (pnpm lint) と条件を揃えるために外さない。
+            # 全体 1.3s に対し 1 ファイル 0.2s で、ファイルを絞る効果がある。
+            run: pnpm run lint {staged_files}
+
+          - name: typecheck
+            glob: '*.{ts,tsx}'
+            # ここだけ変更ファイル単位にできない。tsc -b はファイル引数を受け付けず、
+            # 単体ファイル指定では tsconfig の設定が反映されないため。
+            # プロジェクト全体でも incremental で約 1s なので、絞らず全体を検査する。
+            run: pnpm run typecheck
+
+          - name: test
+            glob: '*.{ts,tsx}'
+            # ここだけ script (pnpm test) を使えない。
+            # pnpm test <path> は vitest run の「ファイル名フィルタ」になり、
+            # テストを持たないファイルを渡すと 0 件で exit 1 になる。
+            # つまり実装ファイルだけ直した commit が必ず失敗してしまう。
+            # related は「そのファイルを import しているテスト」を解決し、
+            # 0 件でも exit 0 なので、こちらを直接呼ぶ。
+            # CI の Unit test (vitest run) は全件実行のままでよい。
+            run: pnpm exec vitest related --run {staged_files}
