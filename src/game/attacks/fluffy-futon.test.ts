@@ -70,21 +70,74 @@ function dodgeThenOpenWindow(
 describe('究極奥義・ふかふか布団', () => {
   // FUTON-001 / FUTON-002
   it.each([
-    { random: PICK_RIGHT, direction: 'RIGHT', dodge: 'DODGE_LEFT' as const },
-    { random: PICK_LEFT, direction: 'LEFT', dodge: 'DODGE_RIGHT' as const },
-  ])('$direction の布団は反対側への回避で第1段階を成功する', ({ random, direction, dodge }) => {
-    const { advance, controller, machine } = setup();
-    const futon = createFluffyFutonAttack({ random });
+    {
+      random: PICK_RIGHT,
+      direction: 'RIGHT',
+      dodge: 'DODGE_LEFT' as const,
+      cue: 'futon-summon-right',
+    },
+    {
+      random: PICK_LEFT,
+      direction: 'LEFT',
+      dodge: 'DODGE_RIGHT' as const,
+      cue: 'futon-summon-left',
+    },
+  ])(
+    '$direction の布団は反対側への回避で第1段階を成功する',
+    ({ random, direction, dodge, cue }) => {
+      const { advance, controller, events, machine } = setup();
+      const futon = createFluffyFutonAttack({ random });
 
-    expect(futon.direction).toBe(direction);
-    expect(futon.correctAction).toBe(dodge);
+      expect(futon.direction).toBe(direction);
+      expect(futon.correctAction).toBe(dodge);
 
-    controller.start(futon);
-    const acceptance = dodgeThenOpenWindow(advance, controller, dodge);
+      controller.start(futon);
+      const acceptance = dodgeThenOpenWindow(advance, controller, dodge);
 
-    expect(acceptance).toBe('ACCEPTED');
-    // 第2段階 = COUNTER_WINDOW。回避成功がそのままカウンター受付へ繋がる。
+      expect(acceptance).toBe('ACCEPTED');
+      // 第2段階 = COUNTER_WINDOW。回避成功がそのままカウンター受付へ繋がる。
+      expect(machine.state).toBe('COUNTER_WINDOW');
+      // Visual Cue に構えた向きが乗る。Rendering 側が左右を描き分けられないと
+      // プレイヤーが回避方向を判断できない (§10)。
+      expect(events).toContainEqual({
+        type: 'ATTACK_VISUAL_CUE',
+        attackId: 'FLUFFY_FUTON',
+        cue,
+      });
+      // 聴覚の予兆は左右を区別しない。
+      expect(events).toContainEqual({
+        type: 'ATTACK_AUDIO_CUE',
+        attackId: 'FLUFFY_FUTON',
+        cue: 'futon-jingle',
+      });
+    },
+  );
+
+  // FUTON-001 / FUTON-002 の受付幅の端。成功幅を受付幅と同じに採っているため、
+  // 受理される範囲 (-0.6秒 〜 +0.1秒) のどこで回避しても第1段階は成功する。
+  //
+  // 受付終了 (+0.10秒) ちょうどは、その時刻に ATTACK の滞在も終わるため
+  // 同じ tick で JUDGE へ抜けてしまい、この Fake Clock の粒度では入力を
+  // 差し込めない。実機のフレーム間隔では起こり得る入力なので、
+  // ここでは受付開始側と中間だけを見る。
+  it.each([
+    { label: '-0.60秒', offsetMs: -600 },
+    { label: '-0.30秒', offsetMs: -300 },
+    { label: '-0.10秒', offsetMs: -100 },
+  ])('受付幅の端 ($label) で回避しても第1段階を成功する', ({ offsetMs }) => {
+    const { advance, controller, machine, vitals } = setup();
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    advance(TELEGRAPH_MS);
+    advance(HIT_AFTER_MS + offsetMs);
+
+    expect(controller.submitAction('DODGE_LEFT')).toBe('ACCEPTED');
+
+    // 着弾と ATTACK 終了まで進めて判定させる。
+    advance(-offsetMs + HIT_TO_WINDOW_MS);
+
     expect(machine.state).toBe('COUNTER_WINDOW');
+    expect(vitals.sleepiness).toBe(0);
   });
 
   // FUTON-003

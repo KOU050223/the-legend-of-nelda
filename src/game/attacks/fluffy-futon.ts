@@ -48,11 +48,27 @@ const DOWN_MS = 2800;
  */
 const COUNTER_WINDOW_MS = 801;
 
+/**
+ * 回避の受付幅。§12 の基本受付時間 -0.6秒 〜 +0.1秒。
+ *
+ * 成功 (perfect) 幅は受付幅と同じに採る。§10 / §12 が布団について挙げる窓は
+ * 「回避できたか」の1つだけで、受理はされるが成功しない中間帯を仕様が持たない。
+ * 分けると -0.60秒の境界で正しい方向へ回避しても HIT になり、
+ * FUTON-001 / FUTON-002 が成立しなくなる。
+ */
+const ACCEPT_FROM_MS = -600;
+const ACCEPT_TO_MS = 100;
+
 /** 布団を構えた方向に対する正解の回避方向。右から来たら左へ逃げる (§10)。 */
 const DODGE_AGAINST: Readonly<Record<'LEFT' | 'RIGHT', PlayerAction>> = {
   LEFT: 'DODGE_RIGHT',
   RIGHT: 'DODGE_LEFT',
 };
+
+/** 構えた向きを含む Visual Cue の ID。Rendering 側が左右を描き分けるために使う。 */
+function futonVisualCue(direction: 'LEFT' | 'RIGHT'): string {
+  return direction === 'LEFT' ? 'futon-summon-left' : 'futon-summon-right';
+}
 
 export interface FluffyFutonOptions {
   /** 省略時は Math.random。左右の構えを決めるためだけに使う。 */
@@ -77,16 +93,22 @@ export function createFluffyFutonAttack({
     // Cue は1技につき1つの文字列 ID だけを持つ。「ジングル → 寝息 → ポフッ」の
     // ような多拍の分節は、この ID を受け取った Audio / Rendering レイヤーの
     // 責務で、Game Logic 側では分けない (CUE-006 の多重発火防止)。
-    visualCue: 'futon-summon',
+    //
+    // Visual Cue だけは構えた向きを含める。ATTACK_VISUAL_CUE が運ぶのは
+    // attackId と cue の文字列だけで direction は乗らないため、向きを
+    // 畳み込まないと Rendering 側が左右どちらに布団を出すか決められない。
+    // プレイヤーが回避方向を選ぶための情報そのものなので落とせない (§10)。
+    visualCue: futonVisualCue(direction),
+    // 聴覚の予兆は方向を持たない。§10 が挙げる音 (専用ジングル / 寝息 /
+    // 「ポフッ」) はいずれも左右を区別しないため、向きを含めない。
     audioCue: 'futon-jingle',
     hitTiming: {
       // 発動 (約0.5〜0.6秒) のうち、叩きつけから着弾までが 500ms。
       hitAfterMs: 500,
-      // 回避の基本受付時間 -0.6秒 〜 +0.1秒 (§12)。
-      acceptFromMs: -600,
-      acceptToMs: 100,
-      perfectFromMs: -100,
-      perfectToMs: 100,
+      acceptFromMs: ACCEPT_FROM_MS,
+      acceptToMs: ACCEPT_TO_MS,
+      perfectFromMs: ACCEPT_FROM_MS,
+      perfectToMs: ACCEPT_TO_MS,
     },
     correctAction: DODGE_AGAINST[direction],
     counterWindowMs: COUNTER_WINDOW_MS,
