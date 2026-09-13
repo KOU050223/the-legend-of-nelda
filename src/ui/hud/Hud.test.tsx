@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { INITIAL_BOSS_HP, useGameStore } from '@/store/game-store';
+import { INITIAL_BOSS_HP } from '@/game/config/combat-balance';
+import { useGameStore } from '@/store/game-store';
 
 import { Hud } from './Hud';
 import styles from './Hud.module.css';

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { INITIAL_BOSS_HP, INITIAL_SLEEPINESS } from '@/game/config/combat-balance';
 import type { CombatState, JudgeResult, PlayerAction } from '@/game/types';
 
 /**
@@ -21,12 +22,10 @@ interface GameStore {
   recordResult: (result: JudgeResult) => void;
 }
 
-export const INITIAL_BOSS_HP = 100;
-
 export const useGameStore = create<GameStore>((set) => ({
   combatState: 'INTRO',
   bossHp: INITIAL_BOSS_HP,
-  sleepiness: 0,
+  sleepiness: INITIAL_SLEEPINESS,
   lastAction: null,
   lastResult: null,
 

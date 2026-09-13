@@ -1,4 +1,5 @@
-import { useGameStore, INITIAL_BOSS_HP } from '@/store/game-store';
+import { INITIAL_BOSS_HP } from '@/game/config/combat-balance';
+import { useGameStore } from '@/store/game-store';
 
 import styles from './Hud.module.css';
 
