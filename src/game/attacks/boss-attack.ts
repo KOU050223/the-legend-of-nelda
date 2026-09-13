@@ -177,6 +177,12 @@ export function createBossAttackController({
   let submittedAction: { action: PlayerAction; inputAt: number } | null = null;
   /** 正解入力の時点で COUNTER_WINDOW を開いた場合の判定結果。 */
   let resolvedJudgement: JudgeResult | null = null;
+  /**
+   * この周回で早押しを弾いたか。
+   * 早押しは判定へ回さないため submittedAction からは追えないが、
+   * 「入力なしの被弾」と区別して演出を出し分ける必要がある。
+   */
+  let rejectedTooEarly = false;
 
   function judgeSubmittedAction(
     active: NonNullable<typeof activeAttack>,
@@ -247,7 +253,11 @@ export function createBossAttackController({
     active.hitTimingEmitted = true;
   }
 
-  const unsubscribe = machine.onTransition(({ to, startedAt }) => {
+  const unsubscribe = machine.onTransition(({ from, to, startedAt }) => {
+    // State 遷移そのものは攻撃サイクル外 (INTRO / 終了状態) でも UI が必要とするので、
+    // 進行中の攻撃を要求する Cue 発行より前に流す。
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from, to });
+
     const active = activeAttack;
     if (!active) {
       return;
@@ -314,6 +324,7 @@ export function createBossAttackController({
       activeAttack = null;
       submittedAction = null;
       resolvedJudgement = null;
+      rejectedTooEarly = false;
       // 硬直はここで解かない。WHIFF / 早押しの硬直はサイクルの切れ目を跨いで
       // 効くのが仕様の意図で、境界でリセットすると硬直時間が観測できなくなる。
       eventBus.emit({ type: 'ATTACK_ENDED', attackId: finishedAttackId });
@@ -334,6 +345,7 @@ export function createBossAttackController({
       };
       submittedAction = null;
       resolvedJudgement = null;
+      rejectedTooEarly = false;
 
       eventBus.emit({ type: 'ATTACK_STARTED', attackId: attack.id });
       const started = machine.startAttack(toCombatAttack(attack));
@@ -429,6 +441,7 @@ export function createBossAttackController({
       if (acceptance === 'TOO_EARLY') {
         // 早押しは判定へ回さない。被弾させず硬直だけを残すため、
         // submittedAction は空のままにして JUDGE では「入力なし」として扱う。
+        rejectedTooEarly = true;
         eventBus.emit({ type: 'INPUT_REJECTED', action, reason: 'TOO_EARLY' });
       }
 
@@ -439,9 +452,25 @@ export function createBossAttackController({
       if (
         !activeAttack ||
         attack.id !== activeAttack.definition.id ||
-        activeAttack.hitAt === null ||
-        !submittedAction
+        activeAttack.hitAt === null
       ) {
+        // 判定対象の攻撃が無い。この周回には結果そのものが存在しないので
+        // JUDGED は出さない。
+        return 'FAILURE';
+      }
+
+      if (!submittedAction) {
+        // 防御入力が無いまま受付が終わった場合も被弾は成立するので、結果を
+        // 発行する。ここを黙って FAILURE にすると、HIT へ進んだのに
+        // 被弾フィードバックが出ない (docs/single-player-poc-spec.md §13)。
+        //
+        // 早押しで弾かれた入力も submittedAction を空のままにするのでここを
+        // 通るが、その周回は INPUT_REJECTED で演出済み。重ねて JUDGED を出すと
+        // 同じ文言のまま表示がやり直しになるため、そちらへは発行しない
+        // (INPUT-005)。被弾そのものは FAILURE の戻り値で変わらず成立する。
+        if (!rejectedTooEarly) {
+          eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+        }
         return 'FAILURE';
       }
 

@@ -48,7 +48,15 @@ function setup(timings: Partial<CombatTimings> = {}) {
 
   advance(0);
 
-  return { advance, clock, controller, eventBus, events, machine, vitals };
+  /**
+   * 攻撃サイクルのイベントだけを型で並べる。
+   * COMBAT_STATE_CHANGED は全遷移に付くので、Cue と攻撃サイクルの
+   * 発行順を見たいテストからは除く。遷移そのものは State Machine 側のテストで見る。
+   */
+  const attackEventTypes = () =>
+    events.map((event) => event.type).filter((type) => type !== 'COMBAT_STATE_CHANGED');
+
+  return { advance, attackEventTypes, clock, controller, eventBus, events, machine, vitals };
 }
 
 describe('共通ボス攻撃基盤', () => {
@@ -71,21 +79,21 @@ describe('共通ボス攻撃基盤', () => {
   it.each([
     {
       cue: 'visual' as const,
-      expected: ['ATTACK_STARTED', 'ATTACK_AUDIO_CUE', 'ATTACK_HIT_TIMING'],
+      expected: ['ATTACK_STARTED', 'ATTACK_AUDIO_CUE', 'ATTACK_HIT_TIMING', 'JUDGED'],
     },
     {
       cue: 'audio' as const,
-      expected: ['ATTACK_STARTED', 'ATTACK_VISUAL_CUE', 'ATTACK_HIT_TIMING'],
+      expected: ['ATTACK_STARTED', 'ATTACK_VISUAL_CUE', 'ATTACK_HIT_TIMING', 'JUDGED'],
     },
   ])('$cue Cueを無効化しても攻撃サイクルと残るCueは動作する', ({ cue, expected }) => {
-    const { advance, controller, events, machine } = setup();
+    const { advance, attackEventTypes, controller, machine } = setup();
 
     controller.start({ ...dummyAttack, cues: { [cue]: false } });
     advance(2000);
     advance(500);
 
     expect(machine.state).toBe('HIT');
-    expect(events.map((event) => event.type)).toEqual(expected);
+    expect(attackEventTypes()).toEqual(expected);
   });
 
   // ATK-BASE-004
@@ -134,7 +142,7 @@ describe('共通ボス攻撃基盤', () => {
 
   // ATK-BASE-005 と完了条件「ダミー攻撃を共通基盤経由で1サイクル実行」。
   it('ダミー攻撃を開始から反撃終了まで実行し、終了後の入力を受け付けない', () => {
-    const { advance, controller, events, machine, vitals } = setup();
+    const { advance, attackEventTypes, controller, machine, vitals } = setup();
 
     const started = controller.start(dummyAttack);
     advance(2000);
@@ -151,7 +159,7 @@ describe('共通ボス攻撃基盤', () => {
     expect(machine.state).toBe('IDLE');
     expect(vitals.bossHp).toBe(90);
     expect(staleInputAccepted).not.toBe('ACCEPTED');
-    expect(events.map((event) => event.type)).toEqual([
+    expect(attackEventTypes()).toEqual([
       'ATTACK_STARTED',
       'ATTACK_VISUAL_CUE',
       'ATTACK_AUDIO_CUE',
@@ -177,7 +185,7 @@ describe('共通ボス攻撃基盤', () => {
   });
 
   it('Cueをすべて無効にしても、攻撃の開始・着弾・終了をイベントで観測できる', () => {
-    const { advance, controller, events } = setup();
+    const { advance, attackEventTypes, controller } = setup();
     const { audioCue: _audioCue, visualCue: _visualCue, ...attackWithoutCues } = dummyAttack;
 
     controller.start(attackWithoutCues);
@@ -185,9 +193,11 @@ describe('共通ボス攻撃基盤', () => {
     advance(500);
     advance(1000);
 
-    expect(events.map((event) => event.type)).toEqual([
+    // 防御入力が無いまま着弾した周回なので、被弾の判定結果も発行される。
+    expect(attackEventTypes()).toEqual([
       'ATTACK_STARTED',
       'ATTACK_HIT_TIMING',
+      'JUDGED',
       'ATTACK_ENDED',
     ]);
   });

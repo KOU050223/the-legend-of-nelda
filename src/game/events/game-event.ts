@@ -1,4 +1,4 @@
-import type { JudgeResult } from '../types/combat-state';
+import type { CombatState, JudgeResult } from '../types/combat-state';
 import type { PlayerAction } from '../types/player-action';
 
 /**
@@ -25,6 +25,10 @@ export type InputRejectionReason = 'TOO_EARLY' | 'WHIFF';
  * (docs/single-player-poc-spec.md §8)。尺を持たせないと Presentation 側が
  * TELEGRAPH の長さを二重に持つことになり、バランス調整でずれる。
  * Cue ID 自体は1技につき1つのまま変えない。
+ *
+ * COMBAT_STATE_CHANGED は State Machine の遷移をそのまま流す。UI は
+ * BOSS_DOWN のような State 依存の演出をこれ1本で知り、State Machine を
+ * 直接参照しない (docs/technical-design.md §9 の一方向データフロー)。
  */
 export type GameEvent =
   | { type: 'ATTACK_STARTED'; attackId: string }
@@ -33,6 +37,7 @@ export type GameEvent =
   | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
   | { type: 'ATTACK_ENDED'; attackId: string }
   | { type: 'JUDGED'; result: JudgeResult }
+  | { type: 'COMBAT_STATE_CHANGED'; from: CombatState; to: CombatState }
   | { type: 'INPUT_REJECTED'; action: PlayerAction; reason: InputRejectionReason }
   | { type: 'BOSS_HP_CHANGED'; hp: number }
   | { type: 'SLEEPINESS_CHANGED'; value: number };

@@ -1,23 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { INITIAL_BOSS_HP } from '@/game/config/combat-balance';
 import type { AttackId } from '@/game/config/combat-balance';
-import type { CombatState, JudgeResult } from '@/game/types';
-import type { InputRejectionReason } from '@/game/events/game-event';
+import type { EventFeedback } from '@/store/game-store';
 import { useGameStore } from '@/store/game-store';
 
+import type { HudLayer, HudProps } from './hud-layers';
 import styles from './Hud.module.css';
-
-/** 将来の Role 別配信で独立して切り替える HUD の情報レイヤー。 */
-export const HUD_LAYERS = ['BOSS_HP', 'SLEEPINESS', 'WAKE_FORCE', 'ACTION_UI', 'EVENT_UI'] as const;
-export type HudLayer = (typeof HUD_LAYERS)[number];
-
-export interface HudProps {
-  /** false のレイヤーだけを非表示にする。指定しないレイヤーは表示する。 */
-  layers?: Partial<Record<HudLayer, boolean>>;
-  /** イベントフィードバックの表示時間。 */
-  eventDurationMs?: number;
-}
 
 const DEFAULT_EVENT_DURATION_MS = 1_200;
 
@@ -25,36 +13,48 @@ function isLayerVisible(layer: HudLayer, layers: HudProps['layers']): boolean {
   return layers?.[layer] !== false;
 }
 
-function eventMessageFor({
-  combatState,
-  lastAttackId,
-  lastInputRejection,
-  lastResult,
-}: {
-  combatState: CombatState;
-  lastAttackId: AttackId | null;
-  lastInputRejection: InputRejectionReason | null;
-  lastResult: JudgeResult | null;
-}): string | null {
-  if (combatState === 'BOSS_DOWN') return 'COUNTER!';
-  if (lastInputRejection === 'WHIFF') return 'WHIFF';
-  if (lastInputRejection === 'TOO_EARLY') return 'TOO EARLY';
+/** 被弾の文言は技ごとに変える。docs/single-player-poc-spec.md §6。 */
+function hitMessageFor(attackId: AttackId | null): string {
+  if (attackId === 'YAWN_WAVE') return 'DROWSY!';
+  if (attackId === 'FLUFFY_FUTON') return 'GOOD NIGHT';
+  return 'HIT';
+}
 
-  switch (lastResult) {
-    case 'PERFECT_DODGE':
-      return 'PERFECT DODGE';
-    case 'JUST_GUARD':
-      return 'JUST GUARD';
-    case 'TOO_EARLY':
-      return 'TOO EARLY';
-    case 'HIT':
-    case 'MISS':
-      if (lastAttackId === 'YAWN_WAVE') return 'DROWSY!';
-      if (lastAttackId === 'FLUFFY_FUTON') return 'GOOD NIGHT';
-      return 'HIT';
+/**
+ * 表示イベントを文言へ移す。入力はこの1つの値だけなので、
+ * 別々の State を突き合わせて文言が変わることがない (UI-008)。
+ */
+function eventMessageFor(feedback: EventFeedback | null): string | null {
+  if (feedback === null) return null;
+
+  switch (feedback.kind) {
+    case 'COUNTER':
+      return 'COUNTER!';
+    case 'REJECTION':
+      return feedback.reason === 'TOO_EARLY' ? 'TOO EARLY' : 'WHIFF';
+    case 'RESULT':
+      switch (feedback.result) {
+        case 'PERFECT_DODGE':
+          return 'PERFECT DODGE';
+        case 'JUST_GUARD':
+          return 'JUST GUARD';
+        case 'TOO_EARLY':
+          return 'TOO EARLY';
+        case 'HIT':
+        case 'MISS':
+          return hitMessageFor(feedback.attackId);
+        default:
+          return null;
+      }
     default:
       return null;
   }
+}
+
+/** ゲージの割合。上限は戦闘生成時の設定値を使うので、既定値へ固定しない。 */
+function percentOf(value: number, maximum: number): number {
+  if (maximum <= 0) return 0;
+  return Math.min(100, Math.max(0, (value / maximum) * 100));
 }
 
 function EventMessage({
@@ -89,19 +89,17 @@ export function Hud({
   eventDurationMs = DEFAULT_EVENT_DURATION_MS,
 }: HudProps): React.JSX.Element {
   const bossHp = useGameStore((state) => state.bossHp);
+  const bossHpMax = useGameStore((state) => state.bossHpMax);
   const sleepiness = useGameStore((state) => state.sleepiness);
+  const sleepinessMax = useGameStore((state) => state.sleepinessMax);
   const lastAction = useGameStore((state) => state.lastAction);
-  const lastAttackId = useGameStore((state) => state.lastAttackId);
-  const lastInputRejection = useGameStore((state) => state.lastInputRejection);
-  const lastResult = useGameStore((state) => state.lastResult);
+  const eventFeedback = useGameStore((state) => state.eventFeedback);
   const eventSequence = useGameStore((state) => state.eventSequence);
-  const combatState = useGameStore((state) => state.combatState);
-  const eventMessage = eventMessageFor({
-    combatState,
-    lastAttackId,
-    lastInputRejection,
-    lastResult,
-  });
+
+  const eventMessage = eventMessageFor(eventFeedback);
+  // 上限は設定で変えられるため、表示は常に割合へ直してから丸める。
+  const sleepinessPercent = Math.round(percentOf(sleepiness, sleepinessMax));
+
   return (
     <div className={styles.hud}>
       {isLayerVisible('BOSS_HP', layers) && (
@@ -110,7 +108,7 @@ export function Hud({
           <div className={styles.gauge}>
             <div
               className={styles.gaugeFill}
-              style={{ width: `${(bossHp / INITIAL_BOSS_HP) * 100}%` }}
+              style={{ width: `${percentOf(bossHp, bossHpMax)}%` }}
             />
           </div>
         </div>
@@ -120,7 +118,7 @@ export function Hud({
         <div className={styles.sleepiness}>
           <span className={styles.label}>HORI SLEEPINESS</span>
           <span className={styles.value}>
-            <span>{sleepiness}</span>
+            <span>{sleepinessPercent}</span>
             <span aria-hidden="true">%</span>
           </span>
         </div>
