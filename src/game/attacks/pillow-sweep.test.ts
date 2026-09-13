@@ -82,7 +82,7 @@ describe('枕薙ぎ払い', () => {
 
   // 完了条件「構え / 溜め / 発動 / 硬直が分かれている」。
   // 構え+溜め → TELEGRAPH、発動 → ATTACK、硬直 → COUNTER_WINDOW に対応する。
-  it('構え・溜め / 発動 / 硬直がそれぞれ別の State として進行する', () => {
+  it('予兆1.3秒のあと0.4秒の攻撃判定へ入り、正解方向の回避で1.5秒の反撃可能状態になる', () => {
     const context = setup();
     const attack = createPillowSweep({ direction: 'RIGHT' });
 
@@ -174,19 +174,35 @@ describe('枕薙ぎ払い', () => {
     expect(context.machine.state).not.toBe('COUNTER_WINDOW');
   });
 
-  // 受付境界 (INPUT-006 / INPUT-007 相当) を枕の値で確認する。
+  // 受付幅 (着弾 -0.6秒 〜 +0.1秒) の両端とその外側。docs/testing-guide.md §9。
+  // 受付開始の外側 (-601ms) は TOO EARLY で判定へ回らず形が違うため、
+  // 上の PILLOW-006 に独立したケースとして置いている。
+  // 受付内は反撃可能状態へ、受付終了より後は被弾する (INPUT-008)。
+  // 早押しと違い判定へ回るので、結果は JUDGED として観測できる。
   it.each([
-    { label: '受付開始境界', offsetMs: -600 },
-    { label: '受付終了境界', offsetMs: 100 },
-  ])('$label ($offsetMs ms) の正解方向回避は成功する', ({ offsetMs }) => {
-    const context = setup();
-    startAndActAtHitOffset(context, 'LEFT', offsetMs, () => {
-      context.controller.submitAction('DODGE_RIGHT');
-    });
-    context.advance(Math.max(0, -offsetMs) + 100);
+    { offsetMs: -600, expected: 'PERFECT_DODGE', state: 'COUNTER_WINDOW', sleepiness: 0 }, // 受付開始境界 (内側)
+    { offsetMs: 0, expected: 'PERFECT_DODGE', state: 'COUNTER_WINDOW', sleepiness: 0 }, // 着弾ちょうど
+    { offsetMs: 100, expected: 'PERFECT_DODGE', state: 'COUNTER_WINDOW', sleepiness: 0 }, // 受付終了境界 (内側)
+    {
+      offsetMs: 101,
+      expected: 'MISS',
+      state: 'HIT',
+      sleepiness: PILLOW_DAMAGE.sleepinessDamage,
+    }, // 受付終了境界の外側 → 遅すぎる
+  ] as const)(
+    '着弾 $offsetMs ms の正解方向回避は $expected になる',
+    ({ offsetMs, expected, state, sleepiness }) => {
+      const context = setup();
+      startAndActAtHitOffset(context, 'LEFT', offsetMs, () => {
+        context.controller.submitAction('DODGE_RIGHT');
+      });
+      context.advance(Math.max(0, -offsetMs) + 100);
 
-    expect(context.events).toContainEqual({ type: 'JUDGED', result: 'PERFECT_DODGE' });
-  });
+      expect(context.events).toContainEqual({ type: 'JUDGED', result: expected });
+      expect(context.machine.state).toBe(state);
+      expect(context.vitals.sleepiness).toBe(sleepiness);
+    },
+  );
 
   // PILLOW-007 回避成功後に約1.5秒の反撃可能状態が発生する。
   it('回避成功後に約1.5秒の反撃可能状態が発生する', () => {
