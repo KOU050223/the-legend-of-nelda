@@ -71,6 +71,8 @@ export interface CombatTransition {
   to: CombatState;
   /** 遷移した時刻 (ms)。GameClock から取る。 */
   at: number;
+  /** 遷移先 State の論理上の開始時刻。時間超過をまとめて処理した場合は `at` より前になる。 */
+  startedAt: number;
 }
 
 export type CombatTransitionListener = (transition: CombatTransition) => void;
@@ -171,7 +173,7 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
     state = next;
     enteredAt = startedAt;
 
-    notify({ from, to: next, at });
+    notify({ from, to: next, at, startedAt });
   }
 
   /**
