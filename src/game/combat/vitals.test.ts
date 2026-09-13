@@ -17,11 +17,15 @@ describe('createCombatVitals', () => {
   describe('初期値 (docs/tests/phase1-single-player-test-spec.md §6)', () => {
     // HP-001
     it('ボスHPは100から始まる', () => {
-      expect(createCombatVitals().bossHp).toBe(100);
+      const vitals = createCombatVitals();
+
+      expect(vitals.bossHp).toBe(100);
     });
 
     it('SLEEPINESSは0から始まる', () => {
-      expect(createCombatVitals().sleepiness).toBe(0);
+      const vitals = createCombatVitals();
+
+      expect(vitals.sleepiness).toBe(0);
     });
   });
 
@@ -129,7 +133,9 @@ describe('createCombatVitals', () => {
 
   describe('勝敗の通知', () => {
     it('戦闘中は終了状態を返さない', () => {
-      expect(createCombatVitals().resolveBattleEnd()).toBeNull();
+      const vitals = createCombatVitals();
+
+      expect(vitals.resolveBattleEnd()).toBeNull();
     });
 
     // HP-005 / SM-003 / RESULT-001
@@ -270,7 +276,7 @@ describe('createCombatVitals', () => {
 
   // RESULT-008
   describe('リスタート', () => {
-    it('reset するとHPとSLEEPINESSが初期値へ戻る', () => {
+    it('やり直すとHPとSLEEPINESSが初期値へ戻る', () => {
       const vitals = createCombatVitals();
 
       vitals.applyCounterDamage('FLUFFY_FUTON');
@@ -282,7 +288,7 @@ describe('createCombatVitals', () => {
       expect(vitals.resolveBattleEnd()).toBeNull();
     });
 
-    it('reset の結果も購読側へ通知される', () => {
+    it('やり直しで戻った初期値も購読側へ通知される', () => {
       const { eventBus, events } = withRecordedEvents();
       const vitals = createCombatVitals({ eventBus });
 
