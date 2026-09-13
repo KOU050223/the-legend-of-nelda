@@ -1,0 +1,100 @@
+import { DEFAULT_ATTACK_DAMAGE } from '../config/combat-balance';
+import { defineBossAttack, type AttackDirection, type BossAttack } from './boss-attack';
+import type { PlayerAction } from '../types/player-action';
+
+/**
+ * 究極奥義・ふかふか布団。docs/single-player-poc-spec.md §10 / §11。
+ *
+ * この技だけが「回避 → カウンター」の2段階入力を要求する。ただし段階を表す
+ * State を新設はしない。第1段階は他の技と同じ回避判定 (ATTACK → JUDGE)、
+ * 第2段階は回避成功で入る COUNTER_WINDOW そのものなので、既存の State Machine が
+ * そのまま2段階になる (docs/technical-design.md §7 の「技固有の処理を
+ * State Machine 本体へ大量に記述しない」)。
+ *
+ * §11 のアニメーション区分と State の対応:
+ *
+ * - 構え (約0.7秒) + 溜め (約1.5〜1.8秒) → TELEGRAPH (2300ms)
+ * - 発動 (約0.5〜0.6秒)                  → ATTACK (hitAfterMs + acceptToMs = 600ms)
+ * - カウンター受付 (回避成功後0.8秒)      → COUNTER_WINDOW
+ * - 大ダウン (約2.5〜3秒)                → DAMAGE (2800ms)
+ */
+
+/** 乱数の注入点。テストでは固定値を渡して左右を決め打ちする (テスト仕様 §3.2 FixedRandom)。 */
+export type RandomSource = () => number;
+
+/** 構え + 溜め。§11 の「構え 約0.7秒」「溜め 約1.5〜1.8秒」の合計。 */
+const TELEGRAPH_MS = 2300;
+
+/**
+ * 大ダウンの長さ。§11 は「約2.5〜3秒」。
+ *
+ * これは演出の尺であって追撃可能な窓ではない。FUTON-007 が「Boss HP -30」を
+ * 単発の確定値として規定し、FUTON-010 が連打による Damage / Counter Event の
+ * 多重発生を禁じているため、DAMAGE 中の registerCounter() は false のままが正しい。
+ */
+const DOWN_MS = 2800;
+
+/**
+ * カウンター受付。仕様は「回避成功後 0.8秒以内」(§12)。
+ *
+ * 801 なのは State Machine の退出条件が exclusive (`elapsed >= dwell` で閉じる)
+ * だから。800 だと実効窓が [0, 800) になり「0.80秒ちょうど」が成立しない。
+ * 801 で [0, 801) となり、仕様の「以内」を inclusive に満たす。
+ * 計測値: 800ms → 成立 / 801ms → 不成立 (FUTON-004 / FUTON-005)。
+ *
+ * なお測る起点は COUNTER_WINDOW の開始であって回避入力の時刻ではない。
+ * 窓は常に着弾時刻 + acceptToMs に開くので、回避を受付の早い側で通すか
+ * 遅い側で通すかによって入力時刻からの長さは変わる。
+ */
+const COUNTER_WINDOW_MS = 801;
+
+/** 布団を構えた方向に対する正解の回避方向。右から来たら左へ逃げる (§10)。 */
+const DODGE_AGAINST: Readonly<Record<'LEFT' | 'RIGHT', PlayerAction>> = {
+  LEFT: 'DODGE_RIGHT',
+  RIGHT: 'DODGE_LEFT',
+};
+
+export interface FluffyFutonOptions {
+  /** 省略時は Math.random。左右の構えを決めるためだけに使う。 */
+  random?: RandomSource;
+}
+
+/**
+ * 左右どちらかに構えた布団を作る。
+ *
+ * direction と correctAction は必ずここで対にして導出する。呼び出し側が
+ * 別々に指定できると「右布団に右回避が正解」のような食い違いを作れてしまう。
+ */
+export function createFluffyFutonAttack({
+  random = Math.random,
+}: FluffyFutonOptions = {}): BossAttack {
+  const direction: Extract<AttackDirection, 'LEFT' | 'RIGHT'> = random() < 0.5 ? 'LEFT' : 'RIGHT';
+
+  return defineBossAttack({
+    id: 'FLUFFY_FUTON',
+    type: 'FLUFFY_FUTON',
+    direction,
+    // Cue は1技につき1つの文字列 ID だけを持つ。「ジングル → 寝息 → ポフッ」の
+    // ような多拍の分節は、この ID を受け取った Audio / Rendering レイヤーの
+    // 責務で、Game Logic 側では分けない (CUE-006 の多重発火防止)。
+    visualCue: 'futon-summon',
+    audioCue: 'futon-jingle',
+    hitTiming: {
+      // 発動 (約0.5〜0.6秒) のうち、叩きつけから着弾までが 500ms。
+      hitAfterMs: 500,
+      // 回避の基本受付時間 -0.6秒 〜 +0.1秒 (§12)。
+      acceptFromMs: -600,
+      acceptToMs: 100,
+      perfectFromMs: -100,
+      perfectToMs: 100,
+    },
+    correctAction: DODGE_AGAINST[direction],
+    counterWindowMs: COUNTER_WINDOW_MS,
+    damage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.bossDamage,
+    sleepinessDamage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.sleepinessDamage,
+    timings: {
+      TELEGRAPH: TELEGRAPH_MS,
+      DAMAGE: DOWN_MS,
+    },
+  });
+}
