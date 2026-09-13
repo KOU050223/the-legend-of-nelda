@@ -23,7 +23,7 @@ pre-commit:
     # format は staged file を書き換えるため、lint / test と並列にすると
     # 同じファイルを同時に触って結果が不安定になる。先に単独で直列実行する。
     - name: format
-      glob: '*.{ts,tsx}'
+      glob: '*.{ts,tsx,yml}'
       # CI の format:check と違い、手元では --write (既定) で直して stage し直す。
       # 人間に手で直させるより速く、CI の format:check も同時に満たせる。
       run: pnpm run format {staged_files}
