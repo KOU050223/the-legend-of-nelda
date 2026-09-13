@@ -12,9 +12,11 @@ import type { JudgeResult } from '../types/combat-state';
  * (docs/technical-design.md §6 / docs/testing-strategy.md §7)。
  */
 export type GameEvent =
+  | { type: 'ATTACK_STARTED'; attackId: string }
   | { type: 'ATTACK_VISUAL_CUE'; attackId: string; cue: string }
   | { type: 'ATTACK_AUDIO_CUE'; attackId: string; cue: string }
-  | { type: 'ATTACK_HIT_TIMING'; attackId: string }
+  | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
+  | { type: 'ATTACK_ENDED'; attackId: string }
   | { type: 'JUDGED'; result: JudgeResult }
   | { type: 'BOSS_HP_CHANGED'; hp: number }
   | { type: 'SLEEPINESS_CHANGED'; value: number };
