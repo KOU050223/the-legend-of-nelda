@@ -4,6 +4,7 @@ import { createFakeClock } from '@/game/clock';
 import type { GameEvent } from '@/game/events/game-event';
 import type { PlayerAction } from '@/game/types';
 import {
+  BOSS_DOWN_FOLLOW_UP_DAMAGE,
   DEFAULT_ATTACK_DAMAGE,
   INITIAL_BOSS_HP,
   MAX_SLEEPINESS,
@@ -409,6 +410,65 @@ describe('createCombatSession', () => {
 
     expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
     expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
+  });
+
+  it('大ダウン中の追撃でボスHPが減る', () => {
+    // BOSS_DOWN_FOLLOW_UP_DAMAGE の単価の根拠。大ダウン中に入る発数が
+    // 分かっていないと「合計が5未満」から単価を決められない。
+    // 入力ロックがあるので押しっぱなしでも発数には上限がある。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+
+    let pendingDefense: PlayerAction | null = null;
+    let shouldCounter = false;
+    let followUps = 0;
+    let maxFollowUpsInOneDown = 0;
+    let wasDown = false;
+
+    session.eventBus.subscribe((event) => {
+      if (event.type === 'ATTACK_VISUAL_CUE') {
+        if (event.cue.includes('left')) pendingDefense = 'DODGE_RIGHT';
+        else if (event.cue.includes('right')) pendingDefense = 'DODGE_LEFT';
+        else pendingDefense = 'GUARD';
+      }
+      if (event.type === 'JUDGED') {
+        shouldCounter = event.result === 'PERFECT_DODGE' || event.result === 'JUST_GUARD';
+      }
+      if (event.type === 'BOSS_HP_CHANGED' && wasDown) followUps += 1;
+    });
+
+    tick();
+
+    for (let frame = 0; frame < 8_000; frame += 1) {
+      clock.advance(50);
+      tick();
+
+      const { combatState } = useGameStore.getState();
+      const isDown = combatState === 'BOSS_DOWN';
+
+      if (wasDown && !isDown) {
+        maxFollowUpsInOneDown = Math.max(maxFollowUpsInOneDown, followUps);
+        followUps = 0;
+      }
+      wasDown = isDown;
+
+      if (combatState === 'ATTACK' && pendingDefense !== null) {
+        session.submitAction(pendingDefense);
+        pendingDefense = null;
+      }
+      if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
+        session.submitAction('ATTACK');
+        shouldCounter = false;
+      }
+      if (isDown) session.submitAction('ATTACK');
+
+      if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
+    }
+
+    // 追撃がゲームプレイ上の効果を持つこと (仕様 §11 の「最大の反撃チャンス」)。
+    expect(BOSS_DOWN_FOLLOW_UP_DAMAGE).toBeGreaterThan(0);
+    expect(maxFollowUpsInOneDown).toBeGreaterThan(0);
   });
 
   it('チュートリアル順を素の定義で書き直しても早期撃破しない', () => {
