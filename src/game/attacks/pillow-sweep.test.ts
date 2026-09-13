@@ -325,14 +325,16 @@ describe('枕薙ぎ払い', () => {
     const visualCues = context.events.filter((event) => event.type === 'ATTACK_VISUAL_CUE');
     const audioCues = context.events.filter((event) => event.type === 'ATTACK_AUDIO_CUE');
 
-    expect(visualCues).toEqual([
+    // durationMs は予兆の尺として共通基盤が添えるため、ここでは内容を固定しない。
+    // このテストが保証したいのは「1攻撃につき1度だけ」という発火回数と宛先。
+    expect(visualCues).toMatchObject([
       {
         type: 'ATTACK_VISUAL_CUE',
         attackId: 'PILLOW_SWEEP',
         cue: 'pillow-sweep-telegraph-left',
       },
     ]);
-    expect(audioCues).toEqual([
+    expect(audioCues).toMatchObject([
       { type: 'ATTACK_AUDIO_CUE', attackId: 'PILLOW_SWEEP', cue: 'pillow-sweep-wind-left' },
     ]);
     expect(context.vitals.bossHp).toBe(INITIAL_BOSS_HP);
