@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createFakeClock } from '@/game/clock';
 import type { GameEvent } from '@/game/events/game-event';
 import type { PlayerAction } from '@/game/types';
-import { INITIAL_BOSS_HP, MAX_SLEEPINESS } from '@/game/config/combat-balance';
+import {
+  DEFAULT_ATTACK_DAMAGE,
+  INITIAL_BOSS_HP,
+  MAX_SLEEPINESS,
+} from '@/game/config/combat-balance';
 import { useGameStore } from '@/store/game-store';
+
+import { createAttackSequence } from '@/game/sequence/attack-sequence';
 
 import { createCombatSession, type FrameLoop } from './combat-session';
 
@@ -118,8 +124,8 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
-      tutorialSequence: [{ slot: 'PILLOW_SWEEP', phase: 'TUTORIAL', assist: true }],
-      mainSequence: [{ slot: 'YAWN_WAVE', phase: 'MAIN', assist: false }],
+      tutorialSequence: [{ slot: 'PILLOW_SWEEP', assist: true }],
+      mainSequence: [{ slot: 'YAWN_WAVE', assist: false }],
     });
 
     const advance = (ms: number) => {
@@ -153,7 +159,7 @@ describe('createCombatSession', () => {
       frameLoop: loop,
       random: () => 0,
       tutorialSequence: [],
-      mainSequence: [{ slot: 'FLUFFY_FUTON', phase: 'MAIN', assist: false }],
+      mainSequence: [{ slot: 'FLUFFY_FUTON', assist: false }],
     });
 
     const started: string[] = [];
@@ -168,19 +174,22 @@ describe('createCombatSession', () => {
     expect(started).toEqual(['FLUFFY_FUTON']);
   });
 
-  it('正しく応じ続けると最終ふかふか布団まで1戦を通して進行できる', () => {
+  it('正しく応じ続けると最終ふかふか布団のカウンターで決着する', () => {
     // 完了条件「最終ふかふか布団まで1戦を通して進行できる」。
-    // 予兆で出る Visual Cue から正解の防御を選び、成功したら反撃する。
+    // チュートリアルの反撃でボスHPが削れると、全成功したプレイヤーほど
+    // 早くボスが落ちて最終布団へ到達できない (仕様 §17)。
     const clock = createFakeClock();
     const { loop, tick } = createManualLoop();
     const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
 
-    const startedAttacks: string[] = [];
+    const steps: { index: number; phase: string; attackId: string }[] = [];
     let pendingDefense: PlayerAction | null = null;
     let shouldCounter = false;
 
     session.eventBus.subscribe((event) => {
-      if (event.type === 'SEQUENCE_STEP_STARTED') startedAttacks.push(event.attackId);
+      if (event.type === 'SEQUENCE_STEP_STARTED') {
+        steps.push({ index: event.stepIndex, phase: event.phase, attackId: event.attackId });
+      }
 
       // 正解は Cue から読む。方向は Cue ID に埋まっている。
       if (event.type === 'ATTACK_VISUAL_CUE') {
@@ -208,6 +217,8 @@ describe('createCombatSession', () => {
         pendingDefense = null;
       }
 
+      // 1つの反撃機会につき1回だけ入力する。大ダウン中に連打すると
+      // 追撃ぶんだけ余計にHPが削れ、「全成功」の定義が曖昧になる。
       if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
         session.submitAction('ATTACK');
         shouldCounter = false;
@@ -216,16 +227,98 @@ describe('createCombatSession', () => {
       if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
     }
 
-    // チュートリアル5手を抜けて本戦へ入り、最終ふかふか布団まで到達する。
-    expect(startedAttacks.slice(0, 5)).toEqual([
-      'PILLOW_SWEEP',
-      'PILLOW_SWEEP',
-      'YAWN_WAVE',
-      'YAWN_WAVE',
-      'FLUFFY_FUTON',
+    // チュートリアル5手 + 本戦7手をすべて通る。
+    expect(steps.map((step) => `${step.phase}:${step.attackId}`)).toEqual([
+      'TUTORIAL:PILLOW_SWEEP',
+      'TUTORIAL:PILLOW_SWEEP',
+      'TUTORIAL:YAWN_WAVE',
+      'TUTORIAL:YAWN_WAVE',
+      'TUTORIAL:FLUFFY_FUTON',
+      'MAIN:PILLOW_SWEEP',
+      'MAIN:YAWN_WAVE',
+      'MAIN:PILLOW_SWEEP',
+      'MAIN:YAWN_WAVE',
+      'MAIN:FLUFFY_FUTON',
+      'MAIN:PILLOW_SWEEP',
+      'MAIN:FLUFFY_FUTON',
     ]);
-    expect(startedAttacks).toContain('FLUFFY_FUTON');
+    // 決着は最終手。チュートリアルの布団で満たされない形で確かめる。
+    expect(steps.at(-1)).toEqual({ index: 11, phase: 'MAIN', attackId: 'FLUFFY_FUTON' });
     expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
+  });
+
+  it('チュートリアルの反撃ではボスHPを削らない', () => {
+    // 仕様 §17 はダメージ量を本戦の行にだけ書いている。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    const session = createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      mainSequence: [{ slot: 'PILLOW_SWEEP', assist: false }],
+    });
+
+    let pendingDefense: PlayerAction | null = null;
+    let shouldCounter = false;
+
+    session.eventBus.subscribe((event) => {
+      if (event.type === 'ATTACK_VISUAL_CUE') {
+        pendingDefense = event.cue.includes('left') ? 'DODGE_RIGHT' : 'DODGE_LEFT';
+      }
+      if (event.type === 'JUDGED') shouldCounter = event.result === 'PERFECT_DODGE';
+    });
+
+    tick();
+
+    // チュートリアル1手目だけを成功させる。
+    for (let frame = 0; frame < 200; frame += 1) {
+      clock.advance(50);
+      tick();
+
+      const { combatState } = useGameStore.getState();
+      if (combatState === 'ATTACK' && pendingDefense !== null) {
+        session.submitAction(pendingDefense);
+        pendingDefense = null;
+      }
+      if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
+        session.submitAction('ATTACK');
+        shouldCounter = false;
+        // 反撃が DAMAGE へ入るまで進めてから抜ける。
+        for (let settle = 0; settle < 20; settle += 1) {
+          clock.advance(50);
+          tick();
+        }
+        break;
+      }
+    }
+
+    expect(useGameStore.getState().bossHp).toBe(INITIAL_BOSS_HP);
+  });
+
+  it('チュートリアルの補助付きの手では被弾ペナルティを軽くする', () => {
+    // 仕様 §16「初回失敗時のペナルティは軽くする」。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+
+    const advance = (ms: number) => {
+      clock.advance(ms);
+      tick();
+    };
+
+    tick();
+    advance(3_100);
+
+    // 何も入力せず1手目を被弾する。
+    for (let frame = 0; frame < 40; frame += 1) {
+      advance(200);
+      if (useGameStore.getState().sleepiness > 0) break;
+    }
+
+    // 枕の既定は12。補助付きのチュートリアル1手目は半減する。
+    expect(useGameStore.getState().sleepiness).toBe(
+      DEFAULT_ATTACK_DAMAGE.PILLOW_SWEEP.sleepinessDamage / 2,
+    );
   });
 
   it('戦闘を作り直すと前の戦闘の補助表示が残らない', () => {
@@ -243,5 +336,23 @@ describe('createCombatSession', () => {
       sequencePhase: 'TUTORIAL',
       assistVisible: false,
     });
+  });
+
+  it('使いかけのシーケンスを渡して作り直しても先頭から出し直す', () => {
+    // RESULT-008 の「Attack Sequence位置」。外から渡したシーケンスは
+    // 前の戦闘で進んでいることがある。
+    const sequence = createAttackSequence({ random: () => 0 });
+    sequence.next();
+    sequence.next();
+
+    createCombatSession({
+      clock: createFakeClock(),
+      frameLoop: createManualLoop().loop,
+      random: () => 0,
+      sequence,
+    });
+
+    expect(sequence.index).toBe(0);
+    expect(sequence.phase).toBe('TUTORIAL');
   });
 });

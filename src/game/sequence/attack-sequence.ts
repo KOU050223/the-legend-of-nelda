@@ -25,19 +25,38 @@ export type SequencePhase = 'TUTORIAL' | 'MAIN';
  */
 export type SequenceSlot = AttackId | 'PILLOW_OR_YAWN';
 
-/** シーケンスの1手。チュートリアルも本戦もこの1つの型で表す。 */
+/**
+ * シーケンスの1手。チュートリアルも本戦もこの1つの型で表す。
+ *
+ * `phase` は持たない。どちらの段かは「チュートリアル配列と本戦配列の
+ * どちらに置いたか」だけで決まり、定義側からは指定させない。指定できると
+ * 本戦の配列へ `phase: 'TUTORIAL'` を混ぜられてしまい、段の表示が
+ * 本戦に入っても切り替わらない設定を作れてしまう (SEQ-002)。
+ */
 export interface SequenceStepDefinition {
   slot: SequenceSlot;
-  phase: SequencePhase;
   /**
    * 操作補助表示 (`← / → DODGE` など) を出すか。
    *
-   * phase から導出しない。仕様 §16 のチュートリアル5手のうち 2手目・4手目は
+   * 段から導出しない。仕様 §16 のチュートリアル5手のうち 2手目・4手目は
    * 「通常判定」で、同じ技をもう一度補助なしで体験させる段になっている
-   * (SEQ-001)。phase だけで補助を決めると、この Tutorial / Normal の区別が
+   * (SEQ-001)。段だけで補助を決めると、この Tutorial / Normal の区別が
    * 消えてしまう。
    */
   assist: boolean;
+  /**
+   * この手だけに掛けるダメージ倍率。省略時は等倍。
+   *
+   * チュートリアルを「安全に体験させる」ために使う (仕様 §16)。技の定義を
+   * 弱くするのではなく出題側が手ごとに掛けるので、同じ技が本戦で出たときは
+   * 通常の数値に戻る。
+   */
+  damageScale?: {
+    /** 反撃が入ったときのボスHPダメージ倍率。 */
+    boss?: number;
+    /** 被弾したときの SLEEPINESS 倍率。 */
+    sleepiness?: number;
+  };
 }
 
 /** next() が返す、実際に出す1手。 */
@@ -53,6 +72,28 @@ export interface SequenceStep {
 }
 
 /**
+ * チュートリアルの反撃はボスHPを削らない。
+ *
+ * 仕様 §17 のタイムラインはダメージ量を本戦の行にだけ書いており
+ * (「12〜19秒 枕薙ぎ払い 本番。反撃：約10ダメージ」に対し、
+ * 「5〜12秒 枕薙ぎ払い チュートリアル」には記載が無い)、本戦7手の
+ * 反撃だけでボスHP100をちょうど削り切る数値になっている
+ * (10+15+10+15+30+10〜15 に最終布団の30)。§5 の「5〜7回程度の成功で撃破」
+ * とも手数が合う。チュートリアルの反撃も等倍で通すと、全成功した
+ * プレイヤーほど早くボスが落ち、最終ふかふか布団に到達できない。
+ *
+ * 被弾側は §16 の「初回失敗時のペナルティは軽くする」に合わせて半減する。
+ * 補助表示を出す手 = 初めてその技に触る手なので、そこだけを軽くする。
+ */
+const TUTORIAL_ASSISTED_SCALE = { boss: 0, sleepiness: 0.5 } as const;
+
+/**
+ * チュートリアルの「通常判定」の手 (仕様 §16 の2手目・4手目)。
+ * 被弾は本戦と同じ重さに戻すが、ボスHPはまだ削らない。
+ */
+const TUTORIAL_NORMAL_SCALE = { boss: 0 } as const;
+
+/**
  * チュートリアルの既定順。docs/single-player-poc-spec.md §16 / SEQ-001。
  *
  * 1. 枕薙ぎ払い：左右回避を学習 (補助あり)
@@ -62,11 +103,11 @@ export interface SequenceStep {
  * 5. ふかふか布団：回避→攻撃の2段階入力を学習 (補助あり)
  */
 export const DEFAULT_TUTORIAL_SEQUENCE: readonly SequenceStepDefinition[] = [
-  { slot: 'PILLOW_SWEEP', phase: 'TUTORIAL', assist: true },
-  { slot: 'PILLOW_SWEEP', phase: 'TUTORIAL', assist: false },
-  { slot: 'YAWN_WAVE', phase: 'TUTORIAL', assist: true },
-  { slot: 'YAWN_WAVE', phase: 'TUTORIAL', assist: false },
-  { slot: 'FLUFFY_FUTON', phase: 'TUTORIAL', assist: true },
+  { slot: 'PILLOW_SWEEP', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
+  { slot: 'PILLOW_SWEEP', assist: false, damageScale: TUTORIAL_NORMAL_SCALE },
+  { slot: 'YAWN_WAVE', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
+  { slot: 'YAWN_WAVE', assist: false, damageScale: TUTORIAL_NORMAL_SCALE },
+  { slot: 'FLUFFY_FUTON', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
 ];
 
 /**
@@ -76,13 +117,13 @@ export const DEFAULT_TUTORIAL_SEQUENCE: readonly SequenceStepDefinition[] = [
  * と仕様 §19 が定めているため (SEQ-004)。
  */
 export const DEFAULT_MAIN_SEQUENCE: readonly SequenceStepDefinition[] = [
-  { slot: 'PILLOW_SWEEP', phase: 'MAIN', assist: false },
-  { slot: 'YAWN_WAVE', phase: 'MAIN', assist: false },
-  { slot: 'PILLOW_SWEEP', phase: 'MAIN', assist: false },
-  { slot: 'YAWN_WAVE', phase: 'MAIN', assist: false },
-  { slot: 'FLUFFY_FUTON', phase: 'MAIN', assist: false },
-  { slot: 'PILLOW_OR_YAWN', phase: 'MAIN', assist: false },
-  { slot: 'FLUFFY_FUTON', phase: 'MAIN', assist: false },
+  { slot: 'PILLOW_SWEEP', assist: false },
+  { slot: 'YAWN_WAVE', assist: false },
+  { slot: 'PILLOW_SWEEP', assist: false },
+  { slot: 'YAWN_WAVE', assist: false },
+  { slot: 'FLUFFY_FUTON', assist: false },
+  { slot: 'PILLOW_OR_YAWN', assist: false },
+  { slot: 'FLUFFY_FUTON', assist: false },
 ];
 
 export interface AttackSequenceOptions {
@@ -131,17 +172,22 @@ function resolveSlot(slot: SequenceSlot, random: () => number): AttackId {
  * 方向を持つ技は呼ぶたびに乱数を引き直すので、同じ技が2度出ても
  * 左右が固定されない (完了条件「左右ランダムに発動する」)。
  */
-function createAttack(attackId: AttackId, random: () => number): BossAttack {
-  if (attackId === 'PILLOW_SWEEP') {
-    return createPillowSweep({ random });
-  }
+function createAttack(
+  attackId: AttackId,
+  random: () => number,
+  damageScale: SequenceStepDefinition['damageScale'],
+): BossAttack {
+  const base =
+    attackId === 'PILLOW_SWEEP'
+      ? createPillowSweep({ random })
+      : attackId === 'FLUFFY_FUTON'
+        ? createFluffyFutonAttack({ random })
+        : // あくび衝撃波は正面技で方向を持たないため、定義を使い回せる。
+          yawnWave;
 
-  if (attackId === 'FLUFFY_FUTON') {
-    return createFluffyFutonAttack({ random });
-  }
-
-  // あくび衝撃波は正面技で方向を持たないため、定義を使い回せる。
-  return yawnWave;
+  // 倍率はこの1手にだけ載せる。共有している yawnWave の定義を
+  // 書き換えないよう、必ず新しいオブジェクトにして返す。
+  return damageScale ? { ...base, damageScale } : base;
 }
 
 /**
@@ -161,7 +207,12 @@ export function createAttackSequence({
     throw new Error('本戦の攻撃順が空です。本戦には1手以上必要です。');
   }
 
-  const steps: readonly SequenceStepDefinition[] = [...tutorial, ...mainBattle];
+  // 段は配列の由来だけで決める。定義側に持たせないことで、本戦の配列に
+  // チュートリアルの段が混ざる設定を作れなくする (SEQ-002 / SEQ-004)。
+  const steps: readonly { definition: SequenceStepDefinition; phase: SequencePhase }[] = [
+    ...tutorial.map((definition) => ({ definition, phase: 'TUTORIAL' as const })),
+    ...mainBattle.map((definition) => ({ definition, phase: 'MAIN' as const })),
+  ];
 
   let index = 0;
 
@@ -169,7 +220,10 @@ export function createAttackSequence({
    * index 番目の手。使い切ったあとは本戦の末尾の手を返し続ける。
    * 繰り返しの対象を本戦に限ることで、チュートリアルは必ず有限回で終わる。
    */
-  function definitionAt(position: number): SequenceStepDefinition {
+  function definitionAt(position: number): {
+    definition: SequenceStepDefinition;
+    phase: SequencePhase;
+  } {
     const clamped = Math.min(position, steps.length - 1);
 
     // noUncheckedIndexedAccess のための既定。clamped は必ず範囲内で、
@@ -179,14 +233,14 @@ export function createAttackSequence({
 
   return {
     next() {
-      const definition = definitionAt(index);
+      const { definition, phase } = definitionAt(index);
       const attackId = resolveSlot(definition.slot, random);
       const step: SequenceStep = {
         index,
-        phase: definition.phase,
+        phase,
         assist: definition.assist,
         attackId,
-        attack: createAttack(attackId, random),
+        attack: createAttack(attackId, random, definition.damageScale),
       };
 
       index += 1;

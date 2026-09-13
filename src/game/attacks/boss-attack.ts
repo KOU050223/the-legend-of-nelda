@@ -74,6 +74,19 @@ export interface BossAttack extends CombatAttack {
    * 反撃可能時間が仕様より短くなる (PILLOW-007)。
    */
   counterWindowFromCorrectInput?: boolean;
+  /**
+   * この一戦のこの一手だけに掛けるダメージ倍率。省略時は等倍。
+   *
+   * チュートリアルの手を「安全に体験させる」ために使う。技の定義そのものを
+   * 弱くするのではなく、出題側 (Attack Sequence) が手ごとに掛ける
+   * (docs/single-player-poc-spec.md §16 / §17)。
+   */
+  damageScale?: {
+    /** 反撃が入ったときのボスHPダメージ倍率。0 ならボスHPを削らない。 */
+    boss?: number;
+    /** 被弾したときの SLEEPINESS 倍率。1 未満でペナルティ軽減。 */
+    sleepiness?: number;
+  };
   cues?: AttackCueSettings;
 }
 
@@ -117,11 +130,15 @@ export function defineBossAttack(attack: BossAttack): BossAttack {
     },
   };
 
+  const withScale: BossAttack = attack.damageScale
+    ? { ...definition, damageScale: { ...attack.damageScale } }
+    : definition;
+
   if (attack.cues) {
-    return { ...definition, cues: { ...attack.cues } };
+    return { ...withScale, cues: { ...attack.cues } };
   }
 
-  return definition;
+  return withScale;
 }
 
 export interface BossAttackController {
@@ -303,7 +320,7 @@ export function createBossAttackController({
 
     if (to === 'HIT') {
       if (isAttackId(attack.id)) {
-        vitals.applyAttackSleepiness(attack.id);
+        vitals.applyAttackSleepiness(attack.id, attack.damageScale?.sleepiness ?? 1);
       } else {
         vitals.addSleepiness(attack.sleepinessDamage);
       }
@@ -312,7 +329,7 @@ export function createBossAttackController({
 
     if (to === 'DAMAGE') {
       if (isAttackId(attack.id)) {
-        vitals.applyCounterDamage(attack.id);
+        vitals.applyCounterDamage(attack.id, attack.damageScale?.boss ?? 1);
       } else {
         vitals.damageBoss(attack.damage);
       }
@@ -370,9 +387,12 @@ export function createBossAttackController({
           const followUp = inputGate.submitAttack(inBossDown);
 
           if (followUp === 'ACCEPTED' && activeAttack) {
-            vitals.damageBoss(
-              activeAttack.definition.bossDownFollowUpDamage ?? BOSS_DOWN_FOLLOW_UP_DAMAGE,
-            );
+            // 追撃にも同じ倍率を掛ける。掛けないとチュートリアルの布団で
+            // 大ダウン中に殴ったぶんだけボスHPが削れてしまう。
+            const followUpDamage =
+              activeAttack.definition.bossDownFollowUpDamage ?? BOSS_DOWN_FOLLOW_UP_DAMAGE;
+
+            vitals.damageBoss(followUpDamage * (activeAttack.definition.damageScale?.boss ?? 1));
           }
 
           return followUp;

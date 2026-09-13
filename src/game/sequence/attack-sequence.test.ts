@@ -89,8 +89,8 @@ describe('createAttackSequence', () => {
       random: fixedRandom(0),
       tutorial: [],
       mainBattle: [
-        { slot: 'FLUFFY_FUTON', phase: 'MAIN', assist: false },
-        { slot: 'YAWN_WAVE', phase: 'MAIN', assist: false },
+        { slot: 'FLUFFY_FUTON', assist: false },
+        { slot: 'YAWN_WAVE', assist: false },
       ],
     });
 
@@ -102,7 +102,7 @@ describe('createAttackSequence', () => {
     const sequence = createAttackSequence({
       random: fixedRandom(0),
       tutorial: [],
-      mainBattle: [{ slot: 'FLUFFY_FUTON', phase: 'MAIN', assist: false }],
+      mainBattle: [{ slot: 'FLUFFY_FUTON', assist: false }],
     });
 
     expect(take(sequence, 3).map((step) => step.attackId)).toEqual([
@@ -116,8 +116,8 @@ describe('createAttackSequence', () => {
     // SEQ-002。チュートリアルの手を繰り返すと本戦へ入れなくなる。
     const sequence = createAttackSequence({
       random: fixedRandom(0),
-      tutorial: [{ slot: 'PILLOW_SWEEP', phase: 'TUTORIAL', assist: true }],
-      mainBattle: [{ slot: 'YAWN_WAVE', phase: 'MAIN', assist: false }],
+      tutorial: [{ slot: 'PILLOW_SWEEP', assist: true }],
+      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
     });
 
     expect(take(sequence, 4).map((step) => ({ id: step.attackId, phase: step.phase }))).toEqual([
@@ -135,8 +135,8 @@ describe('createAttackSequence', () => {
       random: () => (call++ % 2 === 0 ? 0 : 0.9),
       tutorial: [],
       mainBattle: [
-        { slot: 'PILLOW_SWEEP', phase: 'MAIN', assist: false },
-        { slot: 'PILLOW_SWEEP', phase: 'MAIN', assist: false },
+        { slot: 'PILLOW_SWEEP', assist: false },
+        { slot: 'PILLOW_SWEEP', assist: false },
       ],
     });
 
@@ -162,5 +162,61 @@ describe('createAttackSequence', () => {
     expect(() => createAttackSequence({ tutorial: [], mainBattle: [] })).toThrow(
       '本戦の攻撃順が空です',
     );
+  });
+
+  it('段は定義ではなく置いた配列で決まる', () => {
+    // SEQ-002 / SEQ-004。本戦の配列へ入れた手は必ず本戦の段になる。
+    const sequence = createAttackSequence({
+      random: fixedRandom(0),
+      tutorial: [{ slot: 'PILLOW_SWEEP', assist: true }],
+      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
+    });
+
+    expect(take(sequence, 2).map((step) => step.phase)).toEqual(['TUTORIAL', 'MAIN']);
+  });
+
+  it('チュートリアルの手はボスHPを削らない倍率を持つ', () => {
+    // 仕様 §17。全成功でも本戦の最終手まで到達させるため。
+    const sequence = createAttackSequence({ random: fixedRandom(0) });
+
+    expect(take(sequence, 5).map((step) => step.attack.damageScale?.boss)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it('補助付きのチュートリアルの手だけ被弾ペナルティを軽くする', () => {
+    // 仕様 §16「初回失敗時のペナルティは軽くする」。2手目・4手目は通常判定。
+    const sequence = createAttackSequence({ random: fixedRandom(0) });
+
+    expect(take(sequence, 5).map((step) => step.attack.damageScale?.sleepiness)).toEqual([
+      0.5,
+      undefined,
+      0.5,
+      undefined,
+      0.5,
+    ]);
+  });
+
+  it('本戦の手は倍率を持たず通常のダメージで判定する', () => {
+    const sequence = createAttackSequence({ random: fixedRandom(0) });
+    take(sequence, DEFAULT_TUTORIAL_SEQUENCE.length);
+
+    expect(
+      take(sequence, DEFAULT_MAIN_SEQUENCE.length).every(
+        (step) => step.attack.damageScale === undefined,
+      ),
+    ).toBe(true);
+  });
+
+  it('同じ技を共有していても倍率が別の手へ漏れない', () => {
+    // あくび衝撃波は定義を使い回すので、倍率で元の定義を汚さないこと。
+    const sequence = createAttackSequence({
+      random: fixedRandom(0),
+      tutorial: [{ slot: 'YAWN_WAVE', assist: true, damageScale: { boss: 0 } }],
+      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
+    });
+
+    const [tutorialStep, mainStep] = take(sequence, 2);
+
+    expect(tutorialStep?.attack.damageScale?.boss).toBe(0);
+    expect(mainStep?.attack.damageScale).toBeUndefined();
   });
 });

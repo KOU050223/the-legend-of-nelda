@@ -93,6 +93,11 @@ export function createCombatSession({
     sleepinessMax: vitals.sleepinessMax,
   });
 
+  // 出題位置も戦闘ごとに初期化する。外から渡されたシーケンスは前の戦闘で
+  // 使ったものかもしれず、そのままだと本戦の途中から再開してしまう
+  // (RESULT-008 の「Attack Sequence位置」)。
+  attackSequence.reset();
+
   // 進行の表示状態は戦闘ごとに初期化する。store はセッションより長く生きるので、
   // 前の戦闘が本戦の途中や補助表示ありの手で終わっていると、その値のまま
   // 次の INTRO が始まってしまう (仕様 §17 の 0〜5秒は登場演出で、
