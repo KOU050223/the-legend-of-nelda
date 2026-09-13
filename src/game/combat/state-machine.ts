@@ -113,6 +113,14 @@ export interface CombatStateMachine {
   readonly state: CombatState;
   /** 進行中の攻撃。攻撃サイクル外では null。 */
   readonly currentAttack: CombatAttack | null;
+  /**
+   * 現在の State を抜ける論理上の時刻 (ms)。時間で抜けない State では null。
+   *
+   * update() が呼ばれた回数によらず決まるので、フレーム落ちで update() が
+   * 遅れても同じ値になる。着弾予定時刻のように、遷移が通知される前から
+   * 逆算したい側がここを読む。
+   */
+  readonly stateDeadline: number | null;
   /** 時間経過を進める。時刻は GameClock から読む。 */
   update(): void;
   /** 攻撃を開始する。IDLE 以外では何もせず false を返す (多重開始防止)。 */
@@ -308,6 +316,12 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
 
     get currentAttack() {
       return attack;
+    },
+
+    get stateDeadline() {
+      const dwell = dwellOf(state);
+
+      return dwell === null ? null : enteredAt + dwell;
     },
 
     update() {

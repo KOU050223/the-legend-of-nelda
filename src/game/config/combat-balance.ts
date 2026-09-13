@@ -42,3 +42,38 @@ export const DEFAULT_ATTACK_DAMAGE: Readonly<Record<AttackId, AttackDamage>> = {
   YAWN_WAVE: { bossDamage: 15, sleepinessDamage: 18 },
   FLUFFY_FUTON: { bossDamage: 30, sleepinessDamage: 28 },
 };
+
+/**
+ * 入力ミス・入力受理にともなう硬直時間 (ms)。
+ * docs/single-player-poc-spec.md §13。
+ *
+ * 仕様が幅を持つ値 (早押し 0.3〜0.5秒) は中央付近を既定とし、
+ * プレイテストで調整する。Issue #3「入力受付時間を設定から調整できる」。
+ */
+export interface InputLockDurations {
+  /** 早押し (TOO EARLY) で入力を弾いたあとの硬直。仕様は約0.3〜0.5秒。 */
+  tooEarlyMs: number;
+  /**
+   * 回避・ガードを受理したあとの再入力ロック。
+   * 仕様が長さを定めているのは回避 (約0.7秒) だが、1サイクルに受理される
+   * 防御入力は1つなので、ガードにも同じ値を掛けて「最初の入力のみ採用」を満たす。
+   */
+  defenseMs: number;
+  /** 反撃可能時間外の攻撃 (WHIFF) のあとの硬直。仕様は約0.4秒。 */
+  whiffMs: number;
+  /**
+   * 反撃が成立したあとの再入力ロック。
+   *
+   * 空振りの硬直とは別の値。成功後に連打しても Damage / Counter Event が
+   * 複数回発生しないようにするためのもので (COUNTER-006)、
+   * 反撃1回で COUNTER_WINDOW が閉じるため長さ自体は表に出にくい。
+   */
+  counterMs: number;
+}
+
+export const DEFAULT_INPUT_LOCKS: InputLockDurations = {
+  tooEarlyMs: 400,
+  defenseMs: 700,
+  whiffMs: 400,
+  counterMs: 400,
+};

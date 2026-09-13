@@ -23,14 +23,36 @@ afterEach(() => {
 });
 
 describe('attachKeyboardInput', () => {
-  it('割り当てられたキーをPlayerActionへ変換する', () => {
+  // INPUT-001〜INPUT-004。4操作それぞれが Player Action として通知される。
+  // 矢印キーと WASD/J の2系統を割り当てているので、どちらからでも同じ
+  // Action になることまで含めて確認する。
+  it.each([
+    { code: 'ArrowLeft', expected: 'DODGE_LEFT' },
+    { code: 'KeyA', expected: 'DODGE_LEFT' },
+    { code: 'ArrowRight', expected: 'DODGE_RIGHT' },
+    { code: 'KeyD', expected: 'DODGE_RIGHT' },
+    { code: 'ArrowDown', expected: 'GUARD' },
+    { code: 'KeyS', expected: 'GUARD' },
+    { code: 'Space', expected: 'ATTACK' },
+    { code: 'KeyJ', expected: 'ATTACK' },
+  ] as const)('$code を $expected として通知する', ({ code, expected }) => {
+    const actions: PlayerAction[] = [];
+    detach = attachKeyboardInput((action) => actions.push(action));
+
+    dispatchKey(code);
+
+    expect(actions).toEqual([expected]);
+  });
+
+  it('押した順にそのままの回数だけ通知する', () => {
     const actions: PlayerAction[] = [];
     detach = attachKeyboardInput((action) => actions.push(action));
 
     dispatchKey('ArrowLeft');
     dispatchKey('Space');
+    dispatchKey('ArrowLeft');
 
-    expect(actions).toEqual(['DODGE_LEFT', 'ATTACK']);
+    expect(actions).toEqual(['DODGE_LEFT', 'ATTACK', 'DODGE_LEFT']);
   });
 
   it('未割り当てのキーは無視する', () => {

@@ -129,11 +129,11 @@ describe('共通ボス攻撃基盤', () => {
     const staleInputAccepted = controller.submitAction('DODGE_LEFT');
 
     expect(started).toBe(true);
-    expect(accepted).toBe(true);
+    expect(accepted).toBe('ACCEPTED');
     expect(countered).toBe(true);
     expect(machine.state).toBe('IDLE');
     expect(vitals.bossHp).toBe(90);
-    expect(staleInputAccepted).toBe(false);
+    expect(staleInputAccepted).not.toBe('ACCEPTED');
     expect(events.map((event) => event.type)).toEqual([
       'ATTACK_STARTED',
       'ATTACK_VISUAL_CUE',
@@ -155,7 +155,7 @@ describe('共通ボス攻撃基盤', () => {
     advance(100);
 
     expect(secondStarted).toBe(false);
-    expect(accepted).toBe(true);
+    expect(accepted).toBe('ACCEPTED');
     expect(machine.state).toBe('COUNTER_WINDOW');
   });
 
@@ -213,7 +213,7 @@ describe('共通ボス攻撃基盤', () => {
     const acceptedAtHit = controller.submitAction('DODGE_LEFT');
     advance(100);
 
-    expect(acceptedAtHit).toBe(true);
+    expect(acceptedAtHit).toBe('ACCEPTED');
     expect(machine.state).toBe('COUNTER_WINDOW');
   });
 
@@ -227,7 +227,7 @@ describe('共通ボス攻撃基盤', () => {
     const acceptedAtWindowEnd = controller.submitAction('DODGE_LEFT');
     machine.update();
 
-    expect(acceptedAtWindowEnd).toBe(true);
+    expect(acceptedAtWindowEnd).toBe('ACCEPTED');
     expect(machine.state).toBe('COUNTER_WINDOW');
   });
 
@@ -271,6 +271,161 @@ describe('共通ボス攻撃基盤', () => {
       type: 'ATTACK_HIT_TIMING',
       attackId: 'PILLOW_SWEEP',
       at: 2400,
+    });
+  });
+
+  // Issue #3 の完了条件を攻撃サイクルの上で確認する。
+  // 受付ウィンドウ・硬直の長さ自体は player-input.test.ts / judge.test.ts で
+  // 単体で押さえているので、ここでは配線が効いていることだけを見る。
+  describe('プレイヤー入力の受付と入力ミス処理', () => {
+    it('着弾より早すぎる入力は早押しとして弾き、判定へ回さない', () => {
+      const { advance, controller, events, machine } = setup();
+
+      controller.start(dummyAttack);
+      // TELEGRAPH 中。着弾予定はまだ 2400ms 先で、受付開始 (着弾-600ms) より前。
+      advance(1000);
+      const tooEarly = controller.submitAction('DODGE_LEFT');
+
+      expect(tooEarly).toBe('TOO_EARLY');
+      expect(events).toContainEqual({
+        type: 'INPUT_REJECTED',
+        action: 'DODGE_LEFT',
+        reason: 'TOO_EARLY',
+      });
+
+      // 早押しは被弾もさせない。判定は「入力なし」として進む。
+      advance(1000);
+      advance(500);
+
+      expect(machine.state).toBe('HIT');
+    });
+
+    it('早押しの硬直中は受付ウィンドウへ入っても入力できない', () => {
+      const { advance, controller, machine } = setup();
+
+      controller.start(dummyAttack);
+      advance(1000);
+      controller.submitAction('DODGE_LEFT');
+
+      // 硬直 400ms より手前で受付ウィンドウへ入る時刻を選ぶ。
+      advance(300);
+      const duringLock = controller.submitAction('DODGE_LEFT');
+
+      expect(duringLock).toBe('LOCKED');
+
+      advance(700);
+      advance(500);
+
+      expect(machine.state).toBe('HIT');
+    });
+
+    it('受付ウィンドウ内の最初の入力だけを判定へ渡す', () => {
+      const { advance, controller, machine } = setup();
+
+      controller.start(dummyAttack);
+      advance(2000);
+      advance(400);
+      // 1回目は正解。2回目は方向ミスだが、連打として捨てられる。
+      const first = controller.submitAction('DODGE_LEFT');
+      const second = controller.submitAction('DODGE_RIGHT');
+      advance(100);
+
+      expect(first).toBe('ACCEPTED');
+      expect(second).toBe('LOCKED');
+      expect(machine.state).toBe('COUNTER_WINDOW');
+    });
+
+    it('方向を取り違えた入力は受理したうえで被弾させる', () => {
+      const { advance, controller, events, machine } = setup();
+
+      controller.start(dummyAttack);
+      advance(2000);
+      advance(400);
+      const accepted = controller.submitAction('DODGE_RIGHT');
+      advance(100);
+
+      expect(accepted).toBe('ACCEPTED');
+      expect(events).toContainEqual({ type: 'JUDGED', result: 'HIT' });
+      expect(machine.state).toBe('HIT');
+    });
+
+    it('反撃可能時間外の攻撃は空振りになり、ボスへダメージを与えない', () => {
+      const { advance, controller, events, machine, vitals } = setup();
+
+      controller.start(dummyAttack);
+      advance(2000);
+      const whiffed = controller.submitAction('ATTACK');
+
+      expect(whiffed).toBe('WHIFF');
+      expect(machine.state).not.toBe('DAMAGE');
+      expect(vitals.bossHp).toBe(100);
+      expect(events).toContainEqual({
+        type: 'INPUT_REJECTED',
+        action: 'ATTACK',
+        reason: 'WHIFF',
+      });
+    });
+
+    it('回避成功の直後でも反撃の攻撃入力は通る', () => {
+      const { advance, controller, machine, vitals } = setup();
+
+      controller.start(dummyAttack);
+      advance(2000);
+      advance(400);
+      controller.submitAction('DODGE_LEFT');
+      advance(100);
+
+      expect(machine.state).toBe('COUNTER_WINDOW');
+
+      // 回避の再入力ロック (0.7秒) の内側。ここで攻撃が塞がれると
+      // 布団カウンター (回避成功後0.8秒以内) が成立しなくなる。
+      advance(300);
+      const countered = controller.submitAction('ATTACK');
+
+      expect(countered).toBe('ACCEPTED');
+      expect(machine.state).toBe('DAMAGE');
+
+      advance(400);
+
+      expect(vitals.bossHp).toBe(90);
+    });
+
+    it('反撃成立後に攻撃を連打してもダメージが重ならない', () => {
+      const { advance, controller, machine, vitals } = setup();
+
+      controller.start(dummyAttack);
+      advance(2000);
+      advance(400);
+      controller.submitAction('DODGE_LEFT');
+      advance(100);
+      controller.submitAction('ATTACK');
+      const repeated = controller.submitAction('ATTACK');
+      advance(400);
+
+      expect(repeated).not.toBe('ACCEPTED');
+      expect(machine.state).toBe('IDLE');
+      expect(vitals.bossHp).toBe(90);
+    });
+
+    it('受付時間を攻撃定義から広げると、既定では早すぎる入力も判定へ渡る', () => {
+      const { advance, controller, machine } = setup();
+      // 既定の受付開始は着弾-600ms。-1500ms まで広げた攻撃を使う。
+      const lenientAttack = defineBossAttack({
+        ...dummyAttack,
+        hitTiming: { ...dummyAttack.hitTiming, acceptFromMs: -1500, perfectFromMs: -1500 },
+      });
+
+      controller.start(lenientAttack);
+      // 着弾は 2400ms。その1000ms前は、既定の受付幅 (-600ms) なら早押しになる。
+      advance(1400);
+      const accepted = controller.submitAction('DODGE_LEFT');
+
+      expect(accepted).toBe('ACCEPTED');
+
+      advance(600);
+      advance(500);
+
+      expect(machine.state).toBe('COUNTER_WINDOW');
     });
   });
 });

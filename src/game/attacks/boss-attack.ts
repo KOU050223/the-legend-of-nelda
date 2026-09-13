@@ -1,5 +1,11 @@
 import { type AttackTiming, judgePlayerAction } from '../combat/judge';
 import {
+  createPlayerInputGate,
+  isDefensiveAction,
+  type InputAcceptance,
+  type PlayerInputGate,
+} from '../combat/player-input';
+import {
   type CombatAttack,
   type CombatStateMachine,
   type JudgementOutcome,
@@ -84,8 +90,15 @@ export function defineBossAttack(attack: BossAttack): BossAttack {
 export interface BossAttackController {
   /** IDLE 中に攻撃を開始し、Cue をイベントとして発行する。 */
   start(attack: BossAttack): boolean;
-  /** TELEGRAPH / ATTACK 中の最初の入力を保持する。 */
-  submitAction(action: PlayerAction): boolean;
+  /**
+   * プレイヤー入力を1つ受ける。行動の種別で経路が分かれる。
+   *
+   * - 回避 / ガード → 受付ウィンドウと再入力ロックを見て、判定へ回す入力を決める
+   * - 攻撃 → COUNTER_WINDOW 中なら反撃、そうでなければ空振り (WHIFF)
+   *
+   * @returns 入力を受理したか、しなかったならなぜか。
+   */
+  submitAction(action: PlayerAction): InputAcceptance;
   /** State Machine から注入して使う入力判定。 */
   resolveJudgement(attack: CombatAttack): JudgementOutcome;
   /** COUNTER_WINDOW 中の反撃を成立させる。 */
@@ -101,6 +114,8 @@ export interface BossAttackControllerOptions {
   machine: CombatStateMachine;
   vitals: CombatVitals;
   eventBus: GameEventBus;
+  /** 硬直・再入力ロックを持つゲート。省略時は仕様の既定値で作る。 */
+  inputGate?: PlayerInputGate;
 }
 
 /**
@@ -112,13 +127,32 @@ export function createBossAttackController({
   machine,
   vitals,
   eventBus,
+  inputGate = createPlayerInputGate({ clock }),
 }: BossAttackControllerOptions): BossAttackController {
   let activeAttack: {
     definition: BossAttack;
     hitAt: number | null;
     hitTimingEmitted: boolean;
   } | null = null;
+  /** 判定へ回す防御入力。受付ウィンドウ内で受理できたものだけが入る。 */
   let submittedAction: { action: PlayerAction; inputAt: number } | null = null;
+
+  /**
+   * ATTACK 遷移の通知が届く前に着弾予定時刻を求める。
+   *
+   * TELEGRAPH の期限が ATTACK の論理上の開始時刻なので、そこへ hitAfterMs を
+   * 足せば、update() が遅れて呼ばれても実際に配られる hitAt と同じ値になる。
+   * TELEGRAPH 以外では逆算できないため null を返す。
+   */
+  function scheduledHitAt(attack: BossAttack): number | null {
+    if (machine.state !== 'TELEGRAPH') {
+      return null;
+    }
+
+    const deadline = machine.stateDeadline;
+
+    return deadline === null ? null : deadline + attack.hitTiming.hitAfterMs;
+  }
 
   function emitHitTiming(active: NonNullable<typeof activeAttack>): void {
     if (active.hitAt === null || active.hitTimingEmitted) {
@@ -170,6 +204,8 @@ export function createBossAttackController({
       const finishedAttackId = attack.id;
       activeAttack = null;
       submittedAction = null;
+      // 硬直はここで解かない。WHIFF / 早押しの硬直はサイクルの切れ目を跨いで
+      // 効くのが仕様の意図で、境界でリセットすると硬直時間が観測できなくなる。
       eventBus.emit({ type: 'ATTACK_ENDED', attackId: finishedAttackId });
     }
   });
@@ -197,16 +233,55 @@ export function createBossAttackController({
     },
 
     submitAction(action) {
-      if (
-        !activeAttack ||
-        submittedAction ||
-        (machine.state !== 'TELEGRAPH' && machine.state !== 'ATTACK')
-      ) {
-        return false;
+      // 攻撃は着弾タイミングではなく COUNTER_WINDOW に対して判定する。
+      // 技選択ミス (被弾) は防御3択の取り違えであって、攻撃は常に反撃経路
+      // (docs/single-player-poc-spec.md §13 / INPUT-014)。
+      if (!isDefensiveAction(action)) {
+        const acceptance = inputGate.submitAttack(machine.state === 'COUNTER_WINDOW');
+
+        if (acceptance === 'WHIFF') {
+          eventBus.emit({ type: 'INPUT_REJECTED', action, reason: 'WHIFF' });
+          return acceptance;
+        }
+
+        // COUNTER_WINDOW を見てから反撃を渡しているので通常は成立するが、
+        // 拒否された場合に成功を返さない。State Machine 側を真実源にしておく。
+        if (acceptance === 'ACCEPTED' && !machine.registerCounter()) {
+          return 'LOCKED';
+        }
+
+        return acceptance;
       }
 
-      submittedAction = { action, inputAt: clock.now() };
-      return true;
+      const active = activeAttack;
+
+      // 攻撃サイクル外の防御入力は判定対象を持たない。硬直も残さず捨てる。
+      if (!active || (machine.state !== 'TELEGRAPH' && machine.state !== 'ATTACK')) {
+        return 'LOCKED';
+      }
+
+      // 受付開始は着弾時刻から逆算する。ATTACK へ入る前でも、TELEGRAPH の
+      // 期限から着弾予定が分かるので、フレーム落ちで ATTACK 遷移の通知が
+      // 遅れても受付開始の判断は変わらない。
+      const hitAt = active.hitAt ?? scheduledHitAt(active.definition);
+
+      const inWindow =
+        hitAt !== null && clock.now() - hitAt >= active.definition.hitTiming.acceptFromMs;
+
+      const acceptance = inputGate.submitDefensive(action, inWindow);
+
+      if (acceptance === 'ACCEPTED') {
+        submittedAction = { action, inputAt: clock.now() };
+        return acceptance;
+      }
+
+      if (acceptance === 'TOO_EARLY') {
+        // 早押しは判定へ回さない。被弾させず硬直だけを残すため、
+        // submittedAction は空のままにして JUDGE では「入力なし」として扱う。
+        eventBus.emit({ type: 'INPUT_REJECTED', action, reason: 'TOO_EARLY' });
+      }
+
+      return acceptance;
     },
 
     resolveJudgement(attack) {
