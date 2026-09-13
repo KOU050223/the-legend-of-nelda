@@ -1,7 +1,14 @@
 # pnpm の supply-chain policy 用設定。
+# 新規公開から24時間は依存を解決せず、サプライチェーン攻撃の検知期間を確保する。
+# 既存の lockfile を安全に再現できる最小の保留期間を採用する。
+minimumReleaseAge: 1440
+
 # minimumReleaseAgeExclude は「公開直後のため既定では保留される版」を明示的に許可する。
 minimumReleaseAgeExclude:
   - '@types/three@0.186.0'
+
+# 解決済みパッケージの provenance / signature が更新時に弱くなることを拒否する。
+trustPolicy: no-downgrade
 
 # allowBuilds は依存の install 時 build script 実行可否を明示する。
 # lefthook の build script はバイナリ取得用だが、npm パッケージ側が
