@@ -108,11 +108,28 @@ describe('共通ボス攻撃基盤', () => {
     advance(2000);
 
     expect(visualCues).toEqual([
-      { type: 'ATTACK_VISUAL_CUE', attackId: 'PILLOW_SWEEP', cue: 'pillow-pull' },
+      { type: 'ATTACK_VISUAL_CUE', attackId: 'PILLOW_SWEEP', cue: 'pillow-pull', durationMs: 2000 },
     ]);
     expect(audioCues).toEqual([
-      { type: 'ATTACK_AUDIO_CUE', attackId: 'PILLOW_SWEEP', cue: 'wind-up' },
+      { type: 'ATTACK_AUDIO_CUE', attackId: 'PILLOW_SWEEP', cue: 'wind-up', durationMs: 2000 },
     ]);
+  });
+
+  // ATK-BASE-004 補助。Cue に添える尺が TELEGRAPH の実値に追随することを固定する。
+  // Presentation 側が予兆の長さを二重に持たないための情報なので、技ごとの
+  // timings 上書きで変えたときも同じ値が届く必要がある。
+  it('Cueが持つdurationMsは技ごとに上書きしたTELEGRAPHの長さに追随する', () => {
+    const { advance, controller, events } = setup();
+
+    controller.start({ ...dummyAttack, timings: { ...dummyAttack.timings, TELEGRAPH: 1200 } });
+    advance(0);
+
+    const cues = events.filter(
+      (event) => event.type === 'ATTACK_VISUAL_CUE' || event.type === 'ATTACK_AUDIO_CUE',
+    );
+
+    expect(cues).toHaveLength(2);
+    expect(cues.every((cue) => 'durationMs' in cue && cue.durationMs === 1200)).toBe(true);
   });
 
   // ATK-BASE-005 と完了条件「ダミー攻撃を共通基盤経由で1サイクル実行」。
@@ -194,6 +211,7 @@ describe('共通ボス攻撃基盤', () => {
       type: 'ATTACK_VISUAL_CUE',
       attackId: 'YAWN_WAVE',
       cue: 'pillow-pull',
+      durationMs: 2000,
     });
   });
 
