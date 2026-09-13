@@ -97,6 +97,10 @@ describe('究極奥義・ふかふか布団', () => {
     expect(machine.state).toBe('HIT');
     expect(events).toContainEqual({ type: 'JUDGED', result: 'HIT' });
     expect(vitals.sleepiness).toBe(28);
+    // 逆方向へ回避した場合も、入力なしの被弾 (FUTON-009) と同じく1回だけ加算する。
+    expect(events.filter((event) => event.type === 'SLEEPINESS_CHANGED')).toEqual([
+      { type: 'SLEEPINESS_CHANGED', value: 28 },
+    ]);
   });
 
   // FUTON-004 / FUTON-005
