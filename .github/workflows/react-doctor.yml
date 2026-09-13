@@ -12,7 +12,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   # Scans `main` on every push to track the health-score trend and catch regressions that slipped past PR review.
   push:
-    branches: ["main"]
+    branches: ['main']
 
 permissions:
   contents: read
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # fetch-depth: 0 gives React Doctor the full git history it needs to find the merge base with the target branch. Without it a shallow checkout has no merge base, so PR runs can't compare against the base and fall back to reporting every issue in the changed files (pre-existing ones included) instead of only the ones the PR introduced.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -46,12 +46,12 @@ jobs:
         # Security: @v2 is a floating major tag that may move. For supply-chain-
         # hardened CI, pin to a full commit SHA with a version comment instead:
         # uses: millionco/react-doctor@<sha>  # v2.x.x
-        # with:
-        #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"
-        #   scope: full              # On PRs, scan the whole project instead of just changed files
-        #   comment: false           # Disable the sticky PR summary comment
-        #   review-comments: false   # Disable inline review comments on changed lines
-        #   commit-status: false     # Disable the commit status (score + counts, links to the run)
-        #   version: "0.4.0"         # Pin to a specific react-doctor version instead of "latest"
-        #   directory: apps/web      # Scan a sub-directory (default: ".")
-        #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
+        with:
+          #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"
+          #   scope: full              # On PRs, scan the whole project instead of just changed files
+          comment: true
+          review-comments: true
+          commit-status: true
+          #   version: "0.4.0"         # Pin to a specific react-doctor version instead of "latest"
+          #   directory: apps/web      # Scan a sub-directory (default: ".")
+          #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
