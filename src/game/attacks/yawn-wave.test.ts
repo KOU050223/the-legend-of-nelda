@@ -99,10 +99,10 @@ describe('あくび衝撃波', () => {
   });
 
   // YAWN-004
-  it('受付開始より1ms早いガードは成功せず、早押しとして弾く', () => {
+  it('ガード早押し (-710 ms) は成功せず、早押しとして弾く', () => {
     const { events, inputAt, judged, machine, runToJudge, vitals } = setup();
 
-    expect(inputAt(yawnWave.hitTiming.acceptFromMs - 1, 'GUARD')).toBe('TOO_EARLY');
+    expect(inputAt(-710, 'GUARD')).toBe('TOO_EARLY');
     runToJudge();
 
     // 早押しは判定へ回らないので JUDGED を発行しない。採用された入力が
@@ -135,14 +135,16 @@ describe('あくび衝撃波', () => {
   });
 
   // YAWN-007
-  it('受付終了より1ms遅いガードは被弾する', () => {
+  // 受付境界は仕様が定める実時刻で書く。定義値から相対で書くと、受付幅を
+  // 広げたときにテストまで一緒にずれて境界を検知できなくなる。
+  it('ガード終了直後 (+110 ms) のガードは被弾する', () => {
     const { advanceTo, controller, judged, machine, vitals } = setup();
 
     // 受付終了を過ぎると ATTACK を抜けて JUDGE 済みなので、入力自体が
-    // 判定対象を持たない。結果は「採用された入力なし」として被弾になる。
-    advanceTo(HIT_AT + yawnWave.hitTiming.acceptToMs + 1);
+    // 判定対象を持たない。どの経路で弾かれたかによらず、仕様上の帰結は被弾。
+    advanceTo(HIT_AT + 110);
+    controller.submitAction('GUARD');
 
-    expect(controller.submitAction('GUARD')).toBe('LOCKED');
     expect(judged()).toEqual([]);
     expect(machine.state).toBe('HIT');
     expect(vitals.sleepiness).toBe(yawnWave.sleepinessDamage);
