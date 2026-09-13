@@ -2,6 +2,9 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Mesh } from 'three';
 
+import { hitStopDelta } from '../vfx/hit-stop';
+import { useVfxStore } from '../vfx/vfx-store';
+
 /**
  * 仮Boss。Graybox First のため Primitive Mesh で表現する。
  * (docs/development-workflow.md §9 / docs/technical-design.md §12)
@@ -10,9 +13,12 @@ export function BossMesh(): React.JSX.Element {
   const meshRef = useRef<Mesh>(null);
 
   useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.4;
-    }
+    if (!meshRef.current) return;
+
+    // ヒットストップ中はモーションを止める。止めるのは見た目だけで、
+    // Game Logic の時間は動き続ける (hit-stop.ts)。
+    const { active } = useVfxStore.getState();
+    meshRef.current.rotation.y += hitStopDelta(delta, active, performance.now()) * 0.4;
   });
 
   return (

@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
+import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
+import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { Hud } from '@/ui/hud/Hud';
+import { EffectSettings } from '@/ui/settings/EffectSettings';
 
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
@@ -30,7 +33,9 @@ export function App(): React.JSX.Element {
   return (
     <div className={styles.root}>
       <GameScene />
+      <VfxOverlay getSettings={readPresentationSettings} />
       <Hud />
+      <EffectSettings />
     </div>
   );
 }

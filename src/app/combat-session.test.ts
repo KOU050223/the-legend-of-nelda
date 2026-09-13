@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { createSilentAudioOutput } from '@/audio/audio-output';
 import { createFakeClock } from '@/game/clock';
 import type { GameEvent } from '@/game/events/game-event';
 import type { PlayerAction } from '@/game/types';
@@ -39,7 +40,14 @@ function createManualLoop(): { loop: FrameLoop; tick: () => void; isStopped: () 
 function setup() {
   const clock = createFakeClock();
   const { loop, tick, isStopped } = createManualLoop();
-  const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+  // 音は鳴らさない。このテストが確かめるのは HUD と戦闘の接続で、
+  // jsdom には再生できる音源が無い。
+  const session = createCombatSession({
+    clock,
+    frameLoop: loop,
+    random: () => 0,
+    audioOutput: createSilentAudioOutput(),
+  });
 
   const events: GameEvent[] = [];
   session.eventBus.subscribe((event) => events.push(event));
