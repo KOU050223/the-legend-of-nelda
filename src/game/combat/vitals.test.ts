@@ -135,7 +135,9 @@ describe('createCombatVitals', () => {
     it('戦闘中は終了状態を返さない', () => {
       const vitals = createCombatVitals();
 
-      expect(vitals.resolveBattleEnd()).toBeNull();
+      const result = vitals.resolveBattleEnd();
+
+      expect(result).toBeNull();
     });
 
     // HP-005 / SM-003 / RESULT-001
@@ -143,8 +145,9 @@ describe('createCombatVitals', () => {
       const vitals = createCombatVitals({ initialBossHp: 1 });
 
       vitals.damageBoss(1);
+      const result = vitals.resolveBattleEnd();
 
-      expect(vitals.resolveBattleEnd()).toBe('BOSS_DEFEATED');
+      expect(result).toBe('BOSS_DEFEATED');
     });
 
     // HP-006 / SM-004 / RESULT-003
@@ -153,8 +156,9 @@ describe('createCombatVitals', () => {
 
       vitals.addSleepiness(99);
       vitals.addSleepiness(1);
+      const result = vitals.resolveBattleEnd();
 
-      expect(vitals.resolveBattleEnd()).toBe('PLAYER_LOSE');
+      expect(result).toBe('PLAYER_LOSE');
     });
 
     // HP-007
@@ -163,9 +167,10 @@ describe('createCombatVitals', () => {
 
       vitals.addSleepiness(98);
       vitals.addSleepiness(1);
+      const result = vitals.resolveBattleEnd();
 
       expect(vitals.sleepiness).toBe(99);
-      expect(vitals.resolveBattleEnd()).toBeNull();
+      expect(result).toBeNull();
     });
 
     // RESULT-004 / RESULT-005。問い合わせ型なので何度読んでも同じ答えを返し、
@@ -175,9 +180,11 @@ describe('createCombatVitals', () => {
 
       vitals.damageBoss(1);
       vitals.damageBoss(30);
+      const first = vitals.resolveBattleEnd();
+      const second = vitals.resolveBattleEnd();
 
-      expect(vitals.resolveBattleEnd()).toBe('BOSS_DEFEATED');
-      expect(vitals.resolveBattleEnd()).toBe('BOSS_DEFEATED');
+      expect(first).toBe('BOSS_DEFEATED');
+      expect(second).toBe('BOSS_DEFEATED');
     });
 
     // HPが0かつSLEEPINESSが100という相打ちは、反撃が成立している側を採る。
@@ -186,8 +193,9 @@ describe('createCombatVitals', () => {
 
       vitals.addSleepiness(100);
       vitals.damageBoss(10);
+      const result = vitals.resolveBattleEnd();
 
-      expect(vitals.resolveBattleEnd()).toBe('BOSS_DEFEATED');
+      expect(result).toBe('BOSS_DEFEATED');
     });
   });
 
@@ -269,8 +277,9 @@ describe('createCombatVitals', () => {
       const vitals = createCombatVitals({ maxSleepiness: 50 });
 
       vitals.addSleepiness(50);
+      const result = vitals.resolveBattleEnd();
 
-      expect(vitals.resolveBattleEnd()).toBe('PLAYER_LOSE');
+      expect(result).toBe('PLAYER_LOSE');
     });
   });
 
@@ -282,10 +291,11 @@ describe('createCombatVitals', () => {
       vitals.applyCounterDamage('FLUFFY_FUTON');
       vitals.applyAttackSleepiness('FLUFFY_FUTON');
       vitals.reset();
+      const result = vitals.resolveBattleEnd();
 
       expect(vitals.bossHp).toBe(100);
       expect(vitals.sleepiness).toBe(0);
-      expect(vitals.resolveBattleEnd()).toBeNull();
+      expect(result).toBeNull();
     });
 
     it('やり直しで戻った初期値も購読側へ通知される', () => {
