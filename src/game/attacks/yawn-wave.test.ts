@@ -150,7 +150,9 @@ describe('あくび衝撃波', () => {
     advanceTo(HIT_AT + 110);
     controller.submitAction('GUARD');
 
-    expect(judged()).toEqual([]);
+    // 採用された入力が無いまま着弾した周回として、JUDGE で被弾が確定している。
+    // 表示側はこの結果から被弾演出を出す (UI-008)。
+    expect(judged()).toEqual(['HIT']);
     expect(machine.state).toBe('HIT');
     expect(vitals.sleepiness).toBe(yawnWave.sleepinessDamage);
   });

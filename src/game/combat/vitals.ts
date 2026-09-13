@@ -27,6 +27,16 @@ export interface CombatVitals {
   readonly sleepiness: number;
 
   /**
+   * ボスHPの最大値 (= 初期値)。
+   * ゲージの分母は options で上書きできるため、表示側が
+   * INITIAL_BOSS_HP を直接読むと上書き時に割合がずれる。
+   */
+  readonly bossHpMax: number;
+
+  /** SLEEPINESS の上限 (= 敗北しきい値)。割合表示の分母。 */
+  readonly sleepinessMax: number;
+
+  /**
    * ボスHPを減らす。負値を渡すと回復になる。
    * 0未満にも初期HP超にもならない (HP-005)。
    * @returns 適用後のボスHP。
@@ -152,6 +162,10 @@ export function createCombatVitals(options: CombatVitalsOptions = {}): CombatVit
     get sleepiness() {
       return sleepiness;
     },
+
+    bossHpMax: initialBossHp,
+
+    sleepinessMax: maxSleepiness,
 
     damageBoss,
 
