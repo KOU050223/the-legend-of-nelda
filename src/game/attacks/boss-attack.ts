@@ -171,11 +171,28 @@ export function createBossAttackController({
     const { definition: attack } = active;
 
     if (to === 'TELEGRAPH') {
+      // 予兆の尺を Cue へ添える。Presentation 側が TELEGRAPH の長さを
+      // ハードコードで二重に持たずに済ませるためで、技ごとの timings 上書きや
+      // バランス調整がそのまま届く (docs/single-player-poc-spec.md §8 の
+      // 「発射直前の約0.15秒の無音」)。期限を持たない場合はキーごと省く。
+      const deadline = machine.stateDeadline;
+      const duration = deadline === null ? null : { durationMs: deadline - startedAt };
+
       if (attack.cues?.visual !== false && attack.visualCue) {
-        eventBus.emit({ type: 'ATTACK_VISUAL_CUE', attackId: attack.id, cue: attack.visualCue });
+        eventBus.emit({
+          type: 'ATTACK_VISUAL_CUE',
+          attackId: attack.id,
+          cue: attack.visualCue,
+          ...duration,
+        });
       }
       if (attack.cues?.audio !== false && attack.audioCue) {
-        eventBus.emit({ type: 'ATTACK_AUDIO_CUE', attackId: attack.id, cue: attack.audioCue });
+        eventBus.emit({
+          type: 'ATTACK_AUDIO_CUE',
+          attackId: attack.id,
+          cue: attack.audioCue,
+          ...duration,
+        });
       }
       return;
     }

@@ -18,11 +18,18 @@ export type InputRejectionReason = 'TOO_EARLY' | 'WHIFF';
  * レイヤーへもう片方の情報を渡さないためで、Phase 2 で
  * 見ざる / 聞かざる へ Cue を出し分ける際の前提になる
  * (docs/technical-design.md §6 / docs/testing-strategy.md §7)。
+ *
+ * Cue は `durationMs` に予兆 (TELEGRAPH) の尺を添える。あくび衝撃波の
+ * 「発射直前の約0.15秒の無音」のように、Cue を受けた Audio / Rendering 側が
+ * 着弾から逆算して多拍の分節を組み立てる必要があるため
+ * (docs/single-player-poc-spec.md §8)。尺を持たせないと Presentation 側が
+ * TELEGRAPH の長さを二重に持つことになり、バランス調整でずれる。
+ * Cue ID 自体は1技につき1つのまま変えない。
  */
 export type GameEvent =
   | { type: 'ATTACK_STARTED'; attackId: string }
-  | { type: 'ATTACK_VISUAL_CUE'; attackId: string; cue: string }
-  | { type: 'ATTACK_AUDIO_CUE'; attackId: string; cue: string }
+  | { type: 'ATTACK_VISUAL_CUE'; attackId: string; cue: string; durationMs?: number }
+  | { type: 'ATTACK_AUDIO_CUE'; attackId: string; cue: string; durationMs?: number }
   | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
   | { type: 'ATTACK_ENDED'; attackId: string }
   | { type: 'JUDGED'; result: JudgeResult }
