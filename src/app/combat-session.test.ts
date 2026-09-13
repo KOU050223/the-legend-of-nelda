@@ -10,7 +10,7 @@ import {
 } from '@/game/config/combat-balance';
 import { useGameStore } from '@/store/game-store';
 
-import { createAttackSequence } from '@/game/sequence/attack-sequence';
+import { createAttackSequence, DEFAULT_TUTORIAL_SEQUENCE } from '@/game/sequence/attack-sequence';
 
 import { createCombatSession, type FrameLoop } from './combat-session';
 
@@ -135,6 +135,8 @@ describe('createCombatSession', () => {
 
     tick();
     advance(3_100);
+    // 攻撃と攻撃の間隔 (既定1秒) を満たして1手目が始まる。
+    advance(1_000);
 
     expect(useGameStore.getState()).toMatchObject({
       sequencePhase: 'TUTORIAL',
@@ -168,7 +170,10 @@ describe('createCombatSession', () => {
     });
 
     tick();
+    // INTRO (3秒) を抜けたあと、攻撃と攻撃の間隔 (既定1秒) を満たすまで進める。
     clock.advance(3_100);
+    tick();
+    clock.advance(1_000);
     tick();
 
     expect(started).toEqual(['FLUFFY_FUTON']);
@@ -354,5 +359,137 @@ describe('createCombatSession', () => {
 
     expect(sequence.index).toBe(0);
     expect(sequence.phase).toBe('TUTORIAL');
+  });
+
+  it('大ダウン中に追撃し続けても最終ふかふか布団まで到達する', () => {
+    // 仕様 §11 の大ダウンは「最大の反撃チャンス」。そこで殴ったプレイヤーだけが
+    // 本戦1つ目の布団で決着してしまい、ランダム枠と最終布団へ行けなくなっていた。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+
+    const steps: string[] = [];
+    let pendingDefense: PlayerAction | null = null;
+    let shouldCounter = false;
+
+    session.eventBus.subscribe((event) => {
+      if (event.type === 'SEQUENCE_STEP_STARTED')
+        steps.push(`${event.stepIndex}:${event.attackId}`);
+      if (event.type === 'ATTACK_VISUAL_CUE') {
+        if (event.cue.includes('left')) pendingDefense = 'DODGE_RIGHT';
+        else if (event.cue.includes('right')) pendingDefense = 'DODGE_LEFT';
+        else pendingDefense = 'GUARD';
+      }
+      if (event.type === 'JUDGED') {
+        shouldCounter = event.result === 'PERFECT_DODGE' || event.result === 'JUST_GUARD';
+      }
+    });
+
+    tick();
+
+    for (let frame = 0; frame < 8_000; frame += 1) {
+      clock.advance(50);
+      tick();
+
+      const { combatState } = useGameStore.getState();
+
+      if (combatState === 'ATTACK' && pendingDefense !== null) {
+        session.submitAction(pendingDefense);
+        pendingDefense = null;
+      }
+      if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
+        session.submitAction('ATTACK');
+        shouldCounter = false;
+      }
+      // 大ダウン中は押せるだけ押す。
+      if (combatState === 'BOSS_DOWN') session.submitAction('ATTACK');
+
+      if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
+    }
+
+    expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
+    expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
+  });
+
+  it('チュートリアル順を素の定義で書き直しても早期撃破しない', () => {
+    // 倍率を既定配列にだけ書いていると、仕様どおりの5手を手で書き直した
+    // だけでボスHPが80削れて本戦2手目で決着していた。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    const session = createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      // 倍率を書かない、素の { slot, assist } だけの指定。
+      tutorialSequence: DEFAULT_TUTORIAL_SEQUENCE.map(({ slot, assist }) => ({ slot, assist })),
+    });
+
+    const steps: string[] = [];
+    let pendingDefense: PlayerAction | null = null;
+    let shouldCounter = false;
+
+    session.eventBus.subscribe((event) => {
+      if (event.type === 'SEQUENCE_STEP_STARTED')
+        steps.push(`${event.stepIndex}:${event.attackId}`);
+      if (event.type === 'ATTACK_VISUAL_CUE') {
+        if (event.cue.includes('left')) pendingDefense = 'DODGE_RIGHT';
+        else if (event.cue.includes('right')) pendingDefense = 'DODGE_LEFT';
+        else pendingDefense = 'GUARD';
+      }
+      if (event.type === 'JUDGED') {
+        shouldCounter = event.result === 'PERFECT_DODGE' || event.result === 'JUST_GUARD';
+      }
+    });
+
+    tick();
+
+    for (let frame = 0; frame < 8_000; frame += 1) {
+      clock.advance(50);
+      tick();
+
+      const { combatState } = useGameStore.getState();
+
+      if (combatState === 'ATTACK' && pendingDefense !== null) {
+        session.submitAction(pendingDefense);
+        pendingDefense = null;
+      }
+      if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
+        session.submitAction('ATTACK');
+        shouldCounter = false;
+      }
+
+      if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
+    }
+
+    expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
+  });
+
+  it('攻撃と攻撃のあいだに間隔を空ける', () => {
+    // 仕様 §15 の IDLE 約1秒。State Machine は IDLE に滞在時間を持たず、
+    // 間隔はシーケンス側の担当と定めてある。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    const session = createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      idleIntervalMs: 1_000,
+    });
+
+    let started = 0;
+    session.eventBus.subscribe((event) => {
+      if (event.type === 'ATTACK_STARTED') started += 1;
+    });
+
+    tick();
+    // INTRO (3秒) を抜けて IDLE に入った直後はまだ始まらない。
+    clock.advance(3_100);
+    tick();
+    expect(started).toBe(0);
+
+    // 間隔を満たすと始まる。
+    clock.advance(1_000);
+    tick();
+    expect(started).toBe(1);
   });
 });

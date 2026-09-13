@@ -4,8 +4,20 @@ import { createFakeClock } from '../clock';
 import { createCombatStateMachine } from '../combat/state-machine';
 import { createCombatVitals } from '../combat/vitals';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
-import { createBossAttackController } from './boss-attack';
+import { createBossAttackController, type BossAttack } from './boss-attack';
 import { createFluffyFutonAttack } from './fluffy-futon';
+
+/**
+ * 大ダウン中の追撃に単価を持たせた定義。
+ *
+ * 既定の BOSS_DOWN_FOLLOW_UP_DAMAGE は 0 で、仕様 §17 の攻撃順に
+ * 追撃の入る余地が無いため (combat-balance.ts の算術)。ここで検証したいのは
+ * 「大ダウン中に追撃が通り、1発ごとにダメージが入る」という機構そのものなので、
+ * 単価を明示して回す。
+ */
+function withFollowUpDamage(attack: BossAttack, damage = 10): BossAttack {
+  return { ...attack, bossDownFollowUpDamage: damage };
+}
 
 /** 構え + 溜め。ここを進めると ATTACK へ入る。 */
 const TELEGRAPH_MS = 2300;
@@ -287,7 +299,7 @@ describe('究極奥義・ふかふか布団', () => {
   it('カウンター成功後に大ダウンが発生し、その間は追撃できる', () => {
     const { advance, controller, machine, vitals } = setup();
 
-    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    controller.start(withFollowUpDamage(createFluffyFutonAttack({ random: PICK_RIGHT })));
     dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
     advance(300);
     controller.submitAction('ATTACK');
@@ -379,7 +391,7 @@ describe('究極奥義・ふかふか布団', () => {
   it('大ダウン中の追撃は連打してもロック中は通らない', () => {
     const { advance, controller, events, vitals } = setup();
 
-    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    controller.start(withFollowUpDamage(createFluffyFutonAttack({ random: PICK_RIGHT })));
     dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
     advance(300);
     controller.submitAction('ATTACK');

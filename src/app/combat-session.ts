@@ -49,7 +49,17 @@ export interface CombatSessionOptions {
   mainSequence?: readonly SequenceStepDefinition[];
   /** 出題順そのものを差し替える。指定した場合 tutorialSequence / mainSequence は使わない。 */
   sequence?: AttackSequence;
+  /**
+   * 攻撃と攻撃の間隔 (ms)。省略時は仕様 §15 の IDLE 約1秒。
+   *
+   * State Machine は IDLE に滞在時間を持たず、間隔はシーケンス側の担当と
+   * 定めてある (state-machine.ts の CombatTimings)。その受け口がここ。
+   */
+  idleIntervalMs?: number;
 }
+
+/** 攻撃と攻撃の間隔の既定値。docs/single-player-poc-spec.md §15 の IDLE 約1秒。 */
+const DEFAULT_IDLE_INTERVAL_MS = 1_000;
 
 /**
  * Game Logic を1つ組み立てて HUD へ接続する。
@@ -65,6 +75,7 @@ export function createCombatSession({
   tutorialSequence,
   mainSequence,
   sequence,
+  idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS,
 }: CombatSessionOptions = {}): CombatSession {
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
@@ -106,6 +117,9 @@ export function createCombatSession({
 
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
 
+  /** IDLE へ入った時刻。次の技を出すまでの間隔をここから測る。 */
+  let idleSince: number | null = null;
+
   const stopLoop = frameLoop(() => {
     controller.update();
     machine.update();
@@ -113,8 +127,17 @@ export function createCombatSession({
     // IDLE は次の技を待つ状態。戦闘が終わっていれば startAttack が false を
     // 返すのでここでは State だけを見る。
     if (machine.state !== 'IDLE') {
+      idleSince = null;
       return;
     }
+
+    // 攻撃と攻撃の間隔を空ける。State Machine は IDLE に滞在時間を持たない
+    // 設計なので (次の攻撃を待つ状態そのもの)、間隔はここで測る。
+    idleSince ??= clock.now();
+    if (clock.now() - idleSince < idleIntervalMs) {
+      return;
+    }
+    idleSince = null;
 
     const step = attackSequence.next();
 

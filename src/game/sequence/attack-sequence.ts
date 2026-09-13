@@ -88,6 +88,18 @@ export interface SequenceStep {
 const TUTORIAL_ASSISTED_SCALE = { boss: 0, sleepiness: 0.5 } as const;
 
 /**
+ * チュートリアルの手に当てる既定の倍率。
+ *
+ * 既定配列へ直接書かず、チュートリアル配列に置かれた手すべてへここから当てる。
+ * 呼び出し側が `tutorialSequence` を素の `{ slot, assist }` で書き直しても
+ * 倍率が落ちないようにするため。書いた場所によって安全かどうかが変わると、
+ * 仕様どおりの5手を手で書き直しただけでボスHPが 80 削れて早期撃破に戻る。
+ */
+function tutorialDamageScale(assist: boolean): NonNullable<SequenceStepDefinition['damageScale']> {
+  return assist ? TUTORIAL_ASSISTED_SCALE : TUTORIAL_NORMAL_SCALE;
+}
+
+/**
  * チュートリアルの「通常判定」の手 (仕様 §16 の2手目・4手目)。
  * 被弾は本戦と同じ重さに戻すが、ボスHPはまだ削らない。
  */
@@ -103,11 +115,11 @@ const TUTORIAL_NORMAL_SCALE = { boss: 0 } as const;
  * 5. ふかふか布団：回避→攻撃の2段階入力を学習 (補助あり)
  */
 export const DEFAULT_TUTORIAL_SEQUENCE: readonly SequenceStepDefinition[] = [
-  { slot: 'PILLOW_SWEEP', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
-  { slot: 'PILLOW_SWEEP', assist: false, damageScale: TUTORIAL_NORMAL_SCALE },
-  { slot: 'YAWN_WAVE', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
-  { slot: 'YAWN_WAVE', assist: false, damageScale: TUTORIAL_NORMAL_SCALE },
-  { slot: 'FLUFFY_FUTON', assist: true, damageScale: TUTORIAL_ASSISTED_SCALE },
+  { slot: 'PILLOW_SWEEP', assist: true },
+  { slot: 'PILLOW_SWEEP', assist: false },
+  { slot: 'YAWN_WAVE', assist: true },
+  { slot: 'YAWN_WAVE', assist: false },
+  { slot: 'FLUFFY_FUTON', assist: true },
 ];
 
 /**
@@ -210,7 +222,14 @@ export function createAttackSequence({
   // 段は配列の由来だけで決める。定義側に持たせないことで、本戦の配列に
   // チュートリアルの段が混ざる設定を作れなくする (SEQ-002 / SEQ-004)。
   const steps: readonly { definition: SequenceStepDefinition; phase: SequencePhase }[] = [
-    ...tutorial.map((definition) => ({ definition, phase: 'TUTORIAL' as const })),
+    ...tutorial.map((definition) => ({
+      // 倍率の指定が無い手には段の既定を当てる。明示されていればそちらを使う。
+      definition: {
+        ...definition,
+        damageScale: definition.damageScale ?? tutorialDamageScale(definition.assist),
+      },
+      phase: 'TUTORIAL' as const,
+    })),
     ...mainBattle.map((definition) => ({ definition, phase: 'MAIN' as const })),
   ];
 
