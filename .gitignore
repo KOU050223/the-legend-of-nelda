@@ -12,6 +12,7 @@ result-*
 
 # test
 coverage/
+.vitest/
 
 # editor / os
 .DS_Store
