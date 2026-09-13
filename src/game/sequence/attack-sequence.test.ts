@@ -206,6 +206,32 @@ describe('createAttackSequence', () => {
     ).toBe(true);
   });
 
+  it('倍率を片方だけ指定したチュートリアルの手にも段の既定が残る', () => {
+    // 片方だけ指定した手からボスHPの倍率が落ちると、チュートリアルの反撃が
+    // ボスを削って早期撃破に戻る。項目ごとに畳んでいることを見る。
+    const sequence = createAttackSequence({
+      random: fixedRandom(0),
+      tutorial: [{ slot: 'PILLOW_SWEEP', assist: true, damageScale: { sleepiness: 0.25 } }],
+      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
+    });
+
+    const [step] = take(sequence, 1);
+
+    // 明示した側はそのまま、省略した側は段の既定 (boss: 0)。
+    expect(step?.attack.damageScale).toEqual({ boss: 0, sleepiness: 0.25 });
+  });
+
+  it('チュートリアルの手で明示した倍率は既定より優先する', () => {
+    // 0 を既定とする項目へ 1 を明示しても潰されないこと (`??` であって `||` ではない)。
+    const sequence = createAttackSequence({
+      random: fixedRandom(0),
+      tutorial: [{ slot: 'PILLOW_SWEEP', assist: true, damageScale: { boss: 1 } }],
+      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
+    });
+
+    expect(take(sequence, 1)[0]?.attack.damageScale).toEqual({ boss: 1, sleepiness: 0.5 });
+  });
+
   it('同じ技を共有していても倍率が別の手へ漏れない', () => {
     // あくび衝撃波は定義を使い回すので、倍率で元の定義を汚さないこと。
     const sequence = createAttackSequence({

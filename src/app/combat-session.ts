@@ -133,7 +133,16 @@ export function createCombatSession({
 
     // 攻撃と攻撃の間隔を空ける。State Machine は IDLE に滞在時間を持たない
     // 設計なので (次の攻撃を待つ状態そのもの)、間隔はここで測る。
-    idleSince ??= clock.now();
+    if (idleSince === null) {
+      idleSince = clock.now();
+
+      // 手が終わった時点で補助表示を畳む。次の SEQUENCE_STEP_STARTED まで
+      // 待つと、チュートリアル最後の布団の「回避 → 攻撃」の答えが
+      // この間隔のあいだ出たままになる。段は次に出る手のものへ進めるので、
+      // チュートリアルを出し切った時点で表示は本戦へ切り替わる。
+      useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
+    }
+
     if (clock.now() - idleSince < idleIntervalMs) {
       return;
     }

@@ -464,6 +464,44 @@ describe('createCombatSession', () => {
     expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
   });
 
+  it('手が終わったら次の手までのあいだに補助表示を畳む', () => {
+    // 補助表示は「いま答えを見せている手」のもの。次の SEQUENCE_STEP_STARTED を
+    // 待つと、チュートリアル最後の布団の答えが間隔のあいだ出たままになる。
+    const clock = createFakeClock();
+    const { loop, tick } = createManualLoop();
+    createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      tutorialSequence: [{ slot: 'FLUFFY_FUTON', assist: true }],
+      mainSequence: [{ slot: 'YAWN_WAVE', assist: false }],
+    });
+
+    const advance = (ms: number) => {
+      clock.advance(ms);
+      tick();
+    };
+
+    tick();
+    advance(3_100);
+    advance(1_000);
+
+    expect(useGameStore.getState().assistVisible).toBe(true);
+
+    // 入力せず被弾して1手目を終え、IDLE へ戻った時点を見る。
+    // 次の手が始まる前 (間隔のあいだ) に畳まれていること。
+    let clearedBeforeNextStep = false;
+    for (let frame = 0; frame < 40; frame += 1) {
+      advance(100);
+      if (useGameStore.getState().sequencePhase === 'MAIN') {
+        clearedBeforeNextStep = !useGameStore.getState().assistVisible;
+        break;
+      }
+    }
+
+    expect(clearedBeforeNextStep).toBe(true);
+  });
+
   it('攻撃と攻撃のあいだに間隔を空ける', () => {
     // 仕様 §15 の IDLE 約1秒。State Machine は IDLE に滞在時間を持たず、
     // 間隔はシーケンス側の担当と定めてある。

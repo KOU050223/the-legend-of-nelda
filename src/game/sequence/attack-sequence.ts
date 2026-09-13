@@ -100,6 +100,28 @@ function tutorialDamageScale(assist: boolean): NonNullable<SequenceStepDefinitio
 }
 
 /**
+ * チュートリアルの手の倍率を、段の既定と明示指定から1つに畳む。
+ *
+ * 項目ごとに畳むのが要点。オブジェクト単位で `??` すると、
+ * `{ sleepiness: 0.25 }` のように片方だけ指定した手から `boss: 0` が落ち、
+ * チュートリアルの反撃がボスHPを削って早期撃破に戻る。
+ * 明示された値は 0 でも 1 でもそのまま尊重する (`??` であって `||` ではない)。
+ */
+function mergeTutorialDamageScale(
+  definition: SequenceStepDefinition,
+): NonNullable<SequenceStepDefinition['damageScale']> {
+  const defaults = tutorialDamageScale(definition.assist);
+  const boss = definition.damageScale?.boss ?? defaults.boss;
+  const sleepiness = definition.damageScale?.sleepiness ?? defaults.sleepiness;
+
+  // exactOptionalPropertyTypes のため、決まらなかったキーは持たせない。
+  return {
+    ...(boss === undefined ? {} : { boss }),
+    ...(sleepiness === undefined ? {} : { sleepiness }),
+  };
+}
+
+/**
  * チュートリアルの「通常判定」の手 (仕様 §16 の2手目・4手目)。
  * 被弾は本戦と同じ重さに戻すが、ボスHPはまだ削らない。
  */
@@ -223,10 +245,10 @@ export function createAttackSequence({
   // チュートリアルの段が混ざる設定を作れなくする (SEQ-002 / SEQ-004)。
   const steps: readonly { definition: SequenceStepDefinition; phase: SequencePhase }[] = [
     ...tutorial.map((definition) => ({
-      // 倍率の指定が無い手には段の既定を当てる。明示されていればそちらを使う。
+      // 段の既定と明示指定を項目ごとに畳む。明示されていればそちらを使う。
       definition: {
         ...definition,
-        damageScale: definition.damageScale ?? tutorialDamageScale(definition.assist),
+        damageScale: mergeTutorialDamageScale(definition),
       },
       phase: 'TUTORIAL' as const,
     })),
