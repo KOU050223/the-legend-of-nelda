@@ -152,16 +152,56 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
   /** 進行中の攻撃による上書きを含む滞在時間。 */
   let timings: CombatTimings = baseTimings;
   let attack: CombatAttack | null = null;
+  /** 通知中に発生した遷移の順番待ち。入れ子の通知で順序が入れ替わらないようにする。 */
+  const pending: CombatTransition[] = [];
+  let notifying = false;
 
-  function transitionTo(next: CombatState): void {
+  /**
+   * State を切り替える。
+   *
+   * `startedAt` には、滞在時間を満たして進む場合は「前の State の期限」を渡す。
+   * clock.now() で始めると、フレーム落ちなどで update() が期限より遅れて
+   * 呼ばれたぶん (overshoot) を毎回捨ててしまい、入力受付が仕様より延びる。
+   * 入力や攻撃開始で切り替わる場合は現在時刻でよい。
+   */
+  function transitionTo(next: CombatState, startedAt: number = clock.now()): void {
     const from = state;
     const at = clock.now();
 
     state = next;
-    enteredAt = at;
+    enteredAt = startedAt;
 
-    for (const listener of listeners) {
-      listener({ from, to: next, at });
+    notify({ from, to: next, at });
+  }
+
+  /**
+   * 遷移を購読者へ通知する。
+   *
+   * 購読者が中で startAttack() などを呼ぶと通知が入れ子になり、後から登録した
+   * 購読者が内側の遷移を先に受け取って State とずれる。通知中に発生した遷移は
+   * 順番待ちにして、1件ずつ最後まで配り終えてから次を配る。
+   */
+  function notify(transition: CombatTransition): void {
+    pending.push(transition);
+
+    if (notifying) {
+      return;
+    }
+
+    notifying = true;
+    try {
+      let next = pending.shift();
+
+      while (next) {
+        for (const listener of listeners) {
+          listener(next);
+        }
+
+        next = pending.shift();
+      }
+    } finally {
+      notifying = false;
+      pending.length = 0;
     }
   }
 
@@ -175,27 +215,31 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
   }
 
   /** 攻撃サイクルを閉じる。戦闘終了なら終了状態へ、そうでなければ IDLE へ戻る。 */
-  function closeCycle(): void {
+  function closeCycle(startedAt?: number): void {
     const ended = resolveBattleEnd();
 
     attack = null;
     timings = baseTimings;
 
-    transitionTo(ended ?? 'IDLE');
+    transitionTo(ended ?? 'IDLE', startedAt);
   }
 
-  /** JUDGE を評価して HIT か COUNTER_WINDOW へ即時に振り分ける。 */
+  /**
+   * JUDGE を評価して HIT か COUNTER_WINDOW へ即時に振り分ける。
+   * JUDGE は滞在時間を持たないので、入ってきた期限をそのまま次へ渡す。
+   */
   function judge(): void {
+    const judgedAt = enteredAt;
     const current = attack;
 
     if (!current) {
-      closeCycle();
+      closeCycle(judgedAt);
       return;
     }
 
     const outcome = resolveJudgement(current);
 
-    transitionTo(outcome === 'SUCCESS' ? 'COUNTER_WINDOW' : 'HIT');
+    transitionTo(outcome === 'SUCCESS' ? 'COUNTER_WINDOW' : 'HIT', judgedAt);
   }
 
   /**
@@ -214,31 +258,38 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
       return false;
     }
 
+    // 期限どおりに進んだものとして次の State を始める。update() が遅れて
+    // 呼ばれても、遅れたぶんが次の State の滞在時間から差し引かれる。
+    const deadline = enteredAt + dwell;
+
     switch (state) {
       case 'INTRO': {
-        transitionTo('IDLE');
+        transitionTo('IDLE', deadline);
         return true;
       }
 
       case 'TELEGRAPH': {
-        transitionTo('ATTACK');
+        transitionTo('ATTACK', deadline);
         return true;
       }
 
       case 'ATTACK': {
-        transitionTo('JUDGE');
+        transitionTo('JUDGE', deadline);
         return true;
       }
 
       case 'COUNTER_WINDOW': {
-        // 反撃が成立しないまま Window が切れた場合もサイクルは閉じる。
-        transitionTo('DAMAGE');
+        // 反撃が成立しないまま Window が切れた場合は DAMAGE へ入れずに閉じる。
+        // DAMAGE はボスへ反撃が入った State なので、ここを通すと
+        // 攻撃しなかったプレイヤーへ反撃成功と同じ結果を与えてしまう
+        // (FUTON-006「回避成功・攻撃なし」は 大ダウン発生なし / 次攻撃へ進行)。
+        closeCycle(deadline);
         return true;
       }
 
       case 'HIT':
       case 'DAMAGE': {
-        closeCycle();
+        closeCycle(deadline);
         return true;
       }
 

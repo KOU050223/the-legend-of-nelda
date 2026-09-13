@@ -229,7 +229,10 @@ describe('createCombatStateMachine', () => {
     expect(machine.currentAttack).toBeNull();
   });
 
-  it('反撃が成立しないままCOUNTER_WINDOWが切れてもDAMAGEを経てIDLEへ戻る', () => {
+  // DAMAGE はボスへ反撃が入った State なので、攻撃しなかったプレイヤーが
+  // 通ってはいけない。FUTON-006「回避成功・攻撃なし」は
+  // 大ダウン発生なし / 次攻撃へ進行。
+  it('反撃が成立しないままCOUNTER_WINDOWが切れたらDAMAGEを通らずIDLEへ戻る', () => {
     const { machine, visited, advance } = setupSucceeding();
     toIdle(machine, advance);
     machine.startAttack(dummyAttack);
@@ -238,9 +241,8 @@ describe('createCombatStateMachine', () => {
     visited.length = 0;
 
     advance(DEFAULT_COMBAT_TIMINGS.COUNTER_WINDOW);
-    advance(DEFAULT_COMBAT_TIMINGS.DAMAGE);
 
-    expect(visited).toEqual(['DAMAGE', 'IDLE']);
+    expect(visited).toEqual(['IDLE']);
   });
 
   it.each([
@@ -319,8 +321,9 @@ describe('createCombatStateMachine', () => {
         },
       },
       {
+        // 反撃が成立しなかった場合は DAMAGE を通らず IDLE へ戻る。
         from: 'COUNTER_WINDOW' as const,
-        to: 'DAMAGE' as const,
+        to: 'IDLE' as const,
         dwell: fastTimings.COUNTER_WINDOW,
         arrive: (m: CombatStateMachine, advance: (ms: number) => void) => {
           toIdle(m, advance, fastTimings);
@@ -396,6 +399,64 @@ describe('createCombatStateMachine', () => {
     advance(50);
 
     expect(machine.state).toBe('TELEGRAPH');
+  });
+
+  // フレーム落ちなどで update() が期限より遅れて呼ばれた場合。
+  // 遅れたぶんを捨てると入力受付が仕様より延びてしまう。
+  describe('update() が期限より遅れて呼ばれたとき', () => {
+    it('1回のupdateで滞在時間を満たしたStateを続けて抜ける', () => {
+      const { machine, clock } = setup();
+      clock.advance(DEFAULT_COMBAT_TIMINGS.INTRO);
+      machine.update();
+      machine.startAttack(dummyAttack);
+
+      // TELEGRAPH 2000 + ATTACK 450 がまとめて経過した1回のジャンプ。
+      clock.advance(DEFAULT_COMBAT_TIMINGS.TELEGRAPH + DEFAULT_COMBAT_TIMINGS.ATTACK + 50);
+      machine.update();
+
+      expect(machine.state).toBe('HIT');
+    });
+
+    it('遅れたぶんは次のStateの滞在時間から差し引かれる', () => {
+      const { machine, clock } = setup();
+      clock.advance(DEFAULT_COMBAT_TIMINGS.INTRO);
+      machine.update();
+      machine.startAttack(dummyAttack);
+
+      // TELEGRAPH の期限を 100ms 超えてから update する。
+      clock.advance(DEFAULT_COMBAT_TIMINGS.TELEGRAPH + 100);
+      machine.update();
+      expect(machine.state).toBe('ATTACK');
+      // ATTACK は残り 450-100=350ms のはずなので、349ms では抜けない。
+      clock.advance(DEFAULT_COMBAT_TIMINGS.ATTACK - 100 - 1);
+      machine.update();
+      const before = machine.state;
+      clock.advance(1);
+      machine.update();
+
+      expect(before).toBe('ATTACK');
+      expect(machine.state).toBe('HIT');
+    });
+  });
+
+  // 購読者が中で startAttack() を呼ぶと通知が入れ子になる。後から登録した
+  // 購読者が内側の遷移を先に受け取ると、State とずれたまま処理してしまう。
+  it('購読中に別の遷移が起きても購読者は発生順に受け取る', () => {
+    const clock = createFakeClock();
+    const machine = createCombatStateMachine({ clock });
+    // IDLE へ入ったら即座に次の攻撃を始める購読者。シーケンス側の想定。
+    machine.onTransition(({ to }) => {
+      if (to === 'IDLE') {
+        machine.startAttack(dummyAttack);
+      }
+    });
+    const seen: CombatState[] = [];
+    machine.onTransition(({ to }) => seen.push(to));
+
+    clock.advance(DEFAULT_COMBAT_TIMINGS.INTRO);
+    machine.update();
+
+    expect(seen).toEqual(['IDLE', 'TELEGRAPH']);
   });
 
   it('購読を解除した後は遷移が通知されない', () => {
