@@ -9,6 +9,7 @@
 - [`single-player-poc-spec.md`](./single-player-poc-spec.md)
 - [`technical-design.md`](./technical-design.md)
 - [`testing-strategy.md`](./testing-strategy.md)
+- [`testing-guide.md`](./testing-guide.md)
 - [`tests/phase1-single-player-test-spec.md`](./tests/phase1-single-player-test-spec.md)
 
 このドキュメントではルールを増やしすぎず、ハッカソン開発を止めないために必要な事項だけを決める。
@@ -85,8 +86,8 @@ Application
 └─ Zustand
 
 Quality
-├─ ESLint
-├─ Prettier
+├─ oxlint
+├─ oxfmt
 └─ TypeScript strict mode
 
 Test

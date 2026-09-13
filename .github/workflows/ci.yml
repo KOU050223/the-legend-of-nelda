@@ -1,0 +1,54 @@
+# PR 時の自動チェック。docs/testing-strategy.md §13 / docs/development-workflow.md §8。
+# Lint / Format / Type Check / Test / Build を 1 job の連続 step として実行する。
+# step を分けているのは、失敗した step 名が PR 上にそのまま表示され、
+# どのチェックで落ちたかを PR から判別できるようにするため。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 同一 PR へ連続 push した場合、古い run を打ち切る。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint / Type Check / Test / Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # setup-node の cache: 'pnpm' は pnpm が PATH 上にある前提のため、先に導入する。
+      # version は package.json の packageManager から解決させる（明示指定しない）。
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Unit test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
