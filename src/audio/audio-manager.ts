@@ -33,17 +33,17 @@ export function soundForEvent(event: GameEvent): SoundId | null {
           return 'dodge-success';
         case 'JUST_GUARD':
           return 'guard-success';
-        // 被弾。受付外で遅すぎた入力 (MISS) も当たっているので同じヒットSE。
-        case 'HIT':
-        case 'MISS':
-          return 'hit-impact';
-        // 早押しは弾かれただけで当たっていない。ヒットSEを鳴らすと
-        // 被弾と区別がつかなくなる (docs/single-player-poc-spec.md §13)。
+        // 被弾は JUDGED では鳴らさない。下の HIT State で鳴らす。
         default:
           return null;
       }
 
     case 'COMBAT_STATE_CHANGED':
+      // 被弾。HIT State へ入ることが「攻撃が通った」ことそのもので、
+      // 眠気ダメージもここで入る (boss-attack.ts)。JUDGED を発火源にすると、
+      // 早押しで弾かれた周回が無音のまま被弾する。早押しは JUDGED を
+      // 発行しないが State は HIT へ進むため (§13)。
+      if (event.to === 'HIT') return 'hit-impact';
       // 反撃が通った瞬間。大ダウンを持つ技はさらに専用の音を重ねる。
       if (event.to === 'DAMAGE') return 'counter-success';
       if (event.to === 'BOSS_DOWN') return 'boss-down';
@@ -85,7 +85,9 @@ export function createAudioManager({
     const soundId = soundForEvent(event);
     if (soundId === null) return;
 
-    output.play(soundId, Math.min(1, scale));
+    // 1 で頭打ちにしない。スライダーは 2.0 まで動き、素材ごとの gain を
+    // 掛けたあとに最終的なクランプが入る (audio-output.ts)。
+    output.play(soundId, scale);
   });
 
   return () => {

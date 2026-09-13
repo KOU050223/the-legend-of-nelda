@@ -41,6 +41,7 @@ export function VfxScene({
   const shakeRef = useRef<Group>(null);
   const shockwaveRef = useRef<Mesh>(null);
   const trailRef = useRef<Mesh>(null);
+  const futonRef = useRef<Mesh>(null);
 
   useFrame(() => {
     const now = performance.now();
@@ -53,6 +54,7 @@ export function VfxScene({
     applyShake(shakeRef.current, findVfx(active, 'SHAKE'), now, scale);
     applyShockwave(shockwaveRef.current, findVfx(active, 'SHOCKWAVE'), now, scale);
     applySweepTrail(trailRef.current, findVfx(active, 'SWEEP_TRAIL'), now, scale);
+    applyFutonBrace(futonRef.current, findVfx(active, 'FUTON_BRACE'), now, scale);
   });
 
   return (
@@ -68,6 +70,12 @@ export function VfxScene({
       >
         <ringGeometry args={[0.9, 1.1, 48]} />
         <meshBasicMaterial color="#8fd0ff" transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* ふかふか布団。構えた側へ寄せて置き、回避方向を読ませる。 */}
+      <mesh ref={futonRef} position={[0, 1.6, 0.6]} visible={false}>
+        <boxGeometry args={[2.6, 2.0, 0.4]} />
+        <meshBasicMaterial color="#f2e4ff" transparent opacity={0} depthWrite={false} />
       </mesh>
 
       {/* 枕薙ぎ払いの軌跡。左右どちらから来るかで X の符号を変える。 */}
@@ -150,6 +158,37 @@ function applySweepTrail(
   mesh.position.setX(travel * 3);
   // 予兆の後半で濃くする。構えの間から出しっぱなしにしない。
   setOpacity(mesh, Math.max(0, progress - 0.5) * 2 * vfx.strength * scale);
+}
+
+/**
+ * 構えた布団。左右どちらに構えたかを位置で示す。
+ *
+ * 仕様 §10 の「布団を右または左に構える / 攻撃方向が分かる」に当たる。
+ * 暗転 (DIM) だけでは左右の区別がつかず、布団の Audio Cue は無方向なので、
+ * ここがプレイヤーの回避方向の唯一の手がかりになる。
+ */
+function applyFutonBrace(
+  mesh: Mesh | null,
+  vfx: ReturnType<typeof findVfx>,
+  now: number,
+  scale: number,
+): void {
+  if (!mesh) return;
+
+  if (!vfx || scale <= 0) {
+    mesh.visible = false;
+    return;
+  }
+
+  const progress = vfxProgress(vfx, now);
+  const fromRight = vfx.cueId?.endsWith('-right') ?? false;
+
+  mesh.visible = true;
+  // 構えた側から中央へ寄せる。着弾の向きが読めるよう、予兆のあいだ
+  // 左右どちらに居るかをはっきり離して見せる。
+  mesh.position.setX((fromRight ? 1 : -1) * (3.2 - progress * 1.2));
+  // 予兆の進みに合わせて濃くする。召喚されてくる見え方にする。
+  setOpacity(mesh, Math.min(1, progress * 1.6) * vfx.strength * scale);
 }
 
 function setOpacity(mesh: Mesh, opacity: number): void {

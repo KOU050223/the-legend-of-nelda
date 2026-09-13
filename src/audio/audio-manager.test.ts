@@ -74,15 +74,31 @@ describe('soundForEvent', () => {
   it.each([
     ['PERFECT_DODGE', 'dodge-success'],
     ['JUST_GUARD', 'guard-success'],
-    ['HIT', 'hit-impact'],
-    ['MISS', 'hit-impact'],
   ] as const)('判定 %s が音で分かる', (result, expected) => {
     expect(soundForEvent({ type: 'JUDGED', result })).toBe(expected);
   });
 
-  it('早押しで弾かれた入力は被弾SEを鳴らさない', () => {
-    // 当たっていないので、被弾と同じ音にすると結果を取り違える。
-    expect(soundForEvent({ type: 'JUDGED', result: 'TOO_EARLY' })).toBeNull();
+  it('被弾が音で分かる', () => {
+    expect(soundForEvent({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' })).toBe(
+      'hit-impact',
+    );
+  });
+
+  it('早押しで弾かれた周回でも被弾すればヒットSEが鳴る', () => {
+    // 早押しは JUDGED を発行しないまま HIT State へ進んで眠気ダメージが入る
+    // (§13)。JUDGED を発火源にすると、この周回だけ無音で被弾する。
+    expect(
+      soundForEvent({ type: 'INPUT_REJECTED', action: 'GUARD', reason: 'TOO_EARLY' }),
+    ).toBeNull();
+    expect(soundForEvent({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' })).toBe(
+      'hit-impact',
+    );
+  });
+
+  it('被弾SEは1回の被弾につき1つのイベントからしか鳴らない', () => {
+    // JUDGED と State の両方で鳴らすと通常の被弾で二重に鳴る。
+    expect(soundForEvent({ type: 'JUDGED', result: 'HIT' })).toBeNull();
+    expect(soundForEvent({ type: 'JUDGED', result: 'MISS' })).toBeNull();
   });
 
   it('反撃の成立が音で分かる', () => {
@@ -133,7 +149,7 @@ describe('createAudioManager', () => {
   it('音を切ると何も鳴らない', () => {
     const { eventBus, output } = setup({ audioEnabled: false });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
     eventBus.emit({ type: 'ATTACK_AUDIO_CUE', attackId: 'YAWN_WAVE', cue: yawnWave.audioCue! });
 
     expect(output.played).toEqual([]);
@@ -142,15 +158,24 @@ describe('createAudioManager', () => {
   it('音量の設定が再生音量へ効く', () => {
     const { eventBus, output } = setup({ audioIntensity: 0.4 });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(output.played).toEqual([{ soundId: 'hit-impact', volume: 0.4 }]);
+  });
+
+  it('音量を既定より上げられる', () => {
+    // スライダーの上限は 2.0。1.0 で頭打ちにすると上半分が効かない。
+    const { eventBus, output } = setup({ audioIntensity: 1.8 });
+
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
+
+    expect(output.played).toEqual([{ soundId: 'hit-impact', volume: 1.8 }]);
   });
 
   it('強度0は音を切ったのと同じになる', () => {
     const { eventBus, output } = setup({ audioIntensity: 0 });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(output.played).toEqual([]);
   });
@@ -160,7 +185,7 @@ describe('createAudioManager', () => {
     const { disposeSpy } = output;
 
     dispose();
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(output.played).toEqual([]);
     expect(disposeSpy).toHaveBeenCalled();

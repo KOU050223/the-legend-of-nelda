@@ -2,6 +2,9 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Mesh } from 'three';
 
+import { readPresentationSettings } from '@/presentation/presentation-store';
+import { visualScale } from '@/presentation/presentation-settings';
+
 import { hitStopDelta } from '../vfx/hit-stop';
 import { useVfxStore } from '../vfx/vfx-store';
 
@@ -18,7 +21,8 @@ export function BossMesh(): React.JSX.Element {
     // ヒットストップ中はモーションを止める。止めるのは見た目だけで、
     // Game Logic の時間は動き続ける (hit-stop.ts)。
     const { active } = useVfxStore.getState();
-    meshRef.current.rotation.y += hitStopDelta(delta, active, performance.now()) * 0.4;
+    const scale = visualScale(readPresentationSettings());
+    meshRef.current.rotation.y += hitStopDelta(delta, active, performance.now(), scale) * 0.4;
   });
 
   return (

@@ -45,7 +45,7 @@ describe('syncVfxWithGameEvents', () => {
   it('絵を切ると演出が出ない', () => {
     const { activeKinds, eventBus } = setup({ visualEnabled: false });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
     eventBus.emit({
       type: 'ATTACK_VISUAL_CUE',
       attackId: 'PILLOW_SWEEP',
@@ -58,7 +58,7 @@ describe('syncVfxWithGameEvents', () => {
   it('強度0は絵を切ったのと同じになる', () => {
     const { activeKinds, eventBus } = setup({ visualIntensity: 0 });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(activeKinds()).toEqual([]);
   });
@@ -96,8 +96,8 @@ describe('syncVfxWithGameEvents', () => {
   it('同じ演出が連続しても重ならずに再生し直される', () => {
     const { eventBus } = setup();
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     const shakes = useVfxStore.getState().active.filter((item) => item.kind === 'SHAKE');
     expect(shakes).toHaveLength(1);
@@ -119,7 +119,7 @@ describe('syncVfxWithGameEvents', () => {
     const { activeKinds, eventBus, unsubscribe } = setup();
 
     unsubscribe();
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(activeKinds()).toEqual([]);
   });
@@ -127,7 +127,7 @@ describe('syncVfxWithGameEvents', () => {
   it('音を切っても絵は出る', () => {
     const { activeKinds, eventBus } = setup({ audioEnabled: false });
 
-    eventBus.emit({ type: 'JUDGED', result: 'HIT' });
+    eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(activeKinds()).toContain('SHAKE');
   });

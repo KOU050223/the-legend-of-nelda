@@ -59,7 +59,7 @@ describe('ヒットストップ', () => {
 
   it('被弾ではモーションを止めない', () => {
     // 被弾はカメラシェイクで見せる。止めると反撃成功と区別がつかない。
-    const active = activeFrom({ type: 'JUDGED', result: 'HIT' });
+    const active = activeFrom({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' });
 
     expect(hitStopDelta(0.016, active, 0)).toBe(0.016);
   });

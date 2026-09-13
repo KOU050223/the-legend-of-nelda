@@ -14,6 +14,8 @@ export type VfxKind =
   | 'SHOCKWAVE'
   /** ふかふか布団の背景暗転。 */
   | 'DIM'
+  /** ふかふか布団を構えた向き。左右どちらから来るかを見せる。 */
+  | 'FUTON_BRACE'
   /** カメラシェイク。被弾と枕の着弾で強さを変える。 */
   | 'SHAKE'
   /** ガード成功のフラッシュ。 */
@@ -65,8 +67,19 @@ export function vfxForEvent(event: GameEvent): VfxCue[] {
     case 'ATTACK_VISUAL_CUE': {
       // 予兆の尺が来ない場合はイベント側の既定に任せる。TELEGRAPH の長さを
       // ここで二重に持つとバランス調整とずれる (game-event.ts のコメント)。
-      const cue = telegraphVfxFor(event.cue, event.durationMs ?? 0);
-      return cue ? [cue] : [];
+      const durationMs = event.durationMs ?? 0;
+      const cue = telegraphVfxFor(event.cue, durationMs);
+      if (!cue) return [];
+
+      // 布団は暗転だけでは回避方向が分からない。仕様 §10 は視覚の予兆として
+      // 「布団を右または左に構える / 攻撃方向が分かる」を挙げており、
+      // これはプレイヤーが回避方向を選ぶための情報そのもの。暗転と構えを
+      // 別の演出として返し、構えの側が Cue ID の向きを描く。
+      if (cue.kind === 'DIM') {
+        return [cue, { kind: 'FUTON_BRACE', durationMs, strength: 1 }];
+      }
+
+      return [cue];
     }
 
     case 'JUDGED':
@@ -80,15 +93,18 @@ export function vfxForEvent(event: GameEvent): VfxCue[] {
             { kind: 'FLASH', durationMs: 140, strength: 0.7 },
             { kind: 'SHAKE', durationMs: 180, strength: 0.35 },
           ];
-        // 被弾。強めのシェイクで当たったことを分からせる。
-        case 'HIT':
-        case 'MISS':
-          return [{ kind: 'SHAKE', durationMs: 420, strength: 1 }];
+        // 被弾のシェイクは HIT State で出す (下)。
         default:
           return [];
       }
 
     case 'COMBAT_STATE_CHANGED':
+      // 被弾。HIT State へ入ることが「攻撃が通った」ことそのもの。JUDGED を
+      // 発火源にすると、早押しで弾かれた周回が演出なしで被弾する。早押しは
+      // JUDGED を発行しないが State は HIT へ進むため (§13)。
+      if (event.to === 'HIT') {
+        return [{ kind: 'SHAKE', durationMs: 420, strength: 1 }];
+      }
       // 反撃成立は強めのヒットストップ。打撃が刺さった手応えを出す。
       if (event.to === 'DAMAGE') {
         return [

@@ -31,10 +31,20 @@ export function hitStopOf(active: readonly ActiveVfx[], now: number): ActiveVfx 
  * 強さ (strength) が小さいヒットストップは完全には止めず、動きを鈍らせる。
  * 回避成功の「軽いヒットストップ」と反撃成功の「強めのヒットストップ」を
  * 同じ仕組みで出し分けるため (Issue #11 実装対象)。
+ *
+ * @param scale 演出強度。ほかの演出と同じく設定が効く。0 で無効になり、
+ *   絵を切っている間に走っていたヒットストップも即座に解ける。
  */
-export function hitStopDelta(delta: number, active: readonly ActiveVfx[], now: number): number {
+export function hitStopDelta(
+  delta: number,
+  active: readonly ActiveVfx[],
+  now: number,
+  scale = 1,
+): number {
+  if (scale <= 0) return delta;
+
   const vfx = hitStopOf(active, now);
   if (!vfx) return delta;
 
-  return delta * Math.max(0, 1 - vfx.strength);
+  return delta * Math.max(0, 1 - Math.min(1, vfx.strength * scale));
 }

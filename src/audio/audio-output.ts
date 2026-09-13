@@ -53,6 +53,14 @@ export function createHtmlAudioOutput(): AudioOutput {
     preloaded.set(soundId, element);
   }
 
+  /**
+   * いま鳴っているインスタンス。
+   *
+   * dispose() で止めるために持つ。戦闘を破棄したあとに SE が鳴り続けると、
+   * StrictMode の再マウントや画面遷移で前の戦闘の音が残る。
+   */
+  const playing = new Set<HTMLAudioElement>();
+
   return {
     play(soundId, volume) {
       const definition = SOUND_MANIFEST[soundId];
@@ -62,6 +70,9 @@ export function createHtmlAudioOutput(): AudioOutput {
       // ブラウザのキャッシュに載っているため再取得は走らない。
       const instance = new Audio(definition.src);
       instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
+
+      playing.add(instance);
+      instance.addEventListener('ended', () => playing.delete(instance), { once: true });
 
       // 再生できない場面は普通に起きる (操作前の自動再生をブラウザが拒否する、
       // テスト環境に音源が無い)。演出が鳴らないだけでゲームは続くので、
@@ -76,6 +87,12 @@ export function createHtmlAudioOutput(): AudioOutput {
     },
 
     dispose() {
+      for (const instance of playing) {
+        instance.pause();
+        instance.src = '';
+      }
+      playing.clear();
+
       for (const element of preloaded.values()) {
         element.pause();
         element.src = '';

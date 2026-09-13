@@ -34,6 +34,22 @@ describe('telegraphVfxFor', () => {
     expect(new Set(kinds).size).toBe(3);
   });
 
+  it.each([
+    ['左', 'LEFT'],
+    ['右', 'RIGHT'],
+  ] as const)('ふかふか布団は%sに構えたことが絵で分かる', (_name, direction) => {
+    // 仕様 §10「布団を右または左に構える / 攻撃方向が分かる」。布団の Audio Cue は
+    // 無方向なので、向きを絵で出さないと回避方向が当て推量になる。
+    const kinds = kindsOf({
+      type: 'ATTACK_VISUAL_CUE',
+      attackId: 'FLUFFY_FUTON',
+      cue: futonVisualCue(direction),
+      durationMs: 2_000,
+    });
+
+    expect(kinds).toContain('FUTON_BRACE');
+  });
+
   it('予兆の尺はイベントから受け取った値をそのまま使う', () => {
     // 尺を演出側で持つとバランス調整とずれる (game-event.ts)。
     expect(telegraphVfxFor(pillowSweepVisualCue('LEFT'), 1_300)?.durationMs).toBe(1_300);
@@ -49,12 +65,25 @@ describe('vfxForEvent', () => {
     expect(kindsOf({ type: 'JUDGED', result: 'JUST_GUARD' })).toContain('FLASH');
   });
 
-  it.each(['HIT', 'MISS'] as const)('被弾 (%s) はカメラシェイクで分かる', (result) => {
-    expect(kindsOf({ type: 'JUDGED', result })).toEqual(['SHAKE']);
+  it('被弾はカメラシェイクで分かる', () => {
+    expect(kindsOf({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' })).toEqual(['SHAKE']);
+  });
+
+  it('早押しで弾かれた周回でも被弾すればシェイクが出る', () => {
+    // 早押しは JUDGED を発行しないまま HIT State へ進んで眠気ダメージが入る
+    // (§13)。JUDGED を発火源にすると、この周回だけ演出なしで被弾する。
+    expect(kindsOf({ type: 'INPUT_REJECTED', action: 'GUARD', reason: 'TOO_EARLY' })).toEqual([]);
+    expect(kindsOf({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' })).toContain('SHAKE');
+  });
+
+  it('被弾のシェイクは1回の被弾につき1つのイベントからしか出ない', () => {
+    // JUDGED と State の両方で出すと通常の被弾で二重に走る。
+    expect(kindsOf({ type: 'JUDGED', result: 'HIT' })).toEqual([]);
+    expect(kindsOf({ type: 'JUDGED', result: 'MISS' })).toEqual([]);
   });
 
   it('被弾のシェイクはガード成功より強い', () => {
-    const hit = vfxForEvent({ type: 'JUDGED', result: 'HIT' })[0]!;
+    const hit = vfxForEvent({ type: 'COMBAT_STATE_CHANGED', from: 'JUDGE', to: 'HIT' })[0]!;
     const guard = vfxForEvent({ type: 'JUDGED', result: 'JUST_GUARD' }).find(
       (cue) => cue.kind === 'SHAKE',
     );

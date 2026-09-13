@@ -100,10 +100,15 @@ const SOUNDS = {
   },
 
   // あくび: 吸気音。音程が上がり、最後の約0.15秒は無音 (§8 / §22)。
+  //
+  // 長さは あくび衝撃波の TELEGRAPH (src/game/attacks/yawn-wave.ts の
+  // TELEGRAPH_MS) に合わせる。Cue は予兆の頭で鳴らしっぱなしにするので、
+  // 素材が短いとその差がまるごと無音になり、「発射直前の0.15秒だけ無音」
+  // という手がかりが成立しない。TELEGRAPH_MS を変えたらここも変える。
   'yawn-inhale': () => {
     const noise = createNoise(2);
     let filtered = 0;
-    const seconds = 1.6;
+    const seconds = 2.0;
     const silenceFrom = (seconds - 0.15) / seconds;
     return synth(seconds, (time, progress) => {
       if (progress >= silenceFrom) return 0;

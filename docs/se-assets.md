@@ -9,7 +9,7 @@
 ### 1. 同じ名前で上書きする（コード変更なし）
 
 ```bash
-cp path/to/本素材.wav public/audio/se/pillow-swing.wav
+cp path/to/本素材.wav public/audio/se/pillow-sweep-wind.wav
 ```
 
 ファイル名を保ったまま置き換えれば、コードは一切触らなくてよい。
