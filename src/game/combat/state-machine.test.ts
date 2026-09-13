@@ -92,6 +92,36 @@ describe('createCombatStateMachine', () => {
     expect(visited).toEqual(['TELEGRAPH', 'ATTACK', 'JUDGE', 'COUNTER_WINDOW', 'DAMAGE', 'IDLE']);
   });
 
+  // 大ダウンを持つ技は DAMAGE のあとに BOSS_DOWN を挟む。
+  // 究極奥義・ふかふか布団の「約2.5〜3秒反撃可能」(§11)。
+  it('BOSS_DOWN を持つ攻撃は DAMAGE のあとに大ダウンを挟む', () => {
+    const { machine, visited, advance } = setupSucceeding();
+    toIdle(machine, advance);
+    visited.length = 0;
+
+    machine.startAttack({ ...dummyAttack, timings: { BOSS_DOWN: 2800 } });
+    advance(DEFAULT_COMBAT_TIMINGS.TELEGRAPH);
+    advance(DEFAULT_COMBAT_TIMINGS.ATTACK);
+    machine.registerCounter();
+    advance(DEFAULT_COMBAT_TIMINGS.DAMAGE);
+
+    expect(machine.state).toBe('BOSS_DOWN');
+
+    advance(2799);
+    expect(machine.state).toBe('BOSS_DOWN');
+
+    advance(1);
+    expect(visited).toEqual([
+      'TELEGRAPH',
+      'ATTACK',
+      'JUDGE',
+      'COUNTER_WINDOW',
+      'DAMAGE',
+      'BOSS_DOWN',
+      'IDLE',
+    ]);
+  });
+
   // SM-002: 失敗判定は反撃へ行かず被弾して IDLE へ戻る。
   it('判定失敗で ATTACK→JUDGE→HIT→IDLE へ遷移する', () => {
     const { machine, visited, advance } = setup({ resolveJudgement: () => 'FAILURE' });
@@ -289,6 +319,8 @@ describe('createCombatStateMachine', () => {
       HIT: 40,
       COUNTER_WINDOW: 50,
       DAMAGE: 60,
+      // 大ダウンを持たない技の既定。0 のあいだは BOSS_DOWN を経由しない。
+      BOSS_DOWN: 0,
     };
 
     // 各 State の頭までの進め方。State ごとに経路が違うので表に関数で持たせる。

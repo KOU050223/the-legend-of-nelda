@@ -44,6 +44,19 @@ export const DEFAULT_ATTACK_DAMAGE: Readonly<Record<AttackId, AttackDamage>> = {
 };
 
 /**
+ * 大ダウン中の追撃1発あたりのボスHPダメージ。
+ *
+ * 究極奥義・ふかふか布団のカウンター成功で発生する大ダウン
+ * (約2.5〜3秒、docs/single-player-poc-spec.md §11) の間に入れる追撃の単価。
+ * カウンター成立そのもののダメージ (FLUFFY_FUTON の bossDamage = 30) とは別物で、
+ * 追撃を入れた回数だけ加算される。
+ *
+ * 仕様が数値を定めていないため暫定値。枕薙ぎ払いのカウンターと同額の10とし、
+ * 2.5〜3秒で2〜3発入る想定で置いている。プレイテストで調整する。
+ */
+export const BOSS_DOWN_FOLLOW_UP_DAMAGE = 10;
+
+/**
  * 入力ミス・入力受理にともなう硬直時間 (ms)。
  * docs/single-player-poc-spec.md §13。
  *

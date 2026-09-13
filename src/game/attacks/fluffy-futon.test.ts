@@ -99,17 +99,14 @@ describe('究極奥義・ふかふか布団', () => {
       expect(machine.state).toBe('COUNTER_WINDOW');
       // Visual Cue に構えた向きが乗る。Rendering 側が左右を描き分けられないと
       // プレイヤーが回避方向を判断できない (§10)。
-      expect(events).toContainEqual({
-        type: 'ATTACK_VISUAL_CUE',
-        attackId: 'FLUFFY_FUTON',
-        cue,
-      });
+      // durationMs は予兆の尺として共通基盤が添えるため内容を固定しない。
+      expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toMatchObject([
+        { type: 'ATTACK_VISUAL_CUE', attackId: 'FLUFFY_FUTON', cue },
+      ]);
       // 聴覚の予兆は左右を区別しない。
-      expect(events).toContainEqual({
-        type: 'ATTACK_AUDIO_CUE',
-        attackId: 'FLUFFY_FUTON',
-        cue: 'futon-jingle',
-      });
+      expect(events.filter((event) => event.type === 'ATTACK_AUDIO_CUE')).toMatchObject([
+        { type: 'ATTACK_AUDIO_CUE', attackId: 'FLUFFY_FUTON', cue: 'futon-jingle' },
+      ]);
     },
   );
 
@@ -157,22 +154,29 @@ describe('究極奥義・ふかふか布団', () => {
   });
 
   // FUTON-004 / FUTON-005
-  // 境界の起点は COUNTER_WINDOW の開始であって回避入力の時刻ではない。
-  // 窓は常に着弾時刻 + acceptToMs に開くため、回避を受付の早い側で通したか
-  // 遅い側で通したかによって入力時刻からの長さは変わってしまう。
+  //
+  // 境界の起点は「回避が受理された時刻」。受付幅のどこで回避が通ったかに
+  // よらず 0.8秒でなければならないため、回避 offset を変えても同じ境界に
+  // なることまで見る。起点を COUNTER_WINDOW の開始 (着弾 + 受付後端) に
+  // 取ると、-0.6秒で回避した場合に反撃可能時間が 1.5秒へ伸びてしまう。
   it.each([
-    { label: '0.80秒', elapsedMs: 800, acceptance: 'ACCEPTED', state: 'DAMAGE', bossHp: 70 },
-    { label: '0.81秒', elapsedMs: 801, acceptance: 'WHIFF', state: 'IDLE', bossHp: 100 },
-  ])('回避成功後$labelの攻撃は $acceptance になる', ({ elapsedMs, acceptance, state, bossHp }) => {
-    const { advance, controller, machine, vitals } = setup();
+    { label: '0.80秒', afterDodgeMs: 800, acceptance: 'ACCEPTED', bossHp: 70 },
+    { label: '0.81秒', afterDodgeMs: 801, acceptance: 'WHIFF', bossHp: 100 },
+  ])('回避成功後$labelの攻撃は $acceptance になる', ({ afterDodgeMs, acceptance, bossHp }) => {
+    for (const dodgeOffsetMs of [0, -300, -600]) {
+      const { advance, controller, vitals } = setup();
 
-    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
-    dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
-    advance(elapsedMs);
+      controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+      advance(TELEGRAPH_MS);
+      advance(HIT_AFTER_MS + dodgeOffsetMs);
+      expect(controller.submitAction('DODGE_LEFT')).toBe('ACCEPTED');
 
-    expect(controller.submitAction('ATTACK')).toBe(acceptance);
-    expect(machine.state).toBe(state);
-    expect(vitals.bossHp).toBe(bossHp);
+      // 回避からちょうど afterDodgeMs 経過した時点まで進める。
+      advance(afterDodgeMs);
+
+      expect(controller.submitAction('ATTACK')).toBe(acceptance);
+      expect(vitals.bossHp).toBe(bossHp);
+    }
   });
 
   // FUTON-005 の帰結。窓が切れたあとは DAMAGE を経由せずサイクルが閉じる。
@@ -185,6 +189,7 @@ describe('究極奥義・ふかふか布団', () => {
     controller.submitAction('ATTACK');
 
     expect(transitions).not.toContain('DAMAGE');
+    expect(transitions).not.toContain('BOSS_DOWN');
     expect(vitals.bossHp).toBe(100);
   });
 
@@ -198,6 +203,7 @@ describe('究極奥義・ふかふか布団', () => {
 
     expect(transitions).not.toContain('HIT');
     expect(transitions).not.toContain('DAMAGE');
+    expect(transitions).not.toContain('BOSS_DOWN');
     expect(vitals.sleepiness).toBe(0);
     expect(vitals.bossHp).toBe(100);
     // 次の攻撃を開始できる状態まで戻っている。
@@ -222,21 +228,35 @@ describe('究極奥義・ふかふか布団', () => {
   });
 
   // FUTON-008
-  // 仕様 §11 の「約2.5〜3秒」は大ダウンの演出尺として DAMAGE の滞在時間に写す。
-  // FUTON-007 が Boss HP -30 を単発の確定値として規定し、FUTON-010 が連打による
-  // 多重発生を禁じているため、この間は追撃可能な窓ではない。
-  it('カウンター成功後の大ダウンが約2.8秒続き、その間は追撃できない', () => {
-    const { advance, controller, machine } = setup();
+  // 仕様 §11 の「約2.5〜3秒反撃可能」。カウンター成立の DAMAGE (§15 の約0.4秒) を
+  // 抜けたあとに BOSS_DOWN が続き、その間プレイヤーは追撃できる。
+  it('カウンター成功後に大ダウンが発生し、その間は追撃できる', () => {
+    const { advance, controller, machine, vitals } = setup();
 
     controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
     dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
     advance(300);
     controller.submitAction('ATTACK');
 
-    advance(2799);
+    // カウンター成立の State。§15 の約0.4秒を守る。
     expect(machine.state).toBe('DAMAGE');
-    // 大ダウン中の追撃は成立しない。反撃は COUNTER_WINDOW だけで受ける。
-    expect(controller.registerCounter()).toBe(false);
+    expect(vitals.bossHp).toBe(70);
+
+    advance(400);
+    expect(machine.state).toBe('BOSS_DOWN');
+
+    // 大ダウン中は追撃できる。1発ごとに追撃ダメージが入る。
+    advance(500);
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    expect(vitals.bossHp).toBe(60);
+
+    advance(500);
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    expect(vitals.bossHp).toBe(50);
+
+    // 2.8秒の直前まで大ダウンが続く。
+    advance(2800 - 1000 - 1);
+    expect(machine.state).toBe('BOSS_DOWN');
 
     advance(1);
     expect(machine.state).toBe('IDLE');
@@ -258,7 +278,11 @@ describe('究極奥義・ふかふか布団', () => {
   });
 
   // FUTON-010 / CUE-006
-  it('カウンター成功後に連打してもDamageとCounter Eventが複数回発生しない', () => {
+  //
+  // 禁じられているのは「1回のカウンター入力で Damage / Counter Event が
+  // 複数回出ること」。大ダウン中の追撃は別入力による別のダメージなので、
+  // ここでは成立したカウンターが1度きりであることを見る。
+  it('1回のカウンター入力でDamageとCounter Eventが複数回発生しない', () => {
     const { advance, controller, events, transitions, vitals } = setup();
 
     controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
@@ -267,10 +291,12 @@ describe('究極奥義・ふかふか布団', () => {
 
     expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
     // 成立直後の連打。入力ゲートの再入力ロックと、COUNTER_WINDOW 以外では
-    // false を返す registerCounter() の 二重で止まる。
+    // false を返す registerCounter() の二重で止まる。
     expect(controller.submitAction('ATTACK')).not.toBe('ACCEPTED');
     expect(controller.registerCounter()).toBe(false);
-    advance(500);
+
+    // DAMAGE を抜けきるまでは追撃も入らない。
+    advance(399);
     expect(controller.submitAction('ATTACK')).not.toBe('ACCEPTED');
 
     expect(transitions.filter((state) => state === 'DAMAGE')).toHaveLength(1);
@@ -279,6 +305,26 @@ describe('究極奥義・ふかふか布団', () => {
     // Cue も1攻撃につき1回だけ。
     expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'ATTACK_AUDIO_CUE')).toHaveLength(1);
+  });
+
+  // 大ダウン中の追撃も連打では通らない。入力ゲートの再入力ロックが効く。
+  it('大ダウン中の追撃は連打してもロック中は通らない', () => {
+    const { advance, controller, events, vitals } = setup();
+
+    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
+    advance(300);
+    controller.submitAction('ATTACK');
+    advance(400);
+
+    advance(500);
+    expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
+    // 直後の連打はロックで弾かれ、追撃ダメージは二重に入らない。
+    expect(controller.submitAction('ATTACK')).not.toBe('ACCEPTED');
+    expect(vitals.bossHp).toBe(60);
+
+    // カウンター成立の30と追撃の10で、HP変化は2回だけ。
+    expect(events.filter((event) => event.type === 'BOSS_HP_CHANGED')).toHaveLength(2);
   });
 
   // 回避受理後の再入力ロック (defenseMs 0.7秒) がカウンターを塞がないこと。

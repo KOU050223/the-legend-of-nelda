@@ -26,27 +26,27 @@ export type RandomSource = () => number;
 const TELEGRAPH_MS = 2300;
 
 /**
- * 大ダウンの長さ。§11 は「約2.5〜3秒」。
+ * 大ダウンの長さ。§11 の「約2.5〜3秒反撃可能」。
  *
- * これは演出の尺であって追撃可能な窓ではない。FUTON-007 が「Boss HP -30」を
- * 単発の確定値として規定し、FUTON-010 が連打による Damage / Counter Event の
- * 多重発生を禁じているため、DAMAGE 中の registerCounter() は false のままが正しい。
+ * カウンター成立の DAMAGE (§15 の約0.4秒) を抜けたあとに続く、追撃できる時間。
+ * ここでの追撃はカウンター成立そのもののダメージ (30) とは別に加算される。
  */
 const DOWN_MS = 2800;
 
 /**
- * カウンター受付。仕様は「回避成功後 0.8秒以内」(§12)。
+ * カウンター受付。仕様どおり「回避成功後 0.8秒以内」(§12)。
  *
- * 801 なのは State Machine の退出条件が exclusive (`elapsed >= dwell` で閉じる)
- * だから。800 だと実効窓が [0, 800) になり「0.80秒ちょうど」が成立しない。
- * 801 で [0, 801) となり、仕様の「以内」を inclusive に満たす。
- * 計測値: 800ms → 成立 / 801ms → 不成立 (FUTON-004 / FUTON-005)。
+ * 起点は回避が受理された時刻。`counterWindowFromCorrectInput` で
+ * 共通基盤にそう伝えている。State Machine の COUNTER_WINDOW は既定では
+ * 着弾時刻 + 入力受付の後端に開くため、指定しないと受付幅のどこで
+ * 回避が通ったかによって反撃可能時間の長さが変わってしまう
+ * (回避が -0.6秒で通れば 1.5秒、着弾時なら 0.9秒、といった具合)。
  *
- * なお測る起点は COUNTER_WINDOW の開始であって回避入力の時刻ではない。
- * 窓は常に着弾時刻 + acceptToMs に開くので、回避を受付の早い側で通すか
- * 遅い側で通すかによって入力時刻からの長さは変わる。
+ * 境界 (0.80秒ちょうど) は含む。State Machine の滞在時間は
+ * 「超えたら自動で閉じる」封筒として使い、inclusive な期限判定は
+ * 共通基盤の入力側が持つ (FUTON-004 / FUTON-005)。
  */
-const COUNTER_WINDOW_MS = 801;
+const COUNTER_WINDOW_MS = 800;
 
 /**
  * 回避の受付幅。§12 の基本受付時間 -0.6秒 〜 +0.1秒。
@@ -112,11 +112,16 @@ export function createFluffyFutonAttack({
     },
     correctAction: DODGE_AGAINST[direction],
     counterWindowMs: COUNTER_WINDOW_MS,
+    // 「回避成功後0.8秒以内」を回避が受理された時刻から測る (§12)。
+    counterWindowFromCorrectInput: true,
     damage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.bossDamage,
     sleepinessDamage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.sleepinessDamage,
+    // 大ダウンは DAMAGE の上書きではなく専用の State で表す。
+    // §15 の共通ステート時間は DAMAGE を「約0.4秒」と定めており、
+    // ここを伸ばすと反撃が入ったことを示す State の意味が変わってしまう。
+    bossDownMs: DOWN_MS,
     timings: {
       TELEGRAPH: TELEGRAPH_MS,
-      DAMAGE: DOWN_MS,
     },
   });
 }

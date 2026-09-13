@@ -20,6 +20,14 @@ export interface CombatTimings {
   HIT: number;
   COUNTER_WINDOW: number;
   DAMAGE: number;
+  /**
+   * 反撃を受けたボスが倒れている時間 (ms)。この間プレイヤーは追撃できる。
+   *
+   * 既定は 0 で、0 のあいだはこの State を経由しない。大ダウンを持つのは
+   * 究極奥義・ふかふか布団だけなので (docs/single-player-poc-spec.md §11)、
+   * 枕薙ぎ払い・あくび衝撃波の遷移列を変えないために既定を 0 にしてある。
+   */
+  BOSS_DOWN: number;
 }
 
 /**
@@ -33,6 +41,7 @@ export const DEFAULT_COMBAT_TIMINGS: CombatTimings = {
   HIT: 1000,
   COUNTER_WINDOW: 2000,
   DAMAGE: 400,
+  BOSS_DOWN: 0,
 };
 
 /**
@@ -90,7 +99,22 @@ export type JudgementOutcome = 'SUCCESS' | 'FAILURE';
  * 入力が無かった場合も FAILURE を返せばよい (docs/single-player-poc-spec.md §13
  * の「遅すぎる → 被弾」)。
  */
-export type ResolveJudgement = (attack: CombatAttack) => JudgementOutcome;
+/**
+ * SUCCESS のときに、COUNTER_WINDOW の起点を判定側が指定するための戻り値。
+ *
+ * 反撃の受付時間を「正解入力からの経過」で測りたい技があるため
+ * (ふかふか布団の「回避成功後0.8秒以内」docs/single-player-poc-spec.md §12)。
+ * COUNTER_WINDOW は既定では ATTACK の期限 (着弾時刻 + 入力受付の後端) に開くので、
+ * 起点を指定しないと受付幅のどこで正解入力が通ったかによって
+ * 反撃可能時間の長さが変わってしまう。
+ */
+export interface JudgementResult {
+  outcome: JudgementOutcome;
+  /** COUNTER_WINDOW の論理上の開始時刻 (ms)。省略時は JUDGE へ入った時刻。 */
+  successAt?: number;
+}
+
+export type ResolveJudgement = (attack: CombatAttack) => JudgementOutcome | JudgementResult;
 
 /**
  * 戦闘終了の判定を State Machine の外へ出すための注入点。
@@ -247,9 +271,18 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
       return;
     }
 
-    const outcome = resolveJudgement(current);
+    const resolved = resolveJudgement(current);
+    const { outcome, successAt } =
+      typeof resolved === 'string' ? { outcome: resolved, successAt: undefined } : resolved;
 
-    transitionTo(outcome === 'SUCCESS' ? 'COUNTER_WINDOW' : 'HIT', judgedAt);
+    if (outcome !== 'SUCCESS') {
+      transitionTo('HIT', judgedAt);
+      return;
+    }
+
+    // 反撃の受付は正解入力の時刻から測る。指定が無ければ従来どおり
+    // JUDGE へ入った時刻 (= ATTACK の期限) を起点にする。
+    transitionTo('COUNTER_WINDOW', successAt ?? judgedAt);
   }
 
   /**
@@ -297,8 +330,20 @@ export function createCombatStateMachine(options: CombatStateMachineOptions): Co
         return true;
       }
 
-      case 'HIT':
       case 'DAMAGE': {
+        // 大ダウンを持つ技だけ BOSS_DOWN を経由する。滞在時間が 0 の技では
+        // State を挟まず閉じ、遷移列を従来どおりに保つ (SM-001)。
+        if (timings.BOSS_DOWN <= 0) {
+          closeCycle(deadline);
+          return true;
+        }
+
+        transitionTo('BOSS_DOWN', deadline);
+        return true;
+      }
+
+      case 'HIT':
+      case 'BOSS_DOWN': {
         closeCycle(deadline);
         return true;
       }
