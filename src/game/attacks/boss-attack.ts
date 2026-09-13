@@ -167,9 +167,10 @@ export function createBossAttackController({
     }
 
     if (to === 'IDLE' || to === 'BOSS_DEFEATED' || to === 'PLAYER_LOSE') {
-      eventBus.emit({ type: 'ATTACK_ENDED', attackId: attack.id });
+      const finishedAttackId = attack.id;
       activeAttack = null;
       submittedAction = null;
+      eventBus.emit({ type: 'ATTACK_ENDED', attackId: finishedAttackId });
     }
   });
 

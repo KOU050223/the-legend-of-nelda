@@ -175,6 +175,28 @@ describe('共通ボス攻撃基盤', () => {
     ]);
   });
 
+  it('終了イベントの購読者が次の攻撃を始めても、その攻撃の状態とCueを維持する', () => {
+    const { advance, controller, eventBus, events, machine } = setup();
+    const nextAttack = { ...dummyAttack, id: 'YAWN_WAVE' as const, type: 'YAWN_WAVE' as const };
+    eventBus.subscribe((event) => {
+      if (event.type === 'ATTACK_ENDED') {
+        controller.start(nextAttack);
+      }
+    });
+
+    controller.start(dummyAttack);
+    advance(2000);
+    advance(500);
+    advance(1000);
+
+    expect(machine.state).toBe('TELEGRAPH');
+    expect(events).toContainEqual({
+      type: 'ATTACK_VISUAL_CUE',
+      attackId: 'YAWN_WAVE',
+      cue: 'pillow-pull',
+    });
+  });
+
   it('入力時刻は攻撃開始後のゲーム時計から判定し、次の攻撃でも同じ受付幅を使う', () => {
     const { advance, controller, machine } = setup();
 
