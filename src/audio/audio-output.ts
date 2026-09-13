@@ -33,33 +33,26 @@ export function createSilentAudioOutput(): AudioOutput {
  * (docs/technical-design.md §15)。
  *
  * 同じ SE が重なって鳴る場面 (大ダウン中の追撃) があるので、再生のたびに
- * 要素を複製する。元の要素は事前読み込みのキャッシュとしてだけ持つ。
+ * 新しい要素を作る。1つの要素を使い回すと、鳴っている途中の再生要求が
+ * 頭出しに戻してしまい音が切れる。ブラウザが同じURLをキャッシュするので
+ * 2回目以降の読み込みは走らない。
  */
 export function createHtmlAudioOutput(): AudioOutput {
-  const cache = new Map<SoundId, HTMLAudioElement>();
-
-  function load(soundId: SoundId): HTMLAudioElement | null {
-    const cached = cache.get(soundId);
-    if (cached) return cached;
-
-    const definition = SOUND_MANIFEST[soundId];
-    if (!definition) return null;
-
-    const element = new Audio(definition.src);
-    element.preload = 'auto';
-    cache.set(soundId, element);
-    return element;
-  }
+  /** 事前読み込み用。ここへ入れておくと初回再生で待たされない。 */
+  const preloaded = new Map<SoundId, HTMLAudioElement>();
 
   return {
     play(soundId, volume) {
-      const source = load(soundId);
-      if (!source) return;
-
       const definition = SOUND_MANIFEST[soundId];
-      // 同じ SE が重なって鳴る場面があるので再生のたびに要素を複製する。
-      // cloneNode の戻り値は Node なので、複製元と同じ型で作り直す。
-      const instance = new Audio(source.src);
+      if (!definition) return;
+
+      if (!preloaded.has(soundId)) {
+        const element = new Audio(definition.src);
+        element.preload = 'auto';
+        preloaded.set(soundId, element);
+      }
+
+      const instance = new Audio(definition.src);
       instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
 
       // 再生できない場面は普通に起きる (操作前の自動再生をブラウザが拒否する、
@@ -75,11 +68,11 @@ export function createHtmlAudioOutput(): AudioOutput {
     },
 
     dispose() {
-      for (const element of cache.values()) {
+      for (const element of preloaded.values()) {
         element.pause();
         element.src = '';
       }
-      cache.clear();
+      preloaded.clear();
     },
   };
 }
