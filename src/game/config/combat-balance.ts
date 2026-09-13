@@ -92,8 +92,18 @@ export interface InputLockDurations {
    * 反撃が成立したあとの再入力ロック。
    *
    * 空振りの硬直とは別の値。成功後に連打しても Damage / Counter Event が
-   * 複数回発生しないようにするためのもので (COUNTER-006)、
-   * 反撃1回で COUNTER_WINDOW が閉じるため長さ自体は表に出にくい。
+   * 複数回発生しないようにするためのもの (COUNTER-006)。
+   *
+   * 通常の反撃では1回で COUNTER_WINDOW が閉じるため長さは表に出ないが、
+   * 大ダウン中 (約2.8秒) だけは追撃の連射間隔としてそのまま効く。
+   * 400ms だと1回の大ダウンに7発入り、ランダム枠があくびを引いた分岐で
+   * 最終ふかふか布団の手前でボスが落ちる。
+   *
+   * 仕様 §13 は大ダウン中の追撃間隔を定めていないため、同じ §13 が
+   * 回避に定めている「約0.7秒 再入力不可」に合わせてある。
+   * 両分岐が最終布団へ到達することをテストで固定してある
+   * (combat-session.test.ts の「大ダウン中に追撃し続けても最終ふかふか
+   * 布団まで到達する」が枕・あくびの両方で回る)。
    */
   counterMs: number;
 }
@@ -102,5 +112,5 @@ export const DEFAULT_INPUT_LOCKS: InputLockDurations = {
   tooEarlyMs: 400,
   defenseMs: 700,
   whiffMs: 400,
-  counterMs: 400,
+  counterMs: 700,
 };

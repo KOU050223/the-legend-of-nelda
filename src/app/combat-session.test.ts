@@ -362,55 +362,67 @@ describe('createCombatSession', () => {
     expect(sequence.phase).toBe('TUTORIAL');
   });
 
-  it('大ダウン中に追撃し続けても最終ふかふか布団まで到達する', () => {
-    // 仕様 §11 の大ダウンは「最大の反撃チャンス」。そこで殴ったプレイヤーだけが
-    // 本戦1つ目の布団で決着してしまい、ランダム枠と最終布団へ行けなくなっていた。
-    const clock = createFakeClock();
-    const { loop, tick } = createManualLoop();
-    const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+  // ランダム枠 (§17 の 52〜60秒) はどちらを引いても最終布団まで行けること。
+  // 枕(10)とあくび(15)でダメージが違うので、片方だけ通しても保証にならない。
+  it.each([
+    { branch: '枕', random: 0 },
+    { branch: 'あくび', random: 0.9 },
+  ])(
+    '大ダウン中に追撃し続けても最終ふかふか布団まで到達する (ランダム枠=$branch)',
+    ({ random: randomValue }) => {
+      // 仕様 §11 の大ダウンは「最大の反撃チャンス」。そこで殴ったプレイヤーだけが
+      // 本戦1つ目の布団で決着してしまい、ランダム枠と最終布団へ行けなくなっていた。
+      const clock = createFakeClock();
+      const { loop, tick } = createManualLoop();
+      const session = createCombatSession({
+        clock,
+        frameLoop: loop,
+        random: () => randomValue,
+      });
 
-    const steps: string[] = [];
-    let pendingDefense: PlayerAction | null = null;
-    let shouldCounter = false;
+      const steps: string[] = [];
+      let pendingDefense: PlayerAction | null = null;
+      let shouldCounter = false;
 
-    session.eventBus.subscribe((event) => {
-      if (event.type === 'SEQUENCE_STEP_STARTED')
-        steps.push(`${event.stepIndex}:${event.attackId}`);
-      if (event.type === 'ATTACK_VISUAL_CUE') {
-        if (event.cue.includes('left')) pendingDefense = 'DODGE_RIGHT';
-        else if (event.cue.includes('right')) pendingDefense = 'DODGE_LEFT';
-        else pendingDefense = 'GUARD';
-      }
-      if (event.type === 'JUDGED') {
-        shouldCounter = event.result === 'PERFECT_DODGE' || event.result === 'JUST_GUARD';
-      }
-    });
+      session.eventBus.subscribe((event) => {
+        if (event.type === 'SEQUENCE_STEP_STARTED')
+          steps.push(`${event.stepIndex}:${event.attackId}`);
+        if (event.type === 'ATTACK_VISUAL_CUE') {
+          if (event.cue.includes('left')) pendingDefense = 'DODGE_RIGHT';
+          else if (event.cue.includes('right')) pendingDefense = 'DODGE_LEFT';
+          else pendingDefense = 'GUARD';
+        }
+        if (event.type === 'JUDGED') {
+          shouldCounter = event.result === 'PERFECT_DODGE' || event.result === 'JUST_GUARD';
+        }
+      });
 
-    tick();
-
-    for (let frame = 0; frame < 8_000; frame += 1) {
-      clock.advance(50);
       tick();
 
-      const { combatState } = useGameStore.getState();
+      for (let frame = 0; frame < 8_000; frame += 1) {
+        clock.advance(50);
+        tick();
 
-      if (combatState === 'ATTACK' && pendingDefense !== null) {
-        session.submitAction(pendingDefense);
-        pendingDefense = null;
+        const { combatState } = useGameStore.getState();
+
+        if (combatState === 'ATTACK' && pendingDefense !== null) {
+          session.submitAction(pendingDefense);
+          pendingDefense = null;
+        }
+        if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
+          session.submitAction('ATTACK');
+          shouldCounter = false;
+        }
+        // 大ダウン中は押せるだけ押す。
+        if (combatState === 'BOSS_DOWN') session.submitAction('ATTACK');
+
+        if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
       }
-      if (combatState === 'COUNTER_WINDOW' && shouldCounter) {
-        session.submitAction('ATTACK');
-        shouldCounter = false;
-      }
-      // 大ダウン中は押せるだけ押す。
-      if (combatState === 'BOSS_DOWN') session.submitAction('ATTACK');
 
-      if (combatState === 'BOSS_DEFEATED' || combatState === 'PLAYER_LOSE') break;
-    }
-
-    expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
-    expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
-  });
+      expect(steps.at(-1)).toBe('11:FLUFFY_FUTON');
+      expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
+    },
+  );
 
   it('大ダウン中の追撃でボスHPが減る', () => {
     // BOSS_DOWN_FOLLOW_UP_DAMAGE の単価の根拠。大ダウン中に入る発数が

@@ -312,16 +312,18 @@ describe('究極奥義・ふかふか布団', () => {
     expect(machine.state).toBe('BOSS_DOWN');
 
     // 大ダウン中は追撃できる。1発ごとに追撃ダメージが入る。
-    advance(500);
+    // 間隔は再入力ロック (counterMs) 以上を空ける。連打しても
+    // ロックのぶんしか通らないのが仕様 §13「最初の入力のみ採用」。
+    advance(700);
     expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
     expect(vitals.bossHp).toBe(60);
 
-    advance(500);
+    advance(700);
     expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
     expect(vitals.bossHp).toBe(50);
 
     // 2.8秒の直前まで大ダウンが続く。
-    advance(2800 - 1000 - 1);
+    advance(2800 - 1400 - 1);
     expect(machine.state).toBe('BOSS_DOWN');
 
     advance(1);
