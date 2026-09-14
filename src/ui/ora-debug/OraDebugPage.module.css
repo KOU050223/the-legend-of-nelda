@@ -28,5 +28,7 @@
 .readout div { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid #334155; }
 .readout dt { color: #94a3b8; font-size: .875rem; }
 .readout dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.tracking { color: #86efac; font-weight: 700; }
+.notTracking { color: #fda4af; font-weight: 700; }
 
 @media (max-width: 780px) { .page { grid-template-columns: 1fr; padding: 12px; } .panel { padding: 16px; } }

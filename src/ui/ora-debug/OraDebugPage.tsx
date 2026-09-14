@@ -30,7 +30,13 @@ function formatPosition(position: MarkerObservation['left']): string {
 
 function formatAttackStatus(hand: HandObservation, recognition: OraRecognition): string {
   if (!hand.right) return '右手未検出';
-  return recognition.attackReady ? 'READY' : 'クールダウン / 振り直し待ち';
+  return recognition.attackReady ? 'READY: 右手を横へ振る' : 'ATTACK送信済み: 振り直し待ち';
+}
+
+function formatHandStatus(hand: HandObservation): string {
+  if (!hand.right) return '未検出';
+  const speed = Math.hypot(hand.right.velocityX, hand.right.velocityY);
+  return `追跡中 / x ${hand.right.x.toFixed(2)} / y ${hand.right.y.toFixed(2)} / 速度 ${speed.toFixed(2)}`;
 }
 
 function drawMarkerOverlay(
@@ -194,10 +200,8 @@ export function OraDebugPage(): React.JSX.Element {
           </div>
           <div>
             <dt>RIGHT HAND</dt>
-            <dd>
-              {hand.right
-                ? `x ${hand.right.x.toFixed(2)} / y ${hand.right.y.toFixed(2)}`
-                : '未検出'}
+            <dd className={hand.right ? styles.tracking : styles.notTracking}>
+              {formatHandStatus(hand)}
             </dd>
           </div>
           <div>
