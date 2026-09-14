@@ -1,6 +1,13 @@
 export const DEFAULT_CAMERA_CONSTRAINTS: MediaStreamConstraints = {
   audio: false,
-  video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+  // 原画像は高解像度・高フレームレートで取得する。検出用Canvasでは縮小するため、
+  // マーカーを少し動かした時のブレと情報量不足を避けつつ処理量を増やさない。
+  video: {
+    facingMode: 'user',
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 60 },
+  },
 };
 
 export async function requestWebcam(

@@ -17,6 +17,12 @@ export interface MarkerObservation {
   right?: MarkerPosition;
 }
 
+/** MediaPipeなどの手追跡器が渡す、右手首の正規化済み観測値。 */
+export interface HandObservation {
+  capturedAt: number;
+  right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'>;
+}
+
 export const ORA_GAME_ACTIONS = [
   'MOVE_LEFT',
   'MOVE_RIGHT',

@@ -1,4 +1,4 @@
-import type { MarkerObservation, OraMoveAction, OraRecognition } from './types';
+import type { HandObservation, MarkerObservation, OraMoveAction, OraRecognition } from './types';
 
 export interface OraGestureRecognizerOptions {
   moveLeftEnter?: number;
@@ -46,13 +46,36 @@ export function createOraGestureRecognizer(options: OraGestureRecognizerOptions 
   }
 
   return {
-    recognize(observation: MarkerObservation): OraRecognition {
+    recognize(
+      observation: MarkerObservation,
+      hand: HandObservation = { capturedAt: observation.capturedAt },
+    ): OraRecognition {
       const actions: Array<'ATTACK' | 'ORA_ACTION'> = [];
       const { left, right, capturedAt } = observation;
 
+      const handSpeed = hand.right ? Math.hypot(hand.right.velocityX, hand.right.velocityY) : 0;
+      if (handSpeed < config.attackMinSpeed * 0.5) attackArmed = true;
+      if (
+        hand.right &&
+        attackArmed &&
+        handSpeed >= config.attackMinSpeed &&
+        hand.capturedAt - lastAttackAt >= config.attackCooldownMs
+      ) {
+        actions.push('ATTACK');
+        attackArmed = false;
+        lastAttackAt = hand.capturedAt;
+      }
+
       if (!left || !right) {
-        resetForLostMarker();
-        return { move, actions, attackReady: false, oraPoseProgress: 0 };
+        move = null;
+        oraPoseStartedAt = undefined;
+        oraPoseConsumed = false;
+        return {
+          move,
+          actions,
+          attackReady: Boolean(hand.right && attackArmed),
+          oraPoseProgress: 0,
+        };
       }
 
       const centerX = (left.x + right.x) / 2;
@@ -60,18 +83,6 @@ export function createOraGestureRecognizer(options: OraGestureRecognizerOptions 
       if (move === 'MOVE_RIGHT' && centerX <= config.moveRightRelease) move = null;
       if (!move && centerX <= config.moveLeftEnter) move = 'MOVE_LEFT';
       if (!move && centerX >= config.moveRightEnter) move = 'MOVE_RIGHT';
-
-      const speed = Math.hypot(right.velocityX, right.velocityY);
-      if (speed < config.attackMinSpeed * 0.5) attackArmed = true;
-      if (
-        attackArmed &&
-        speed >= config.attackMinSpeed &&
-        capturedAt - lastAttackAt >= config.attackCooldownMs
-      ) {
-        actions.push('ATTACK');
-        attackArmed = false;
-        lastAttackAt = capturedAt;
-      }
 
       const isOraPose =
         left.y <= config.oraMaxY &&
@@ -98,7 +109,7 @@ export function createOraGestureRecognizer(options: OraGestureRecognizerOptions 
         lastOraAt = capturedAt;
       }
 
-      return { move, actions, attackReady: attackArmed, oraPoseProgress };
+      return { move, actions, attackReady: Boolean(hand.right && attackArmed), oraPoseProgress };
     },
     reset: resetForLostMarker,
   };

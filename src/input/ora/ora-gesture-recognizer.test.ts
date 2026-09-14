@@ -42,10 +42,13 @@ describe('createOraGestureRecognizer', () => {
   it('RIGHTを素早く振ると ATTACK を1回だけ出す', () => {
     const recognizer = createOraGestureRecognizer();
     const frame = observation(1000);
-    frame.right = { ...frame.right!, velocityX: 1.3, velocityY: 0 };
+    const hand = { capturedAt: 1000, right: { x: 0.5, y: 0.5, velocityX: 1.3, velocityY: 0 } };
 
-    const first = recognizer.recognize(frame);
-    const continued = recognizer.recognize({ ...frame, capturedAt: 1100 });
+    const first = recognizer.recognize(frame, hand);
+    const continued = recognizer.recognize(
+      { ...frame, capturedAt: 1100 },
+      { ...hand, capturedAt: 1100 },
+    );
 
     expect(first.actions).toEqual(['ATTACK']);
     expect(continued.actions).toEqual([]);
@@ -54,9 +57,9 @@ describe('createOraGestureRecognizer', () => {
   it('認識を保てる小さな横移動でも ATTACK を出す', () => {
     const recognizer = createOraGestureRecognizer();
     const frame = observation(1000);
-    frame.right = { ...frame.right!, velocityX: 0.35, velocityY: 0 };
+    const hand = { capturedAt: 1000, right: { x: 0.5, y: 0.5, velocityX: 0.35, velocityY: 0 } };
 
-    const result = recognizer.recognize(frame);
+    const result = recognizer.recognize(frame, hand);
 
     expect(result.actions).toEqual(['ATTACK']);
   });
