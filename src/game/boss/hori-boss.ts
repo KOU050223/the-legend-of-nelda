@@ -362,6 +362,14 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
   return {
     update(targets) {
       const now = clock.now();
+      // ビームの進みに使う経過時間。update のたびに必ず進める。
+      //
+      // 技を出している間だけ更新すると、技と技の待ち時間 (1.5秒以上) が
+      // まるごと次の技の初回フレームへ渡り、着弾点が追尾速度を無視して
+      // 一気に飛ぶ。予兆の開始位置がボスの足元から離れてしまい、
+      // 「予兆を見て走って逃げる」(§9.2) が成立しない。
+      const deltaMs = Math.max(0, now - lastUpdateAt);
+      lastUpdateAt = now;
 
       // BOSS DOWN 中は技を出さない。総攻撃を受ける時間 (§11.2)。
       if (bossDownUntil !== null) {
@@ -381,8 +389,7 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
         const current = attackPhase();
 
         // 予兆中からビームは動く。予兆を見て走り出す時間が要るため。
-        advanceBeamOrigin(targets, Math.max(0, now - lastUpdateAt));
-        lastUpdateAt = now;
+        advanceBeamOrigin(targets, deltaMs);
 
         // 判定が出ている尺をフレームがまたいでも取りこぼさない。処理落ちや
         // バックグラウンドのタブでは TELEGRAPH から RECOVER へ一気に飛ぶ。

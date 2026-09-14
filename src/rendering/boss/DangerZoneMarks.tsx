@@ -2,7 +2,7 @@ import { DoubleSide } from 'three';
 
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 
-import { dangerZoneKey, lineMarkRotation } from './danger-zone-geometry';
+import { lineMarkRotation } from './danger-zone-geometry';
 
 /**
  * ボスの危険範囲を地面へ描く。
@@ -47,8 +47,13 @@ export function DangerZoneMarks({
 
   return (
     <>
+      {/*
+        key は判定側が持つ `zone.id`。座標からキーを作ると、追尾する技
+        (ブルーライト照射) では着弾点が毎フレーム動くぶんキーも変わり、
+        React が毎フレーム別物とみなして mesh を作り直す。
+      */}
       {zones.map((zone) => (
-        <DangerZoneMark key={dangerZoneKey(zone)} zone={zone} color={color} opacity={opacity} />
+        <DangerZoneMark key={zone.id} zone={zone} color={color} opacity={opacity} />
       ))}
     </>
   );

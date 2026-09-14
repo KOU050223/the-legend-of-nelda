@@ -40,6 +40,7 @@ describe('突進の危険範囲は描画と判定が一致する', () => {
     const rotationY = (deg * Math.PI) / 180;
     const length = 30;
     const zone: DangerZone = {
+      id: 'TEST:0',
       origin: { x: 0, z: 0 },
       shape: { kind: 'LINE', length, halfWidth: 2.5 },
       rotationY,

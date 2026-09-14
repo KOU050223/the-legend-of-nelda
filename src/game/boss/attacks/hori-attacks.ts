@@ -176,11 +176,14 @@ export function dangerZonesOf(attackId: HoriAttackId, context: ZoneContext): Dan
   switch (attackId) {
     case 'WAKE_UP_ALARM':
     case 'MORNING_DASH': {
-      return [{ origin: aim.origin, shape: spec.shape, rotationY: aim.rotationY }];
+      return [
+        { id: `${attackId}:0`, origin: aim.origin, shape: spec.shape, rotationY: aim.rotationY },
+      ];
     }
 
     case 'COMPRESSION_FIELD': {
-      return aim.points.map((point) => ({
+      return aim.points.map((point, index) => ({
+        id: `${attackId}:${index}`,
         origin: point,
         shape: spec.shape,
         rotationY: 0,
@@ -195,11 +198,16 @@ export function dangerZonesOf(attackId: HoriAttackId, context: ZoneContext): Dan
 
       const target = targets.find((candidate) => candidate.id === aim.targetId);
       if (target === undefined || context.beamOrigin !== undefined) {
-        return [{ origin: start, shape: spec.shape, rotationY: 0 }];
+        return [{ id: `${attackId}:0`, origin: start, shape: spec.shape, rotationY: 0 }];
       }
 
       return [
-        { origin: advanceBeam(start, target.position, elapsedMs), shape: spec.shape, rotationY: 0 },
+        {
+          id: `${attackId}:0`,
+          origin: advanceBeam(start, target.position, elapsedMs),
+          shape: spec.shape,
+          rotationY: 0,
+        },
       ];
     }
   }

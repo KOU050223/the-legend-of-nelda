@@ -418,6 +418,41 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
     expect(moved).toBeLessThanOrEqual((BLUE_LIGHT_TRACKING_SPEED * 100) / 1000 + 0.001);
   });
 
+  it('2回目以降の照射でも、開始直後に着弾点が飛ばない', () => {
+    const { boss, clock } = setup({ pickAttack: () => 'BLUE_LIGHT' });
+    const targets = [{ id: 'pay', position: { x: 20, z: 0 } }];
+
+    const step = 50;
+    // 1回目を最後まで回し、技と技の待ち時間を挟んで2回目へ入る。待ち時間ぶんの
+    // 経過を次の技の初回フレームへ渡すと、着弾点が追尾速度を無視して一気に飛ぶ。
+    // 2回目の照射で1フレームあたりに動いた距離をすべて集めてから検査する。
+    const movesInSecondBeam: number[] = [];
+    let previous: { x: number; z: number } | null = null;
+    let beamCount = 0;
+
+    for (let i = 0; i < 400; i += 1) {
+      boss.update(targets);
+      const origin = boss.snapshot().activeAttack?.beamOrigin ?? null;
+
+      if (origin === null) {
+        // 技が終わった。次に始まるものを数える。
+        previous = null;
+      } else {
+        if (previous === null) beamCount += 1;
+        else if (beamCount >= 2) {
+          movesInSecondBeam.push(Math.hypot(origin.x - previous.x, origin.z - previous.z));
+        }
+        previous = { x: origin.x, z: origin.z };
+      }
+
+      clock.advance(step);
+    }
+
+    const allowed = (BLUE_LIGHT_TRACKING_SPEED * step) / 1000 + 0.001;
+    expect(movesInSecondBeam.length).toBeGreaterThan(0);
+    expect(Math.max(...movesInSecondBeam)).toBeLessThanOrEqual(allowed);
+  });
+
   it('睡眠時間圧縮フィールドは複数箇所を危険にし、安全地帯が残る', () => {
     const { boss } = setup({ pickAttack: () => 'COMPRESSION_FIELD' });
     boss.update(three);

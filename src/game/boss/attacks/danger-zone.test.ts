@@ -4,6 +4,7 @@ import { isInsideDangerZone, type DangerZone } from './danger-zone';
 
 describe('絶対起床アラームの危険範囲 (全方位リング)', () => {
   const zone: DangerZone = {
+    id: 'TEST:0',
     origin: { x: 0, z: 0 },
     shape: { kind: 'RING', innerRadius: 3, outerRadius: 18 },
     rotationY: 0,
@@ -28,6 +29,7 @@ describe('絶対起床アラームの危険範囲 (全方位リング)', () => {
 describe('早朝ルーティン突進の危険範囲 (直線)', () => {
   // rotationY = 0 は -Z を向く (facingRotationY と同じ規約)。
   const zone: DangerZone = {
+    id: 'TEST:0',
     origin: { x: 0, z: 0 },
     shape: { kind: 'LINE', length: 30, halfWidth: 2.5 },
     rotationY: 0,
@@ -58,6 +60,7 @@ describe('早朝ルーティン突進の危険範囲 (直線)', () => {
 
 describe('ブルーライト / 圧縮フィールドの危険範囲 (円)', () => {
   const zone: DangerZone = {
+    id: 'TEST:0',
     origin: { x: 10, z: -5 },
     shape: { kind: 'CIRCLE', radius: 6 },
     rotationY: 0,

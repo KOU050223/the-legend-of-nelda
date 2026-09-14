@@ -8,6 +8,15 @@ import type { PlanarPosition } from '../../movement/types';
  * CIRCLE は着弾点そのもの。`rotationY` は LINE の向きにだけ意味がある。
  */
 export interface DangerZone {
+  /**
+   * 危険範囲の識別子。`<技ID>:<何番目か>` の形。
+   *
+   * 表示側が mesh を作り直さずに済ませるために持たせている。座標から
+   * キーを作ると、追尾する技では着弾点が毎フレーム動くぶんキーも変わり、
+   * 技の最中にジオメトリを捨てて確保し直すことになる。1つの技が出す
+   * 危険範囲は個数も並び順も変わらないので、技と序数で一意になる。
+   */
+  readonly id: string;
   readonly origin: PlanarPosition;
   readonly shape: DangerShape;
   /** LINE の伸びる方向 (ラジアン)。他の形では無視される。 */
