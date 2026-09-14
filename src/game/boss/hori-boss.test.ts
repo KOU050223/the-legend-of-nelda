@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ARENA_BOUNDS } from '../arena/arena';
+import { ARENA_BOUNDS, SAFE_ZONE_ANCHORS, SAFE_ZONE_RADIUS } from '../arena/arena';
 import { createFakeClock } from '../clock';
 
 type FakeClock = ReturnType<typeof createFakeClock>;
@@ -15,7 +15,7 @@ import { ATTACK_REACH } from '../config/phase2-player-balance';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
 import { clampToBounds } from '../movement/movement';
 import type { PlanarPosition } from '../movement/types';
-import type { DangerZone } from './attacks/danger-zone';
+import { isInsideDangerZone, type DangerZone } from './attacks/danger-zone';
 import { NO_SLEEP_MODE_HP_RATIO } from './boss-phase';
 import { bossMoveSpeed, createHoriBoss, type BossSnapshot, type HoriBoss } from './hori-boss';
 import type { BossTarget, DamageHit } from './boss-target';
@@ -479,15 +479,60 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
     const zones = boss.dangerZones(three);
 
     expect(zones.length).toBeGreaterThan(1);
-    // 全面が危険になってはいけない。安全地帯へ移動できることが対処
-    // なので、どこにも逃げ場が無いと技として成立しない。
-    const covered = zones.filter((zone) =>
-      three.some(
-        (target) =>
-          Math.hypot(zone.origin.x - target.position.x, zone.origin.z - target.position.z) < 0.001,
-      ),
-    );
-    expect(covered.length).toBeLessThan(zones.length);
+    // 逃げ場は「どこか空いている」ではなく #54 が定義した安全地帯そのもの。
+    // docs/phase2-gameplay-spec.md §9.3 の対処が「安全地帯へ移動する」なので、
+    // 本物のアンカーが危険範囲へ入らないことを確かめる。
+    for (const anchor of SAFE_ZONE_ANCHORS) {
+      for (const zone of zones) {
+        expect(isInsideDangerZone(zone, anchor)).toBe(false);
+      }
+    }
+    // 技が無効化されていないことも見る。危険な点が実在しなければ、
+    // 上の検査は「何も起きていない」でも通ってしまう。
+    expect(zones.some((zone) => isInsideDangerZone(zone, zone.origin))).toBe(true);
+  });
+
+  it('安全地帯に立っていれば睡眠時間圧縮フィールドで被弾しない', () => {
+    // 3人が安全地帯の中心に立ち、判定が終わるまで動かない。
+    const sheltered: BossTarget[] = SAFE_ZONE_ANCHORS.map((anchor, index) => ({
+      id: `player-${index}`,
+      position: { x: anchor.x, z: anchor.z },
+    }));
+    const { boss, clock, hits } = setup({ pickAttack: () => 'COMPRESSION_FIELD' });
+    const spec = DEFAULT_HORI_ATTACKS.COMPRESSION_FIELD;
+
+    boss.update(sheltered);
+    clock.advance(spec.telegraphMs + spec.activeMs);
+    boss.update(sheltered);
+
+    expect(hits).toEqual([]);
+  });
+
+  it('安全地帯の外に立っていれば睡眠時間圧縮フィールドで被弾しうる', () => {
+    // 上のテストが「この技が誰にも当たらない」で通っていないことの確認。
+    const { boss, clock, hits } = setup({ pickAttack: () => 'COMPRESSION_FIELD' });
+    const spec = DEFAULT_HORI_ATTACKS.COMPRESSION_FIELD;
+    const zones = (() => {
+      boss.update([]);
+      return boss.dangerZones([]);
+    })();
+    const exposed: BossTarget[] = zones.map((zone, index) => ({
+      id: `exposed-${index}`,
+      position: zone.origin,
+    }));
+
+    clock.advance(spec.telegraphMs + spec.activeMs);
+    boss.update(exposed);
+
+    expect(hits.length).toBeGreaterThan(0);
+    // 危険区画の中心は、どの安全地帯からも離れている。
+    for (const zone of zones) {
+      for (const anchor of SAFE_ZONE_ANCHORS) {
+        expect(Math.hypot(zone.origin.x - anchor.x, zone.origin.z - anchor.z)).toBeGreaterThan(
+          SAFE_ZONE_RADIUS,
+        );
+      }
+    }
   });
 
   it('早朝ルーティン突進はボス自身が軌道上を進むが、危険範囲は動かない', () => {
