@@ -17,9 +17,16 @@ Zombie Stand Up（1〜94フレーム）を1本持たせたもの。テクスチ�
 ## モーションFBX（Mixamo / Without Skin）
 
 追加のモーションは Mixamo から **Without Skin**（FBX Binary / 30fps / Keyframe
-Reduction none）で落として [`export/motions/`](export/motions/) に置く。With Skin
-だとモーション1本ごとにメッシュとテクスチャが丸ごと付いてくるため、リポジトリに
-同じモデルが何度も入る。Without Skin ならボーンのキーフレームだけで済む。
+Reduction none）で落とす。With Skin だとモーション1本ごとにメッシュとテクスチャが
+丸ごと付いてくるため、リポジトリに同じモデルが何度も入る。Without Skin ならボーンの
+キーフレームだけで済む。
+
+置き場所は2つあり、ビルドスクリプトはこの順で探す。
+
+1. [`assets/motions/`](../../motions/) — 全キャラ共有。歩く・走るのような汎用
+   モーション。Mixamo のリグは `mixamorig:*` で共通なのでキャラに紐づかない
+2. [`export/motions/`](export/motions/) — 堀大輔専用。ボス専用の攻撃のように
+   流用の余地がないもの
 
 ロコモーション系（歩き・走り）は **In Place 版**を落とす。ルートモーションが
 入っていると、位置制御をゲームロジック側でやるときに干渉する。
@@ -27,10 +34,10 @@ Reduction none）で落として [`export/motions/`](export/motions/) に置く�
 Mixamo のアクション名はどれも `mixamo.com` なので、GLBへまとめる際に
 ビルドスクリプト側の `MOTIONS` がクリップ名を付け直す。
 
-| FBX               | GLB内のクリップ名 | 再生      | 由来                        |
-| ----------------- | ----------------- | --------- | --------------------------- |
-| （ベースFBX同梱） | `stand-up`        | 1回・停止 | Zombie Stand Up（登場演出） |
-| `walking.fbx`     | `walk`            | ループ    | Walking                     |
+| FBX               | 置き場所          | クリップ名 | 再生      | 由来                        |
+| ----------------- | ----------------- | ---------- | --------- | --------------------------- |
+| （ベースFBX同梱） | —                 | `stand-up` | 1回・停止 | Zombie Stand Up（登場演出） |
+| `walking.fbx`     | `assets/motions/` | `walk`     | ループ    | Walking                     |
 
 ## Web表示用GLBの生成
 
@@ -43,7 +50,7 @@ blender --background --python scripts/build-hori-daisuke-glb.py
 
 モーションを増やすときは3箇所を必ず揃える。片方だけだとクリップ名がズレる。
 
-1. `export/motions/` にFBXを置く
+1. `assets/motions/`（共有）か `export/motions/`（堀大輔専用）にFBXを置く
 2. [`scripts/build-hori-daisuke-glb.py`](../../../scripts/build-hori-daisuke-glb.py) の `MOTIONS`
 3. [`src/rendering/character/horiDaisukeMotions.ts`](../../../src/rendering/character/horiDaisukeMotions.ts) の `HoriDaisukeMotion` と `MOTION_CLIPS`
 

@@ -2,9 +2,14 @@
 
 ベース: assets/character/hori-daisuke-v1/export/hori-daisuke-rigged-zombie-stand-up.fbx
         (Hori Daisuke v4 モデル + Mixamo 33ボーンリグ + Zombie Stand Up アニメ)
-追加  : assets/character/hori-daisuke-v1/export/motions/*.fbx
-        (Mixamo から Without Skin で落としたモーションのみのFBX)
+追加  : Mixamo から Without Skin で落としたモーションのみのFBX。次の順で探す。
+        1. assets/motions/                                  (全キャラ共有)
+        2. assets/character/hori-daisuke-v1/export/motions/  (堀大輔専用)
 出力  : public/models/hori-daisuke.glb
+
+Mixamo のリグは `mixamorig:*` で共通なので、歩く・走るのような汎用モーションは
+キャラに紐づかない。共有側に置いて他のキャラからも同じFBXを使う。ボス専用の
+攻撃モーションのように流用の余地がないものだけキャラ側に置く。
 
 Mixamo のアクションは全て `mixamo.com` 系の同じ名前で入ってくるため、読み込んだ
 直後に MOTIONS のクリップ名へ改名する。改名しないと2本目以降が `mixamo.com.001`
@@ -26,13 +31,16 @@ import bpy
 REPO = Path(__file__).resolve().parent.parent
 CHARACTER = REPO / 'assets' / 'character' / 'hori-daisuke-v1' / 'export'
 BASE_FBX = CHARACTER / 'hori-daisuke-rigged-zombie-stand-up.fbx'
-MOTIONS_DIR = CHARACTER / 'motions'
 OUT = REPO / 'public' / 'models' / 'hori-daisuke.glb'
+
+# モーションFBXを探す場所。共有を先に見る。
+MOTION_DIRS = (REPO / 'assets' / 'motions', CHARACTER / 'motions')
 
 # ベースFBXに同梱されているアクションのクリップ名。
 BASE_CLIP = 'stand-up'
 
-# モーションFBXのファイル名 -> GLB内のクリップ名。
+# モーションFBXのファイル名 -> GLB内のクリップ名。ファイル名は MOTION_DIRS から
+# 探すので、共有・キャラ固有のどちらに置いたかをここへ書く必要はない。
 # src/rendering/character/horiDaisukeMotions.ts の MOTION_CLIPS と対応させる。
 # モーションFBXを追加したら、ここにファイル名とクリップ名を足す。
 MOTIONS: dict[str, str] = {
@@ -86,6 +94,16 @@ def stash(obj: bpy.types.Object, action: bpy.types.Action) -> None:
     track.mute = True
 
 
+def find_motion(filename: str) -> Path:
+    """モーションFBXを MOTION_DIRS から探す。共有を優先し、無ければキャラ固有。"""
+    for directory in MOTION_DIRS:
+        path = directory / filename
+        if path.exists():
+            return path
+    searched = ', '.join(str(d.relative_to(REPO)) for d in MOTION_DIRS)
+    raise FileNotFoundError(f'motion fbx {filename!r} not found in: {searched}')
+
+
 def load_motion(base: bpy.types.Object, path: Path, clip_name: str) -> None:
     """モーションFBXを読み、アクションだけをベースArmatureへ移す。"""
     before = set(bpy.data.objects)
@@ -134,10 +152,7 @@ def main() -> None:
     print(f'motion {BASE_CLIP!r} from {BASE_FBX.name} frames={tuple(base_action.frame_range)}')
 
     for filename, clip_name in MOTIONS.items():
-        path = MOTIONS_DIR / filename
-        if not path.exists():
-            raise FileNotFoundError(f'motion fbx not found: {path}')
-        load_motion(base, path, clip_name)
+        load_motion(base, find_motion(filename), clip_name)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.export_scene.gltf(
