@@ -25,9 +25,10 @@ export function WasshoiDebug(): React.JSX.Element {
   const [threshold, setThreshold] = useState(DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
 
   const play = useCallback(
-    (event: WasshoiEvent): void => {
-      if (!controllerRef.current?.playRecordedSample(event)) {
-        if (sampleReady) setError('わっしょーいを再生できませんでした');
+    async (event: WasshoiEvent): Promise<void> => {
+      const played = await controllerRef.current?.playRecordedSample(event);
+      if (!played && sampleReady) {
+        setError('わっしょーいを再生できませんでした。もう一度「試聴する」を押してください。');
       }
     },
     [sampleReady],
@@ -42,7 +43,7 @@ export function WasshoiDebug(): React.JSX.Element {
         intensity: 0,
         lastEvent: event,
       }));
-      play(event);
+      void play(event);
     },
     [play],
   );
@@ -106,7 +107,7 @@ export function WasshoiDebug(): React.JSX.Element {
   }, [recording]);
 
   const preview = (): void => {
-    play({ type: 'WASSHOI', intensity: 0.6, durationMs: 700 });
+    void play({ type: 'WASSHOI', intensity: 0.6, durationMs: 700 });
   };
 
   return (

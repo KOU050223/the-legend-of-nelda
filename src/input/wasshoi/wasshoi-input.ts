@@ -18,7 +18,7 @@ export interface WasshoiInputController {
   stopRecording(): Promise<Blob>;
   isRecording(): boolean;
   /** 録音済みの本人Sampleを、許可済みのAudioContextから再生する。 */
-  playRecordedSample(event: WasshoiEvent): boolean;
+  playRecordedSample(event: WasshoiEvent): Promise<boolean>;
   stop(): void;
 }
 
@@ -178,21 +178,31 @@ export async function attachWasshoiInput(
       return blob;
     },
     isRecording: () => recorder?.state === 'recording',
-    playRecordedSample(event) {
-      if (stopped || recordedSample === null || context.state !== 'running') return false;
-      const sourceNode = context.createBufferSource();
-      const gainNode = context.createGain();
-      sourceNode.buffer = recordedSample;
-      gainNode.gain.value = 0.15 + event.intensity * 0.85;
-      // 長い発話ほどゆっくり、短い発話ほど速くする。内容は一切反映しない。
-      sourceNode.playbackRate.value = Math.min(
-        1.6,
-        Math.max(0.65, 700 / Math.max(250, event.durationMs)),
-      );
-      sourceNode.connect(gainNode);
-      gainNode.connect(context.destination);
-      sourceNode.start();
-      return true;
+    async playRecordedSample(event) {
+      if (stopped || recordedSample === null) return false;
+      try {
+        // 入力だけを解析している間、ブラウザがContextをsuspendすることがある。
+        // 再生直前に再開してからBufferSourceを作ることで、発話終了後にも鳴らす。
+        if (context.state === 'suspended') await context.resume();
+        if (context.state !== 'running') return false;
+
+        const sourceNode = context.createBufferSource();
+        const gainNode = context.createGain();
+        sourceNode.buffer = recordedSample;
+        gainNode.gain.value = 0.15 + event.intensity * 0.85;
+        // 長い発話ほどゆっくり、短い発話ほど速くする。内容は一切反映しない。
+        sourceNode.playbackRate.value = Math.min(
+          1.6,
+          Math.max(0.65, 700 / Math.max(250, event.durationMs)),
+        );
+        sourceNode.connect(gainNode);
+        gainNode.connect(context.destination);
+        sourceNode.start();
+        return true;
+      } catch (error) {
+        console.error('録音済みわっしょーいの再生に失敗', error);
+        return false;
+      }
     },
     stop: () => stop(),
   };
