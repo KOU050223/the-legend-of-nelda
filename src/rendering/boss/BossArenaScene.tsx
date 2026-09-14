@@ -41,12 +41,6 @@ import { DangerZoneMarks } from './DangerZoneMarks';
 /** 操作するプレイヤー。 */
 const LOCAL_PLAYER_ID = 'odoruno';
 
-/**
- * 3人ぶんの見た目の色。スポーン地点の並び順に当てる
- * (#54 の WorldScene と同じ割り当て)。
- */
-const CHARACTER_COLORS = ['#e07a3f', '#3f8f5f', '#5f7fd0'] as const;
-
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
 /**
@@ -284,27 +278,35 @@ export function BossArenaScene(): React.JSX.Element {
         <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
       </group>
 
-      {view.players.map((player) =>
-        player.id === LOCAL_PLAYER_ID ? (
-          <group key={player.id} ref={localRoot}>
-            <CharacterModel color={CHARACTER_COLORS[1]} />
-            <StatusBar player={player} local />
-          </group>
-        ) : (
-          <group
-            key={player.id}
-            ref={(node) => {
-              if (node === null) mateRoots.current.delete(player.id);
-              else mateRoots.current.set(player.id, node);
-            }}
-          >
-            <CharacterModel
-              color={player.id === 'pay' ? CHARACTER_COLORS[0] : CHARACTER_COLORS[2]}
-            />
-            <StatusBar player={player} />
-          </group>
-        ),
-      )}
+      {/*
+        3人の大輔 (#79 のGLBモデル)。どのモデルを出すかは characterId から
+        引く。`player.id === 'pay'` のようなidでの分岐は書かない
+        (phase2-player-balance.ts と同じく、キャラ差はデータで持つ)。
+
+        ボスと同じ理由で、GLBの読み込みは Suspense で受け止める。3人ぶんを
+        1つの境界でまとめ、1人読み込み中に他が消えないようにする。
+      */}
+      <Suspense fallback={null}>
+        {view.players.map((player) =>
+          player.id === LOCAL_PLAYER_ID ? (
+            <group key={player.id} ref={localRoot}>
+              <CharacterModel characterId={player.characterId} />
+              <StatusBar player={player} local />
+            </group>
+          ) : (
+            <group
+              key={player.id}
+              ref={(node) => {
+                if (node === null) mateRoots.current.delete(player.id);
+                else mateRoots.current.set(player.id, node);
+              }}
+            >
+              <CharacterModel characterId={player.characterId} />
+              <StatusBar player={player} />
+            </group>
+          ),
+        )}
+      </Suspense>
 
       {/*
         drei の Text はフォント読み込み中に suspend する。境界を挟まないと

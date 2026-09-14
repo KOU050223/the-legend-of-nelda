@@ -32,11 +32,12 @@ Blender と glTF で軸が違う。書き出し時に変換されるので、**�
 
 現状のモデル:
 
-| モデル               | 身長（GLB, m） | 原点 | 備考                         |
-| -------------------- | -------------: | ---- | ---------------------------- |
-| `paypay-daisuke.glb` |          1.902 | 足元 | Blender製                    |
-| `dance-daisuke.glb`  |          1.809 | 足元 | Blender製                    |
-| `hori-daisuke.glb`   |     正規化 1.0 | 足元 | Mixamo経由。下記の例外を参照 |
+| モデル               | 身長（GLB, m） | 原点 | 備考                          |
+| -------------------- | -------------: | ---- | ----------------------------- |
+| `paypay-daisuke.glb` |          1.902 | 足元 | Blender製                     |
+| `dance-daisuke.glb`  |          1.809 | 足元 | Blender製                     |
+| `hori-daisuke.glb`   |     正規化 1.0 | 足元 | Mixamo経由。下記の例外を参照  |
+| `star-platinum.glb`  |            2.0 | 足元 | FBX由来。リグ・モーションなし |
 
 ### 例外: Mixamo経由のモデル
 
