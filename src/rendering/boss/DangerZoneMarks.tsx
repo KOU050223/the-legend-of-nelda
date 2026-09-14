@@ -13,8 +13,13 @@ import type { DangerZone } from '@/game/boss/attacks/danger-zone';
  * (docs/development-workflow.md §9)。
  */
 
-/** 地面へ貼るための高さ。Z-fighting を避けるだけのわずかな浮き。 */
-const GROUND_OFFSET_Y = 0.02;
+/**
+ * 地面からの浮き。
+ *
+ * 草 (`Grass.tsx` の高さ 0.4) より上へ出す。地面すれすれに置くと草に
+ * 埋もれて危険範囲が読めない。Z-fighting を避けるだけの値では足りない。
+ */
+const GROUND_OFFSET_Y = 0.45;
 
 /**
  * 突進の矩形を地面へ寝かせ、進行方向へ向ける Euler 角。
@@ -44,8 +49,14 @@ export function DangerZoneMarks({
   zones,
   imminent = false,
 }: DangerZoneMarksProps): React.JSX.Element {
-  const opacity = imminent ? 0.55 : 0.28;
-  const color = imminent ? '#ff3b30' : '#ff9f0a';
+  // 草原の緑の上に載るので、緑から最も離れた色を選ぶ。橙を薄く敷くと
+  // 地面の緑と明度が近く、危険範囲だと気づけない
+  // (#58「B級演出でも情報は潰さない」)。
+  //
+  // 予兆は紫寄りの赤、判定中は純度の高い赤。色相ではなく明度と彩度で
+  // 段階を付けているので、色覚特性によらず「濃くなった」が読める。
+  const opacity = imminent ? 0.8 : 0.55;
+  const color = imminent ? '#ff1a1a' : '#c2185b';
 
   return (
     <>

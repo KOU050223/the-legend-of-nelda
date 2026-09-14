@@ -1,38 +1,25 @@
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 
 import { BossArenaScene } from '../boss/BossArenaScene';
 
-/**
- * 危険範囲が読めるよう、アリーナ全体が収まる俯瞰から見る。
- * 真上すぎると高さのある物 (ボス) が潰れるので、少し手前へ引く。
- */
-const PREVIEW_CAMERA = { position: [0, 42, 30] as const, fov: 50, lookAt: [0, 0, 0] as const };
+/** ワールド探索モードと同じ空色。探索と戦闘で見た目を変えない。 */
+const WORLD_BACKGROUND = '#8fc7e8';
 
 /**
- * 堀大輔とのボス戦シーン (`?scene=boss`)。
+ * 堀大輔とのボス戦 (`?scene=boss`)。
  *
- * 1人ローカルで移動・攻撃・回避ができ、被弾でHPが減る (#55 / #56 / #58)。
- * アリーナの地形そのもの (境界・スポーン地点・装置アンカー) は #54 の
- * スコープで、ここは仮の平面。
+ * ワールドの草原の上で戦う。戦闘専用の別マップは作らない
+ * (docs/phase2-gameplay-spec.md §2「1つの広めのボスマップ」)。
+ * 地形そのもの (境界・スポーン地点・装置アンカー) は #54 のスコープ。
  */
-/**
- * 俯瞰カメラを原点へ向ける。
- *
- * Canvas の `camera` prop は位置しか渡せず、`onCreated` で lookAt しても
- * R3F が既定の向きで上書きするため、Scene の内側から毎回向け直す。
- */
-function PreviewCamera(): null {
-  useFrame(({ camera }) => {
-    camera.lookAt(0, 0, 0);
-  });
-  return null;
-}
-
 export function BossScene(): React.JSX.Element {
   return (
-    <Canvas camera={{ position: [...PREVIEW_CAMERA.position], fov: PREVIEW_CAMERA.fov }}>
-      <color attach="background" args={['#14121f']} />
-      <PreviewCamera />
+    <Canvas shadows camera={{ position: [0, 4, 20], fov: 50 }}>
+      <color attach="background" args={[WORLD_BACKGROUND]} />
+
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[4, 10, 4]} intensity={1.4} castShadow />
+
       <BossArenaScene />
     </Canvas>
   );
