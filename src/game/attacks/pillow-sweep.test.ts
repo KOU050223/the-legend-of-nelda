@@ -312,21 +312,21 @@ describe('枕薙ぎ払い', () => {
   );
 
   // CUE-005 / CUE-006 Cue は攻撃1回につき1度だけ発火し、HP を書き換えない。
-  it('Visual / Audio Cue は攻撃1回につき1度だけ発火し、HP を書き換えない', () => {
+  it('TELEGRAPH中はVisual / Audio Cueが1度だけ発火し、HP を書き換えない', () => {
     const context = setup();
 
     const attack = createPillowSweep({ direction: 'LEFT' });
     context.controller.start(attack);
-    // TELEGRAPH の途中で何度 update しても Cue が増えないことを見る。
+    // TELEGRAPH の途中 (ATTACK へ進む前) で何度 update しても Cue が増えないことを見る。
     context.advance(400);
     context.advance(400);
-    context.advance(hitAtFromStart(attack) - 800);
+    context.advance((attack.timings?.TELEGRAPH ?? 0) - 400 - 400 - 1);
 
     const visualCues = context.events.filter((event) => event.type === 'ATTACK_VISUAL_CUE');
     const audioCues = context.events.filter((event) => event.type === 'ATTACK_AUDIO_CUE');
 
     // durationMs は予兆の尺として共通基盤が添えるため、ここでは内容を固定しない。
-    // このテストが保証したいのは「1攻撃につき1度だけ」という発火回数と宛先。
+    // このテストが保証したいのは「TELEGRAPH中は1度だけ」という発火回数と宛先。
     expect(visualCues).toMatchObject([
       {
         type: 'ATTACK_VISUAL_CUE',
@@ -339,5 +339,23 @@ describe('枕薙ぎ払い', () => {
     ]);
     expect(context.vitals.bossHp).toBe(INITIAL_BOSS_HP);
     expect(context.vitals.sleepiness).toBe(0);
+  });
+
+  // vfx-cue.ts のレビュー指摘: 枕の軌跡は仕様上「発動」区分の演出で、
+  // TELEGRAPH の尺で終わる Cue のままでは ATTACK が始まる前に消えてしまう。
+  // ATTACK 開始時に同じ Cue を ACTIVATION として再送することを保証する。
+  it('ATTACKへ進むと同じ Visual Cue が ACTIVATION として再送される', () => {
+    const context = setup();
+
+    const attack = createPillowSweep({ direction: 'LEFT' });
+    context.controller.start(attack);
+    context.advance(attack.timings?.TELEGRAPH ?? 0);
+
+    const visualCues = context.events.filter((event) => event.type === 'ATTACK_VISUAL_CUE');
+
+    expect(visualCues).toMatchObject([
+      { attackId: 'PILLOW_SWEEP', cue: 'pillow-sweep-telegraph-left' },
+      { attackId: 'PILLOW_SWEEP', cue: 'pillow-sweep-telegraph-left', phase: 'ACTIVATION' },
+    ]);
   });
 });

@@ -1,8 +1,11 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 
+import { readPresentationSettings } from '@/presentation/presentation-store';
+
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
+import { VfxScene } from '../vfx/VfxScene';
 
 /**
  * Phase 1 の最小3D Scene。
@@ -18,13 +21,20 @@ export function GameScene(): React.JSX.Element {
       <ambientLight intensity={0.4} />
       <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
 
-      <BossMesh />
-      <PlayerMesh />
+      {/*
+        カメラシェイクはシーンの中身を包んだ group を動かして表現する。
+        OrbitControls が毎フレーム camera を上書きするため、camera 自体を
+        揺らしても打ち消される。
+      */}
+      <VfxScene getSettings={readPresentationSettings}>
+        <BossMesh />
+        <PlayerMesh />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[24, 24]} />
-        <meshStandardMaterial color="#241f33" />
-      </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[24, 24]} />
+          <meshStandardMaterial color="#241f33" />
+        </mesh>
+      </VfxScene>
 
       <OrbitControls enablePan={false} />
     </Canvas>

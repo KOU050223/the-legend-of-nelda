@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { createSilentAudioOutput } from '@/audio/audio-output';
 import { createFakeClock } from '@/game/clock';
 import type { GameEvent } from '@/game/events/game-event';
 import type { PlayerAction } from '@/game/types';
@@ -14,6 +15,13 @@ import { useGameStore } from '@/store/game-store';
 import { createAttackSequence, DEFAULT_TUTORIAL_SEQUENCE } from '@/game/sequence/attack-sequence';
 
 import { createCombatSession, type FrameLoop } from './combat-session';
+
+/**
+ * 音を鳴らさない出力。このファイルが確かめるのは戦闘の進行であって
+ * 演出ではない。jsdom には再生できる音源が無く、既定のままだと
+ * 再生できない旨の警告でテスト出力が埋まる。
+ */
+const silentAudio = createSilentAudioOutput;
 
 /**
  * フレームを手で進められるループ。rAF も実時間も使わずに
@@ -39,7 +47,14 @@ function createManualLoop(): { loop: FrameLoop; tick: () => void; isStopped: () 
 function setup() {
   const clock = createFakeClock();
   const { loop, tick, isStopped } = createManualLoop();
-  const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+  // 音は鳴らさない。このテストが確かめるのは HUD と戦闘の接続で、
+  // jsdom には再生できる音源が無い。
+  const session = createCombatSession({
+    clock,
+    frameLoop: loop,
+    random: () => 0,
+    audioOutput: silentAudio(),
+  });
 
   const events: GameEvent[] = [];
   session.eventBus.subscribe((event) => events.push(event));
@@ -125,6 +140,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       tutorialSequence: [{ slot: 'PILLOW_SWEEP', assist: true }],
       mainSequence: [{ slot: 'YAWN_WAVE', assist: false }],
     });
@@ -161,6 +177,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       tutorialSequence: [],
       mainSequence: [{ slot: 'FLUFFY_FUTON', assist: false }],
     });
@@ -186,7 +203,12 @@ describe('createCombatSession', () => {
     // 早くボスが落ちて最終布団へ到達できない (仕様 §17)。
     const clock = createFakeClock();
     const { loop, tick } = createManualLoop();
-    const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+    const session = createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      audioOutput: silentAudio(),
+    });
 
     const steps: { index: number; phase: string; attackId: string }[] = [];
     let pendingDefense: PlayerAction | null = null;
@@ -261,6 +283,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       mainSequence: [{ slot: 'PILLOW_SWEEP', assist: false }],
     });
 
@@ -305,7 +328,7 @@ describe('createCombatSession', () => {
     // 仕様 §16「初回失敗時のペナルティは軽くする」。
     const clock = createFakeClock();
     const { loop, tick } = createManualLoop();
-    createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+    createCombatSession({ clock, frameLoop: loop, random: () => 0, audioOutput: silentAudio() });
 
     const advance = (ms: number) => {
       clock.advance(ms);
@@ -336,6 +359,7 @@ describe('createCombatSession', () => {
       clock: createFakeClock(),
       frameLoop: createManualLoop().loop,
       random: () => 0,
+      audioOutput: silentAudio(),
     });
 
     expect(useGameStore.getState()).toMatchObject({
@@ -355,6 +379,7 @@ describe('createCombatSession', () => {
       clock: createFakeClock(),
       frameLoop: createManualLoop().loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       sequence,
     });
 
@@ -378,6 +403,7 @@ describe('createCombatSession', () => {
         clock,
         frameLoop: loop,
         random: () => randomValue,
+        audioOutput: silentAudio(),
       });
 
       const steps: string[] = [];
@@ -430,7 +456,12 @@ describe('createCombatSession', () => {
     // 入力ロックがあるので押しっぱなしでも発数には上限がある。
     const clock = createFakeClock();
     const { loop, tick } = createManualLoop();
-    const session = createCombatSession({ clock, frameLoop: loop, random: () => 0 });
+    const session = createCombatSession({
+      clock,
+      frameLoop: loop,
+      random: () => 0,
+      audioOutput: silentAudio(),
+    });
 
     let pendingDefense: PlayerAction | null = null;
     let shouldCounter = false;
@@ -492,6 +523,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       // 倍率を書かない、素の { slot, assist } だけの指定。
       tutorialSequence: DEFAULT_TUTORIAL_SEQUENCE.map(({ slot, assist }) => ({ slot, assist })),
     });
@@ -545,6 +577,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       tutorialSequence: [{ slot: 'FLUFFY_FUTON', assist: true }],
       mainSequence: [{ slot: 'YAWN_WAVE', assist: false }],
     });
@@ -583,6 +616,7 @@ describe('createCombatSession', () => {
       clock,
       frameLoop: loop,
       random: () => 0,
+      audioOutput: silentAudio(),
       idleIntervalMs: 1_000,
     });
 

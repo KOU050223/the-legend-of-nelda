@@ -1,3 +1,5 @@
+import { createAudioManager } from '@/audio/audio-manager';
+import { createHtmlAudioOutput, type AudioOutput } from '@/audio/audio-output';
 import { createBossAttackController } from '@/game/attacks/boss-attack';
 import { createRealClock, type GameClock } from '@/game/clock';
 import { createCombatStateMachine } from '@/game/combat/state-machine';
@@ -9,6 +11,8 @@ import {
   type SequenceStepDefinition,
 } from '@/game/sequence/attack-sequence';
 import type { PlayerAction } from '@/game/types';
+import { readPresentationSettings } from '@/presentation/presentation-store';
+import { syncVfxWithGameEvents } from '@/rendering/vfx/vfx-sync';
 import { useGameStore } from '@/store/game-store';
 import { syncHudWithGameEvents } from '@/ui/hud/game-event-sync';
 
@@ -56,6 +60,13 @@ export interface CombatSessionOptions {
    * 定めてある (state-machine.ts の CombatTimings)。その受け口がここ。
    */
   idleIntervalMs?: number;
+  /**
+   * SE の再生先。既定はブラウザの Audio。
+   *
+   * 演出の接続を切っても戦闘は成立するので、テストからは無音の出力を渡す
+   * (jsdom に実オーディオが無い)。
+   */
+  audioOutput?: AudioOutput;
 }
 
 /** 攻撃と攻撃の間隔の既定値。docs/single-player-poc-spec.md §15 の IDLE 約1秒。 */
@@ -76,6 +87,7 @@ export function createCombatSession({
   mainSequence,
   sequence,
   idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS,
+  audioOutput = createHtmlAudioOutput(),
 }: CombatSessionOptions = {}): CombatSession {
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
@@ -116,6 +128,19 @@ export function createCombatSession({
   useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
 
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
+
+  // 演出は HUD と同じく「イベントを購読して状態を書く」だけの購読者として足す。
+  // Game Logic 側は購読者の有無を知らないので、ここを外しても戦闘は変わらない
+  // (Issue #11 完了条件 / docs/technical-design.md §6)。
+  const unsubscribeVfx = syncVfxWithGameEvents({
+    eventBus,
+    getSettings: readPresentationSettings,
+  });
+  const disposeAudio = createAudioManager({
+    eventBus,
+    output: audioOutput,
+    getSettings: readPresentationSettings,
+  });
 
   /** IDLE へ入った時刻。次の技を出すまでの間隔をここから測る。 */
   let idleSince: number | null = null;
@@ -173,6 +198,8 @@ export function createCombatSession({
     dispose() {
       stopLoop();
       unsubscribeHud();
+      unsubscribeVfx();
+      disposeAudio();
       controller.dispose();
     },
   };

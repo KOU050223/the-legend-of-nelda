@@ -22,6 +22,16 @@ afterEach(() => {
   detach = undefined;
 });
 
+/**
+ * 実際の要素からキーを投げる。設定UIのスライダーやチェックボックスを
+ * 操作している状況を再現するため、target を window ではなく要素にする。
+ */
+function dispatchKeyFrom(element: HTMLElement, code: string): void {
+  document.body.append(element);
+  element.dispatchEvent(new KeyboardEvent('keydown', { code, cancelable: true, bubbles: true }));
+  element.remove();
+}
+
 describe('attachKeyboardInput', () => {
   // INPUT-001〜INPUT-004。4操作それぞれが Player Action として通知される。
   // 矢印キーと WASD/J の2系統を割り当てているので、どちらからでも同じ
@@ -82,5 +92,31 @@ describe('attachKeyboardInput', () => {
     dispatchKey('ArrowLeft');
 
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['スライダー', 'input'],
+    ['ボタン', 'button'],
+    ['セレクト', 'select'],
+  ])('%sを操作している間は矢印キーがゲーム入力にならない', (_name, tag) => {
+    // 設定UIは矢印キーでスライダーを動かし Space でチェックを切り替える。
+    // 素通しすると設定を触るたびに回避・攻撃が暴発し、preventDefault() で
+    // スライダー自体も動かせなくなる。
+    const onAction = vi.fn<(action: PlayerAction) => void>();
+    detach = attachKeyboardInput(onAction);
+
+    dispatchKeyFrom(document.createElement(tag), 'ArrowLeft');
+
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('UI以外の場所からのキーはゲーム入力になる', () => {
+    // 上の除外が広すぎて操作そのものを殺していないことの確認。
+    const onAction = vi.fn<(action: PlayerAction) => void>();
+    detach = attachKeyboardInput(onAction);
+
+    dispatchKeyFrom(document.createElement('div'), 'ArrowLeft');
+
+    expect(onAction).toHaveBeenCalledWith('DODGE_LEFT');
   });
 });
