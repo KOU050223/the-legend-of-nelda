@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
+import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
+import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
+import { EffectSettings } from '@/ui/settings/EffectSettings';
 
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
@@ -44,7 +47,13 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
   return (
     <div className={styles.root}>
       <GameScene />
-      {!result && <Hud />}
+      {!result && (
+        <>
+          <VfxOverlay getSettings={readPresentationSettings} />
+          <Hud />
+          <EffectSettings />
+        </>
+      )}
       <ResultOverlay onRestart={onRestart} />
     </div>
   );

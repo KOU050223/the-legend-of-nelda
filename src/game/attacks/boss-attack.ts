@@ -310,6 +310,24 @@ export function createBossAttackController({
 
     if (to === 'ATTACK') {
       active.hitAt = startedAt + attack.hitTiming.hitAfterMs;
+
+      // 枕の軌跡・あくびの衝撃波は仕様上「発動」区分の演出で、TELEGRAPH の
+      // 尺で終わる Cue のままだと ATTACK が始まる前に消える
+      // (docs/single-player-poc-spec.md §7 / §9 の「発動」)。同じ Cue ID を
+      // ACTIVATION として ATTACK の尺で再送し、Presentation 側が
+      // 予兆用と発動用を別の演出として出し分けられるようにする。
+      if (attack.cues?.visual !== false && attack.visualCue) {
+        // ATTACK の尺は toCombatAttack() と同じ式 (hitAfterMs + acceptToMs)。
+        // attack.timings は上書き用の Partial なので、ここでは値の出どころが
+        // 一意な hitTiming から直接計算する。
+        eventBus.emit({
+          type: 'ATTACK_VISUAL_CUE',
+          attackId: attack.id,
+          cue: attack.visualCue,
+          durationMs: attack.hitTiming.hitAfterMs + attack.hitTiming.acceptToMs,
+          phase: 'ACTIVATION',
+        });
+      }
       return;
     }
 
@@ -393,6 +411,7 @@ export function createBossAttackController({
               activeAttack.definition.bossDownFollowUpDamage ?? BOSS_DOWN_FOLLOW_UP_DAMAGE;
 
             vitals.damageBoss(followUpDamage * (activeAttack.definition.damageScale?.boss ?? 1));
+            eventBus.emit({ type: 'BOSS_DOWN_FOLLOW_UP_HIT' });
           }
 
           return followUp;

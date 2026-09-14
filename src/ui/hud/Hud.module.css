@@ -1,6 +1,9 @@
 .hud {
   position: absolute;
   inset: 0;
+  /* VFX オーバーレイ (z-index: 1) より手前。暗転やフラッシュで
+     ゲージや文言が沈まないようにする。 */
+  z-index: 2;
   pointer-events: none;
   display: flex;
   flex-direction: column;

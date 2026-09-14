@@ -4,6 +4,12 @@ import type { Mesh } from 'three';
 import { useGameStore } from '@/store/game-store';
 import { RESULT_TIMING } from '@/ui/result/result-presentation';
 
+import { readPresentationSettings } from '@/presentation/presentation-store';
+import { visualScale } from '@/presentation/presentation-settings';
+
+import { hitStopDelta } from '../vfx/hit-stop';
+import { useVfxStore } from '../vfx/vfx-store';
+
 /**
  * 仮Boss。Graybox First のため Primitive Mesh で表現する。
  * (docs/development-workflow.md §9 / docs/technical-design.md §12)
@@ -16,7 +22,10 @@ export function BossMesh(): React.JSX.Element {
     if (meshRef.current) {
       const result = useGameStore.getState().result;
       if (!result) {
-        meshRef.current.rotation.y += delta * 0.4;
+        // 通常戦闘では既存VFXのヒットストップと演出強度を反映する。
+        const { active } = useVfxStore.getState();
+        const scale = visualScale(readPresentationSettings());
+        meshRef.current.rotation.y += hitStopDelta(delta, active, performance.now(), scale) * 0.4;
         return;
       }
       if (result.outcome !== 'victory') return;

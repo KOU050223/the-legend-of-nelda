@@ -1,12 +1,19 @@
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSilentAudioOutput } from '@/audio/audio-output';
+import type * as AudioOutputModule from '@/audio/audio-output';
+import { useVfxStore } from '@/rendering/vfx/vfx-store';
 import { useGameStore } from '@/store/game-store';
 import { App } from './App';
 import * as sessions from './combat-session';
 import type { PlayerAction } from '@/game/types';
 
 vi.mock('@/rendering/scene/GameScene', () => ({ GameScene: () => null }));
+vi.mock('@/audio/audio-output', async (importOriginal) => {
+  const actual = await importOriginal<typeof AudioOutputModule>();
+  return { ...actual, createHtmlAudioOutput: actual.createSilentAudioOutput };
+});
 
 describe('App', () => {
   beforeEach(() => {
@@ -24,6 +31,7 @@ describe('App', () => {
     const created: sessions.CombatSession[] = [];
     vi.spyOn(sessions, 'createCombatSession').mockImplementation(() => {
       const session = create({
+        audioOutput: createSilentAudioOutput(),
         random: () => 0,
         tutorialSequence: [],
         mainSequence: [{ slot: 'PILLOW_SWEEP', assist: false }],
@@ -77,7 +85,9 @@ describe('App', () => {
       result: null,
       eventFeedback: null,
     });
-    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '演出設定' })).toBeInTheDocument();
+    expect(useVfxStore.getState().active).toEqual([]);
     act(() => {
       session.eventBus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'DAMAGE', to: 'BOSS_DEFEATED' });
       session.eventBus.emit({ type: 'BOSS_HP_CHANGED', hp: 0 });
@@ -128,7 +138,9 @@ describe('App', () => {
       });
       expect(useGameStore.getState()).toEqual(ended);
       fireEvent.click(screen.getByRole('button', { name: /RESTART/ }));
-      expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+      expect(screen.getByRole('region', { name: '演出設定' })).toBeInTheDocument();
+      expect(useVfxStore.getState().active).toEqual([]);
       expect(vi.getTimerCount()).toBe(1);
     }
     expect(eventCounts).toEqual([1, 1, 1]);
