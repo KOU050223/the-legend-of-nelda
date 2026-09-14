@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { facingRotationY, moveCharacter } from './movement';
+import { clampToBounds, facingRotationY, moveCharacter } from './movement';
 
 describe('moveCharacter', () => {
   it('forward = 1 のとき -Z方向へ移動する (カメラは+Z側から原点を見ているため)', () => {
@@ -97,6 +97,116 @@ describe('moveCharacter', () => {
     });
 
     expect(Math.abs(next.z)).toBeCloseTo(2);
+  });
+});
+
+describe('moveCharacter の境界クランプ', () => {
+  const bounds = { radius: 10 };
+
+  it('bounds を渡さなければ従来どおり制限されない', () => {
+    const next = moveCharacter({
+      position: { x: 0, z: 0 },
+      input: { forward: 1, right: 0 },
+      speed: 100,
+      delta: 1,
+    });
+
+    expect(Math.hypot(next.x, next.z)).toBeCloseTo(100);
+  });
+
+  it('外へ向かって歩き続けてもアリーナの外へ出られない', () => {
+    // 制限なしなら 40 units 進む長さ。境界 (10) に達したうえで止まることを見る。
+    let position = { x: 0, z: 0 };
+    for (let frame = 0; frame < 600; frame += 1) {
+      position = moveCharacter({
+        position,
+        input: { forward: 0, right: 1 },
+        speed: 4,
+        delta: 1 / 60,
+        bounds,
+      });
+    }
+
+    expect(Math.hypot(position.x, position.z)).toBeCloseTo(bounds.radius);
+    expect(position.x).toBeCloseTo(bounds.radius);
+  });
+
+  it('壁へ斜めに押し当てると止まらず壁沿いに進む', () => {
+    // 逃げ回る攻撃 (ブルーライト照射) で壁に張り付かないことを保証する。
+    const onWall = { x: bounds.radius, z: 0 };
+    const next = moveCharacter({
+      position: onWall,
+      input: { forward: 1, right: 1 },
+      speed: 4,
+      delta: 1 / 60,
+      bounds,
+    });
+
+    expect(Math.hypot(next.x, next.z)).toBeCloseTo(bounds.radius);
+    expect(next.z).toBeLessThan(onWall.z);
+  });
+
+  it('壁沿いに進んでも一周ぶんの向きは失わない (接線方向へ進み続けられる)', () => {
+    let position = { x: bounds.radius, z: 0 };
+    for (let frame = 0; frame < 60; frame += 1) {
+      position = moveCharacter({
+        position,
+        input: { forward: 1, right: 1 },
+        speed: 4,
+        delta: 1 / 60,
+        bounds,
+      });
+    }
+
+    expect(Math.hypot(position.x, position.z)).toBeCloseTo(bounds.radius);
+    expect(position.z).toBeLessThan(-1);
+  });
+
+  it('入力がなくても境界の外にある位置は引き戻される', () => {
+    const next = moveCharacter({
+      position: { x: 40, z: 0 },
+      input: { forward: 0, right: 0 },
+      speed: 4,
+      delta: 1 / 60,
+      bounds,
+    });
+
+    expect(next).toEqual({ x: bounds.radius, z: 0 });
+  });
+
+  it('境界の内側では位置を変えない', () => {
+    const inside = { x: 1, z: -2 };
+    const next = moveCharacter({
+      position: inside,
+      input: { forward: 0, right: 0 },
+      speed: 4,
+      delta: 1 / 60,
+      bounds,
+    });
+
+    expect(next).toEqual(inside);
+  });
+});
+
+describe('clampToBounds', () => {
+  it('境界の外の位置は角度を保ったまま境界上へ丸める', () => {
+    const clamped = clampToBounds({ x: 30, z: 40 }, { radius: 5 });
+
+    expect(clamped).toEqual({ x: 3, z: 4 });
+  });
+
+  it('境界上の位置は動かさない', () => {
+    expect(clampToBounds({ x: 0, z: 5 }, { radius: 5 })).toEqual({ x: 0, z: 5 });
+  });
+
+  it('原点でも 0除算にならない', () => {
+    expect(clampToBounds({ x: 0, z: 0 }, { radius: 5 })).toEqual({ x: 0, z: 0 });
+  });
+
+  it('呼び出し元の position オブジェクトをそのまま返さない', () => {
+    const position = { x: 1, z: 1 };
+
+    expect(clampToBounds(position, { radius: 5 })).not.toBe(position);
   });
 });
 
