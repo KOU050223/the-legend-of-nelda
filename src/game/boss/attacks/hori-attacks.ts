@@ -8,7 +8,7 @@ import {
 } from '../../config/phase2-boss-balance';
 import { distanceToBounds, moveCharacter, facingRotationY } from '../../movement/movement';
 import type { PlanarPosition } from '../../movement/types';
-import { ARENA_BOUNDS } from '../../arena/arena';
+import { ARENA_BOUNDS, SAFE_ZONE_ANCHORS, SAFE_ZONE_RADIUS } from '../../arena/arena';
 import { pseudoRandom, ringLayout } from '../../arena/ring-layout';
 import type { BossTarget } from '../boss-target';
 import type { DangerShape } from '../../config/phase2-boss-balance';
@@ -26,6 +26,121 @@ import type { DangerZone } from './danger-zone';
  * (§9.2「走って逃げる」) なので、経過時間に応じて着弾点が動く。ただし
  * 追尾速度は上限付き (BLUE_LIGHT_TRACKING_SPEED) で、走れば振り切れる。
  */
+
+/**
+ * 安全地帯と危険区画のあいだに取る余白。
+ *
+ * ちょうど接する位置に置くと、安全地帯の縁に立ったプレイヤーが
+ * `isInsideDangerZone` の「境界は内側」判定で被弾する。安全地帯の中に居れば
+ * 安全、を成り立たせるための最小限の余白。
+ */
+export const SAFE_ZONE_CLEARANCE = 0.25;
+
+/** 危険区画の中心が安全地帯の中心から取る距離。 */
+const COMPRESSION_FIELD_MIN_DISTANCE = (() => {
+  const { shape } = DEFAULT_HORI_ATTACKS.COMPRESSION_FIELD;
+  return (shape.kind === 'CIRCLE' ? shape.radius : 0) + SAFE_ZONE_RADIUS + SAFE_ZONE_CLEARANCE;
+})();
+
+/** 角度を (-π, π] へ畳む。 */
+function normalizeAngle(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+/** `from` から `to` までの角度差を (0, 2π] で返す。 */
+function angleSpacing(from: number, to: number): number {
+  const delta = (to - from) % (Math.PI * 2);
+  return delta > 0 ? delta : delta + Math.PI * 2;
+}
+
+/**
+ * 半径 `radius` の円周上で、この安全地帯が塞ぐ角度の半幅 (rad)。
+ * 0 ならその半径ではどの角度に置いても当たらない。
+ */
+function blockedHalfAngle(radius: number, safe: PlanarPosition): number {
+  const safeRadius = Math.hypot(safe.x, safe.z);
+  if (radius === 0 || safeRadius === 0) {
+    return Math.abs(radius - safeRadius) >= COMPRESSION_FIELD_MIN_DISTANCE ? 0 : Math.PI;
+  }
+
+  // 余弦定理。中心間距離が MIN_DISTANCE になる角度が弧の端。
+  const cosine =
+    (radius * radius + safeRadius * safeRadius - COMPRESSION_FIELD_MIN_DISTANCE ** 2) /
+    (2 * radius * safeRadius);
+  if (cosine >= 1) return 0;
+  if (cosine <= -1) return Math.PI;
+  return Math.acos(cosine);
+}
+
+/** 半径 `radius` の円周上に、どの安全地帯にも当たらない角度があるか。 */
+function hasClearAngle(radius: number): boolean {
+  const arcs = SAFE_ZONE_ANCHORS.map((safe) => ({
+    center: Math.atan2(safe.z, safe.x),
+    half: blockedHalfAngle(radius, safe),
+  })).toSorted((a, b) => a.center - b.center);
+  if (arcs.length === 0) return true;
+
+  // 隣り合う弧のあいだに隙間が残っていれば、そこが安全な角度。
+  for (const [index, arc] of arcs.entries()) {
+    const next = arcs[(index + 1) % arcs.length];
+    if (next === undefined) continue;
+    if (angleSpacing(arc.center, next.center) - arc.half - next.half > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * 安全な角度が生まれる最小半径。安全地帯の配置と危険区画の半径だけで決まるので
+ * 一度だけ求める。
+ *
+ * 塞ぐ角度の半幅は半径に対して単調減少するため二分探索でよい。**返すのは必ず
+ * `high` 側**（安全が確認できた端）。この半径は安全な角度が点へ退化する境界で、
+ * `low` 側や中点を返すと浮動小数点で「安全な角度が無い」側へ落ちうる。
+ */
+function findClearAngleMinRadius(): number {
+  const { innerRadius, outerRadius } = COMPRESSION_FIELD_RING;
+  if (hasClearAngle(innerRadius)) return innerRadius;
+
+  // COMPRESSION_FIELD_RING は as const なのでリテラル型になる。探索で動かすため number にする。
+  let low: number = innerRadius;
+  let high: number = outerRadius;
+  for (let step = 0; step < 60; step += 1) {
+    const middle = (low + high) / 2;
+    if (hasClearAngle(middle)) high = middle;
+    else low = middle;
+  }
+  return high;
+}
+
+const CLEAR_ANGLE_MIN_RADIUS = findClearAngleMinRadius();
+
+/**
+ * 危険区画の候補を、安全地帯に重ならない位置へ寄せる。
+ *
+ * 半径の分布を保ちたいので、**半径はその半径に安全な角度が無いときだけ**最小限
+ * 上げる。角度はその半径で塞がれていなければそのまま、塞がれていれば禁止された
+ * 弧の近い方の端へ移す。安全地帯は 120度 間隔で弧は互いに交わらないため、
+ * 端へ移せば他の安全地帯に対しても必ず安全になる (retry しない)。
+ *
+ * 候補を捨てて引き直さないのは、区画数が seed によって減ると避ける圧が
+ * 変わってしまうため (docs/phase2-gameplay-spec.md §9.3)。
+ */
+function clearOfSafeZones(angle: number, radius: number): { angle: number; radius: number } {
+  const placedRadius = Math.max(radius, CLEAR_ANGLE_MIN_RADIUS);
+
+  const blocked = SAFE_ZONE_ANCHORS.map((safe) => ({
+    center: Math.atan2(safe.z, safe.x),
+    half: blockedHalfAngle(placedRadius, safe),
+  })).find((arc) => arc.half > 0 && Math.abs(normalizeAngle(angle - arc.center)) < arc.half);
+
+  if (blocked === undefined) return { angle, radius: placedRadius };
+
+  const before = blocked.center - blocked.half;
+  const after = blocked.center + blocked.half;
+  const toBefore = Math.abs(normalizeAngle(angle - before));
+  const toAfter = Math.abs(normalizeAngle(angle - after));
+  return { angle: toBefore <= toAfter ? before : after, radius: placedRadius };
+}
 
 /** 予兆の開始時に固定される狙い。技によって使うフィールドが違う。 */
 export interface AttackAim {
@@ -81,13 +196,22 @@ export function aimAttack(attackId: HoriAttackId, context: AimContext): AttackAi
         // 角度の揺らぎは #54 の装置配置 (等間隔) と違い、毎回同じ場所が
         // 安全にならないよう残す。seed が同じなら配置も同じで、
         // スナップショットから復元できる (Issue #58)。
+        //
+        // 候補が #54 の安全地帯へ重なったときは、捨てずに寄せる。捨てると
+        // 区画数が seed 次第で減り、§9.3「安全地帯へ移動する」の圧が変わる。
         points: ringLayout({
           count: COMPRESSION_FIELD_ZONE_COUNT,
           innerRadius: COMPRESSION_FIELD_RING.innerRadius,
           outerRadius: COMPRESSION_FIELD_RING.outerRadius,
           seed,
           angleJitter: COMPRESSION_FIELD_ANGLE_JITTER,
-        }).map(({ x, z }) => ({ x, z })),
+        }).map((point) => {
+          const placed = clearOfSafeZones(point.angle, Math.hypot(point.x, point.z));
+          return {
+            x: Math.cos(placed.angle) * placed.radius,
+            z: Math.sin(placed.angle) * placed.radius,
+          };
+        }),
       };
     }
 
