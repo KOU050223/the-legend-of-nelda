@@ -1,0 +1,148 @@
+/*
+ * 元ネタのタイトル画面と同じ構図 (左下に勇者 / 右にロゴとメニュー) を、
+ * 画像アセットを増やさず CSS のグラデーションと clip-path だけで作る。
+ * 狙っている雰囲気がチープさなので、作り込むより記号的な山と空で足りる。
+ */
+.title {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  font-family: 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#3fa9dd 0%, #7fd0ea 45%, #cdeef5 75%, #e7f7f2 100%);
+}
+
+/* 奥の雪山。薄い青で遠さを出す。 */
+.mountains {
+  position: absolute;
+  inset: 38% 0 0;
+  background: #9dc9dd;
+  clip-path: polygon(
+    0% 100%,
+    0% 52%,
+    12% 18%,
+    22% 46%,
+    34% 24%,
+    46% 58%,
+    58% 10%,
+    70% 50%,
+    82% 26%,
+    92% 54%,
+    100% 34%,
+    100% 100%
+  );
+}
+
+/* 手前の緑の尾根。 */
+.ridge {
+  position: absolute;
+  inset: 58% 0 0;
+  background: linear-gradient(#6ea86a, #3f7a4d);
+  clip-path: polygon(
+    0% 100%,
+    0% 44%,
+    10% 22%,
+    20% 50%,
+    32% 30%,
+    44% 62%,
+    56% 34%,
+    68% 58%,
+    80% 28%,
+    90% 52%,
+    100% 30%,
+    100% 100%
+  );
+}
+
+/* 左下の勇者。ドット絵なので拡大は最近傍で。 */
+.hero {
+  position: absolute;
+  left: 9%;
+  bottom: 8%;
+  width: auto;
+  height: 34vh;
+  image-rendering: pixelated;
+  /* 元写真の切り口が下端に直線で残るので、尾根へ向けて消す。 */
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 97%);
+  filter: drop-shadow(3px 3px 0 #2c3a3155);
+}
+
+.menu {
+  position: absolute;
+  top: 12%;
+  right: 5%;
+  width: min(52%, 620px);
+  text-align: right;
+}
+
+/* ロゴの金色は、塗りのグラデーションと縁取りを重ねただけの安い作り。 */
+.logo {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 78px);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  background: linear-gradient(#fff6cf 14%, #ffd964 44%, #c98a22 78%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* 縁取りは text-stroke だと塗りを潰すので、影を四方へ重ねて作る。 */
+  filter: drop-shadow(2px 0 0 #8c3c1a) drop-shadow(-2px 0 0 #8c3c1a) drop-shadow(0 2px 0 #8c3c1a)
+    drop-shadow(0 -2px 0 #8c3c1a) drop-shadow(0 5px 0 #6e2a1288);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: clamp(13px, 1.7vw, 22px);
+  color: #23424b;
+  text-shadow: 0 1px 0 #ffffffaa;
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 2vh, 22px);
+  margin-top: clamp(18px, 5vh, 52px);
+}
+
+.link,
+.primary {
+  border: none;
+  background: none;
+  padding: 6px 18px;
+  font: inherit;
+  font-size: clamp(15px, 2.1vw, 27px);
+  color: #1d3b44;
+  text-shadow: 0 1px 0 #ffffffaa;
+  cursor: pointer;
+}
+
+/* 選択中の行だけ、元ネタと同じ緑の角丸で塗る。 */
+.primary {
+  border-radius: 999px;
+  background: linear-gradient(#a9e6a0, #6fc46a);
+  color: #123322;
+  box-shadow: 0 2px 0 #3f8a45;
+}
+
+.link:hover,
+.primary:hover {
+  transform: translateX(-4px);
+}
+
+.link:focus-visible,
+.primary:focus-visible {
+  outline: 3px solid #ffdf8a;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .link,
+  .primary {
+    transition: transform 0.12s steps(2);
+  }
+}
