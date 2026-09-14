@@ -39,6 +39,9 @@ export function MicrophoneDebug(): React.JSX.Element {
     stopRef.current?.();
     stopRef.current = null;
     startingRef.current = false;
+
+    // アンマウント経由の停止では表示を更新する相手がいない。
+    if (disposedRef.current) return;
     setRunning(false);
     setStableNote(null);
     setSnapshot(null);

@@ -28,6 +28,8 @@ export interface NoteStabilizer {
 
 /** フレームが閾値を満たすか。満たさないものは無音と同じ扱いにする。 */
 export function isAcceptableFrame(frame: PitchFrame, config: PitchInputConfig): boolean {
+  // NaN は比較がすべて false になり、閾値チェックを素通りしてしまう。
+  if (!Number.isFinite(frame.frequencyHz)) return false;
   if (frame.rms < config.minRms) return false;
   if (frame.clarity < config.minClarity) return false;
   if (frame.frequencyHz < config.minFrequencyHz) return false;

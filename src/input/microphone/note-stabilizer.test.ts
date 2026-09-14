@@ -125,6 +125,16 @@ describe('createNoteStabilizer', () => {
     expect(stabilizer.getStableNote()).toBeNull();
   });
 
+  // 猶予ちょうどでは切る。境界を含めないと noteOffDelayMs の意味が曖昧になる。
+  it('無音が猶予ちょうど続いたら鳴り終わったと判定する', () => {
+    const stabilizer = createNoteStabilizer({ ...CONFIG, noteOffDelayMs: 120 });
+    feed(stabilizer, [frameOf(C5, 0), frameOf(C5, 33), frameOf(C5, 66)]);
+
+    // 最後に音を受け取ったのは 66ms。その 120ms 後。
+    expect(stabilizer.update(null, 66 + 119)?.type).toBeUndefined();
+    expect(stabilizer.update(null, 66 + 120)?.type).toBe('note-off');
+  });
+
   it('鳴り終わったと判定するのは一度だけ', () => {
     const stabilizer = createNoteStabilizer({ ...CONFIG, noteOffDelayMs: 120 });
     feed(stabilizer, [frameOf(C5, 0), frameOf(C5, 33), frameOf(C5, 66)]);
@@ -209,5 +219,20 @@ describe('isAcceptableFrame', () => {
   it('想定した音域の外は採用しない', () => {
     expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 100 }), CONFIG)).toBe(false);
     expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 5000 }), CONFIG)).toBe(false);
+  });
+
+  // 境界そのものは採用する (docs/testing-guide.md §9)。
+  it('音域の両端ちょうどは採用する', () => {
+    expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 200 }), CONFIG)).toBe(true);
+    expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 2000 }), CONFIG)).toBe(true);
+  });
+
+  it('閾値ちょうどの音量・はっきりさは採用する', () => {
+    expect(isAcceptableFrame(frameOf(C5, 0, { rms: CONFIG.minRms }), CONFIG)).toBe(true);
+    expect(isAcceptableFrame(frameOf(C5, 0, { clarity: CONFIG.minClarity }), CONFIG)).toBe(true);
+  });
+
+  it('周波数として成立しないフレームは採用しない', () => {
+    expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: Number.NaN }), CONFIG)).toBe(false);
   });
 });

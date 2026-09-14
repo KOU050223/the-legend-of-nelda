@@ -26,10 +26,13 @@ const ANALYSIS_INTERVAL_MS = 33;
  * ノイズ抑制やAGCが倍音を壊し、かえって検出を不安定にする。
  */
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
-  channelCount: 1,
-  echoCancellation: false,
-  noiseSuppression: false,
-  autoGainControl: false,
+  // ideal にするのは、完全一致で要求すると対応しない機器で OverconstrainedError
+  // になり、マイクがあるのに「デバイス無し」として扱われてしまうため。
+  // 無視された場合は getSettings() の実値を受け入れる。
+  channelCount: { ideal: 1 },
+  echoCancellation: { ideal: false },
+  noiseSuppression: { ideal: false },
+  autoGainControl: { ideal: false },
 };
 
 /**
@@ -231,9 +234,21 @@ export async function attachMicrophoneNoteInput(
     stopped = true;
 
     stopTimer(timerId);
-    session.dispose();
-    stopStream();
+
+    // 鳴ったままの音を note-on の出しっぱなしで終わらせない。購読側が
+    // 「今鳴っている音」を持つ場合、対の note-off が無いと停止後も残る。
+    const sounding = stabilizer.getStableNote();
+
+    try {
+      session.dispose();
+    } finally {
+      // dispose が投げてもマイクは必ず手放す。
+      stopStream();
+    }
+
     stabilizer.reset();
     onStatusChange?.('idle');
+
+    if (sounding !== null) onNote({ type: 'note-off', note: sounding });
   };
 }

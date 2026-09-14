@@ -138,12 +138,14 @@ describe('attachMicrophoneNoteInput', () => {
     const { stop } = await attachHarness({ getUserMedia });
     stop();
 
+    // 完全一致ではなく ideal で要求する。対応しない機器で
+    // OverconstrainedError にせず、実値を受け入れられるようにするため。
     const constraints = getUserMedia.mock.calls[0]?.[0];
     expect(constraints?.audio).toMatchObject({
-      channelCount: 1,
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
+      channelCount: { ideal: 1 },
+      echoCancellation: { ideal: false },
+      noiseSuppression: { ideal: false },
+      autoGainControl: { ideal: false },
     });
   });
 
@@ -198,6 +200,51 @@ describe('attachMicrophoneNoteInput', () => {
     expect(track.stopped).toBe(true);
     expect(session.disposed).toBe(true);
     expect(timer.running).toBe(false);
+  });
+
+  // note-on を出しっぱなしで購読を終わらせない。対の note-off が無いと
+  // 購読側が「鳴り続けている」と思ったまま残る。
+  it('鳴っている途中で停止したら鳴り終わったと通知する', async () => {
+    const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
+    const { stop, timer, events } = await attachHarness({ frames });
+
+    timer.tick(3);
+    stop();
+
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-off']);
+    expect(events.at(-1)?.note.name).toBe('C');
+  });
+
+  it('鳴っていなければ停止しても通知しない', async () => {
+    const { stop, events } = await attachHarness();
+
+    stop();
+
+    expect(events).toEqual([]);
+  });
+
+  it('解析の後始末が失敗してもマイクは解放する', async () => {
+    const track = createFakeTrack();
+    const timer = createManualTimer();
+
+    const stop = await attachMicrophoneNoteInput(() => undefined, {
+      clock: createFakeClock(),
+      detector: createScriptedDetector([]),
+      getUserMedia: () => Promise.resolve(createFakeStream(track)),
+      createSession: () => ({
+        sampleRate: 48_000,
+        frameSize: 2048,
+        readFrame: () => undefined,
+        dispose: () => {
+          throw new Error('dispose failed');
+        },
+      }),
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    expect(() => stop()).toThrow('dispose failed');
+    expect(track.stopped).toBe(true);
   });
 
   it('停止後はフレームを解析しない', async () => {
@@ -288,10 +335,12 @@ describe('attachMicrophoneNoteInput', () => {
     const statuses: MicrophoneInputStatus[] = [];
     await expect(
       attachMicrophoneNoteInput(() => undefined, {
-        getUserMedia: () => Promise.reject(new Error('boom')),
+        // 名前を持たない値で reject される環境もあるため、Error 以外も扱えること。
+        // eslint-disable-next-line prefer-promise-reject-errors
+        getUserMedia: () => Promise.reject('boom'),
         onStatusChange: (value) => statuses.push(value),
       }),
-    ).rejects.toThrow('boom');
+    ).rejects.toBe('boom');
 
     expect(statuses.at(-1)).toBe('error');
   });

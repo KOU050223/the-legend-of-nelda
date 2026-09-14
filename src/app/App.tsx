@@ -11,7 +11,8 @@ import { EffectSettings } from '@/ui/settings/EffectSettings';
 
 /**
  * 動的 import にするのは、静的 import だと import.meta.env.DEV の死枝除去で
- * JS は消えても CSS Modules の副作用 import が本番バンドルへ残るため。(Issue #43)
+ * JS は消えても CSS Modules の副作用 import が main チャンクへ残るため。
+ * 分離後も非同期チャンクとしては出力されるが、本番では読み込まれない。(Issue #43)
  */
 const MicrophoneDebug = lazy(async () => ({
   default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug,
