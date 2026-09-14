@@ -35,12 +35,18 @@ function readClipNames(path: string): readonly string[] {
   return animations.flatMap(({ name }) => (typeof name === 'string' ? [name] : []));
 }
 
-describe('hori-daisuke.glb のモーション', () => {
-  it('GLBのクリップ名と MOTION_CLIPS が一致する', () => {
-    expect(readClipNames(GLB_PATH).toSorted()).toEqual(Object.keys(MOTION_CLIPS).toSorted());
+describe('堀大輔のモーション', () => {
+  it('選べるモーションがすべてGLBに入っている', () => {
+    const selectable = Object.keys(MOTION_CLIPS).toSorted();
+
+    const inGlb = readClipNames(GLB_PATH).toSorted();
+
+    expect(inGlb).toEqual(selectable);
   });
 
-  it('既定のモーションが MOTION_CLIPS にある', () => {
-    expect(MOTION_CLIPS[DEFAULT_MOTION]).toBeDefined();
+  it('既定のモーションがGLBに入っている', () => {
+    const inGlb = readClipNames(GLB_PATH);
+
+    expect(inGlb).toContain(DEFAULT_MOTION);
   });
 });

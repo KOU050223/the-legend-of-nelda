@@ -16,8 +16,8 @@ Mixamo のアクションは全て `mixamo.com` 系の同じ名前で入って�
 になり、GLB側でクリップを名前で引けなくなる。
 
 モーションFBX側のArmatureはアクションを剥がしたら捨てる。ベースFBXのArmatureへ
-アクションを付け替え、NLAへスタッシュしてからまとめて書き出す。ボーン名が揃って
-いる前提で、揃わないものはエラーにする。
+アクションを付け替え、NLAへスタッシュしてからまとめて書き出す。ボーン名の集合が
+ベースと完全に一致することを前提とし、過不足があればエラーにする。
 
 実行方法:
 
@@ -115,10 +115,18 @@ def load_motion(base: bpy.types.Object, path: Path, clip_name: str) -> None:
         raise RuntimeError(f'{path.name}: expected 1 armature, got {len(armatures)}')
     source = armatures[0]
 
+    # ボーン名は両方向で一致させる。モーション側に余分があるとそのチャンネルが
+    # 無視され、逆にベースのボーンが欠けていると、そのボーンだけ直前のポーズや
+    # バインドポーズのまま取り残されて姿勢が壊れる。どちらも黙って通さない。
     base_bones = {b.name for b in base.data.bones}
-    missing = sorted({b.name for b in source.data.bones} - base_bones)
-    if missing:
-        raise RuntimeError(f'{path.name}: bones not in base rig: {missing}')
+    source_bones = {b.name for b in source.data.bones}
+    if source_bones != base_bones:
+        unknown = sorted(source_bones - base_bones)
+        missing = sorted(base_bones - source_bones)
+        raise RuntimeError(
+            f'{path.name}: bone set differs from base rig'
+            f' (not in base: {unknown}, missing from motion: {missing})'
+        )
 
     action = take_action(source)
     action.name = clip_name
