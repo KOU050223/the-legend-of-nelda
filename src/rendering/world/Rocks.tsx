@@ -14,7 +14,7 @@ const ROCK_COLOR = '#6b6559';
  * 隙間を詰め、縁ではなく壁として読めるようにする。
  */
 const PLACEMENTS: PropPlacement[] = propRingLayout({
-  count: 72,
+  count: 96,
   ...ROCK_RING,
   seed: 7,
 });

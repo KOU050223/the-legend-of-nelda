@@ -16,7 +16,7 @@ export const GROUND_SIZE = (ARENA_RADIUS + SCENERY_MARGIN) * 2;
  * 境界を示す岩の帯。プレイ可能範囲のすぐ外側へ置き、
  * 「ここから先へは行けない」を見た目で伝える。
  */
-export const ROCK_RING = { innerRadius: ARENA_RADIUS + 2.5, outerRadius: ARENA_RADIUS + 5.5 };
+export const ROCK_RING = { innerRadius: ARENA_RADIUS + 2, outerRadius: ARENA_RADIUS + 4.8 };
 
 /** 岩のさらに外側の木立。遠景として奥行きを出す。SCENERY_MARGIN の内側へ収める。 */
 export const TREE_RING = { innerRadius: ARENA_RADIUS + 7, outerRadius: ARENA_RADIUS + 16 };
