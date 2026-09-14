@@ -2,20 +2,20 @@ import { useLayoutEffect, useRef } from 'react';
 import { Object3D } from 'three';
 import type { InstancedMesh } from 'three';
 
-import { ringLayout, type PropPlacement } from './stage-layout';
+import { propRingLayout, TREE_RING, type PropPlacement } from './stage-layout';
 
 const TRUNK_COLOR = '#4a3524';
 const LEAVES_COLOR = '#2f6b3a';
 
 /**
- * 見た目の目印として木を配置する。Ground の縁沿いの帯に加えて、
- * Player の近くにも中景の帯を置く。近景が無いと視差が生まれず、
- * 移動している実感が出ないため (Follow Cameraは常にPlayerの背後6ユニット)。
+ * 岩の壁のさらに外側へ置く遠景の木立。
+ *
+ * アリーナの内側には置かない。当たり判定を持たない木をプレイ可能範囲へ置くと
+ * 中を素通りできてしまい、境界が壁として読めなくなるため (Issue #54)。
+ * アリーナ内部のランドマーク (＝移動している実感を出す視差の元) は、
+ * 装置・安全地帯・祭壇のマーカー (`ArenaMarkers`) が担う。
  */
-const PLACEMENTS: PropPlacement[] = [
-  ...ringLayout({ count: 16, innerRadius: 10, outerRadius: 24, seed: 11 }),
-  ...ringLayout({ count: 28, innerRadius: 30, outerRadius: 44, seed: 1 }),
-];
+const PLACEMENTS: PropPlacement[] = propRingLayout({ count: 40, ...TREE_RING, seed: 1 });
 
 const dummy = new Object3D();
 
@@ -23,7 +23,7 @@ const dummy = new Object3D();
  * 木立。instancedMesh で幹と葉を1回ずつの draw call にまとめる
  * (Three.js コンポーネントのみで軽量に保つための構成)。
  *
- * 配置は `ringLayout` による決定論的な計算結果を使う。毎フレーム
+ * 配置は `propRingLayout` による決定論的な計算結果を使う。毎フレーム
  * 位置を更新する必要が無いので、マウント時に一度だけ行列を設定する。
  */
 export function Trees(): React.JSX.Element {

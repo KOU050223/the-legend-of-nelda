@@ -1,3 +1,29 @@
+import { ARENA_RADIUS } from '@/game/arena/arena';
+import { pseudoRandom, ringLayout, type RingLayoutOptions } from '@/game/arena/ring-layout';
+
+/**
+ * 外周の景色 (岩・木) を置くために、プレイ可能範囲の外へ取る余白。
+ *
+ * **プレイ可能範囲 (`ARENA_RADIUS`) とは別物**。地面をプレイ可能範囲ぴったりに
+ * すると、境界を示すための岩や木の足元から地面が消えて宙に浮く。
+ */
+const SCENERY_MARGIN = 20;
+
+/** 地面 (Plane) の一辺。外周の景色の下まで敷く。 */
+export const GROUND_SIZE = (ARENA_RADIUS + SCENERY_MARGIN) * 2;
+
+/**
+ * 境界を示す岩の帯。プレイ可能範囲のすぐ外側へ置き、
+ * 「ここから先へは行けない」を見た目で伝える。
+ */
+export const ROCK_RING = { innerRadius: ARENA_RADIUS + 2, outerRadius: ARENA_RADIUS + 4.8 };
+
+/** 岩のさらに外側の木立。遠景として奥行きを出す。SCENERY_MARGIN の内側へ収める。 */
+export const TREE_RING = { innerRadius: ARENA_RADIUS + 7, outerRadius: ARENA_RADIUS + 16 };
+
+/** 草を生やす範囲。アリーナの床いっぱい。 */
+export const GRASS_RING = { innerRadius: 0, outerRadius: ARENA_RADIUS - 0.5 };
+
 export interface PropPlacement {
   x: number;
   z: number;
@@ -8,49 +34,20 @@ export interface PropPlacement {
 }
 
 /**
- * 0〜1 の決定論的な擬似乱数。`Math.random()` は使わない
- * (再レンダーのたびに配置が変わってしまうため)。同じ seed には常に
- * 同じ値を返す。
+ * 境界の目印 (木・岩・草) を「壁のように隙間なく」ではなく「自然にばらけた縁」
+ * として見せるための配置。
+ *
+ * 座標そのものは Game層の `ringLayout` が決め、ここでは向きと大きさという
+ * **見た目だけの値**を足す (docs/technical-design.md §4)。当たり判定や
+ * ゲーム上の意味は持たない。
  */
-function pseudoRandom(seed: number): number {
-  const x = Math.sin(seed * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-}
+export function propRingLayout(options: RingLayoutOptions): PropPlacement[] {
+  const seed = options.seed ?? 0;
 
-export interface RingLayoutOptions {
-  count: number;
-  /** リングの内側の半径。 */
-  innerRadius: number;
-  /** リングの外側の半径。 */
-  outerRadius: number;
-  /** 配置の再現性を変えるための seed オフセット。 */
-  seed?: number;
-}
-
-/**
- * 原点を中心にしたリング状 (ドーナツ状) の帯へ、角度と半径をずらして
- * props を並べる。境界の目印 (木・岩) を「壁のように隙間なく」ではなく
- * 「自然にばらけた縁」として見せるための配置関数。
- */
-export function ringLayout({
-  count,
-  innerRadius,
-  outerRadius,
-  seed = 0,
-}: RingLayoutOptions): PropPlacement[] {
-  const placements: PropPlacement[] = [];
-
-  for (let i = 0; i < count; i += 1) {
-    const angle = (i / count) * Math.PI * 2 + pseudoRandom(seed + i * 2) * 0.3;
-    const radius = innerRadius + pseudoRandom(seed + i * 2 + 1) * (outerRadius - innerRadius);
-
-    placements.push({
-      x: Math.cos(angle) * radius,
-      z: Math.sin(angle) * radius,
-      rotationY: pseudoRandom(seed + i * 3) * Math.PI * 2,
-      scale: 0.8 + pseudoRandom(seed + i * 5) * 0.5,
-    });
-  }
-
-  return placements;
+  return ringLayout(options).map((point, index) => ({
+    x: point.x,
+    z: point.z,
+    rotationY: pseudoRandom(seed + index * 3) * Math.PI * 2,
+    scale: 0.8 + pseudoRandom(seed + index * 5) * 0.5,
+  }));
 }

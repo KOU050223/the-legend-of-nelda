@@ -21,6 +21,18 @@ export interface PlanarPosition {
   z: number;
 }
 
+/**
+ * 移動できる範囲。原点を中心とした円で表す。
+ *
+ * ボスアリーナは中央にボス・外周に装置を置く円形の構造なので
+ * (docs/phase2-boss-arena-spec.md)、境界も円1つで表せる。矩形や任意形状が
+ * 必要になるまでは増やさない。
+ */
+export interface CircularBounds {
+  /** 原点からの最大距離。 */
+  radius: number;
+}
+
 export interface MoveCharacterOptions {
   position: PlanarPosition;
   input: MovementInput;
@@ -28,4 +40,6 @@ export interface MoveCharacterOptions {
   speed: number;
   /** 直前フレームからの経過秒。 */
   delta: number;
+  /** 移動できる範囲。省略すると制限しない。 */
+  bounds?: CircularBounds;
 }
