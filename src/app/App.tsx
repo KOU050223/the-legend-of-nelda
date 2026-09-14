@@ -10,6 +10,7 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 
 import { useScreenStore } from './screen';
 import { createCombatSession } from './combat-session';
@@ -33,6 +34,10 @@ export function App(): React.JSX.Element {
   // タイトルを経由させると既存の手順が変わってしまう (`?scene=world` と同じ扱い)。
   if (new URLSearchParams(window.location.search).get('debug') === 'ora') {
     return <OraDebugPage />;
+  }
+
+  if (new URLSearchParams(window.location.search).get('debug') === 'wasshoi') {
+    return <WasshoiDebug />;
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
