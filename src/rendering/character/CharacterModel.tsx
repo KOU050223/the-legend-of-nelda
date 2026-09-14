@@ -1,4 +1,9 @@
-import { PlaceholderCharacter } from './PlaceholderCharacter';
+import { PlaceholderCharacter, PLACEHOLDER_CHARACTER_COLOR } from './PlaceholderCharacter';
+
+export interface CharacterModelProps {
+  /** 3人を見分けるための色。実Asset導入後はマテリアル差し替えの入口になる。 */
+  color?: string;
+}
 
 /**
  * キャラクターの見た目を担当する境界。
@@ -11,6 +16,8 @@ import { PlaceholderCharacter } from './PlaceholderCharacter';
  * ここを `useGLTF('/models/player.glb')` を使う実装へ差し替えるだけでよい
  * (Issue #41)。
  */
-export function CharacterModel(): React.JSX.Element {
-  return <PlaceholderCharacter />;
+export function CharacterModel({
+  color = PLACEHOLDER_CHARACTER_COLOR,
+}: CharacterModelProps): React.JSX.Element {
+  return <PlaceholderCharacter color={color} />;
 }

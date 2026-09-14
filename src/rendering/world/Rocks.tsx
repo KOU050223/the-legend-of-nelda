@@ -2,27 +2,29 @@ import { useLayoutEffect, useRef } from 'react';
 import { Object3D } from 'three';
 import type { InstancedMesh } from 'three';
 
-import { ringLayout, type PropPlacement } from './stage-layout';
+import { propRingLayout, ROCK_RING, type PropPlacement } from './stage-layout';
 
 const ROCK_COLOR = '#6b6559';
 
 /**
- * 木立よりさらに外側に配置し、遠景の岩山のような縁を作る。
- * outerRadius は Ground (100x100、半径50) の縁からはみ出さないよう
- * 余白を残す (岩の見た目上の半径 ~1.6 を考慮)。
+ * プレイ可能範囲のすぐ外側を取り囲む岩の壁。
+ *
+ * 移動は `ARENA_BOUNDS` でクランプされるため当たり判定は持たないが、
+ * 「どこで止まるか」を見た目で伝えるのはこの岩の帯の役目。数を多くして
+ * 隙間を詰め、縁ではなく壁として読めるようにする。
  */
-const PLACEMENTS: PropPlacement[] = ringLayout({
-  count: 20,
-  innerRadius: 40,
-  outerRadius: 46,
+const PLACEMENTS: PropPlacement[] = propRingLayout({
+  count: 96,
+  ...ROCK_RING,
   seed: 7,
 });
 
 const dummy = new Object3D();
 
 /**
- * 岩の群れ。見た目上の境界を示すランドマークで、当たり判定は持たない
- * (Issue #41 のスコープでは Collision/Physics を扱わない)。
+ * 岩の群れ。アリーナの境界を示すランドマーク。
+ * 当たり判定は持たず、移動の制限は `moveCharacter` の `bounds` が担う
+ * (Issue #54)。
  *
  * instancedMesh 1つ・1 draw call で構成し、軽量に保つ。
  */

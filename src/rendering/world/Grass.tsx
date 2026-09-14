@@ -2,15 +2,14 @@ import { useLayoutEffect, useRef } from 'react';
 import { Object3D } from 'three';
 import type { InstancedMesh } from 'three';
 
-import { ringLayout, type PropPlacement } from './stage-layout';
+import { GRASS_RING, propRingLayout, type PropPlacement } from './stage-layout';
 
 const GRASS_COLOR = '#6fae3f';
 
 /** 草むらの塊の数。1塊につき複数本の cone をまとめて生やす。 */
-const CLUMPS: PropPlacement[] = ringLayout({
+const CLUMPS: PropPlacement[] = propRingLayout({
   count: 260,
-  innerRadius: 0,
-  outerRadius: 42,
+  ...GRASS_RING,
   seed: 3,
 });
 
