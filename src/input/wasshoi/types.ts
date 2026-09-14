@@ -19,7 +19,9 @@ export interface VoiceActivityConfig {
 }
 
 export const DEFAULT_VOICE_ACTIVITY_CONFIG: VoiceActivityConfig = {
-  threshold: 0.02,
+  // 一般的な内蔵マイクの通常発話は0.01前後になることがあるため、まずは小さめにする。
+  // Debug画面で実測RMSを見ながら上げ、環境ノイズによる誤検出を抑える。
+  threshold: 0.008,
   hangoverMs: 300,
   maxDurationMs: 10_000,
 };

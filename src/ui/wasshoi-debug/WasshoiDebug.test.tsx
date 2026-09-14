@@ -13,6 +13,7 @@ const controller: WasshoiInputController = {
   startRecording,
   stopRecording,
   isRecording: () => false,
+  playRecordedSample: () => true,
   stop,
 };
 

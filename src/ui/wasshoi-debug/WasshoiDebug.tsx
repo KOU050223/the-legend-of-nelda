@@ -5,7 +5,11 @@ import {
   type WasshoiInputController,
   type WasshoiInputStatus,
 } from '@/input/wasshoi/wasshoi-input';
-import type { WasshoiDebugSnapshot, WasshoiEvent } from '@/input/wasshoi/types';
+import {
+  DEFAULT_VOICE_ACTIVITY_CONFIG,
+  type WasshoiDebugSnapshot,
+  type WasshoiEvent,
+} from '@/input/wasshoi/types';
 
 import styles from './WasshoiDebug.module.css';
 
@@ -13,24 +17,21 @@ import styles from './WasshoiDebug.module.css';
 export function WasshoiDebug(): React.JSX.Element {
   const [status, setStatus] = useState<WasshoiInputStatus>('idle');
   const [snapshot, setSnapshot] = useState<WasshoiDebugSnapshot | null>(null);
-  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
+  const [sampleReady, setSampleReady] = useState(false);
   const [recording, setRecording] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<WasshoiInputController | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const sampleUrlRef = useRef<string | null>(null);
+  const [threshold, setThreshold] = useState(DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
 
-  const play = useCallback((event: WasshoiEvent): void => {
-    const audio = audioRef.current;
-    if (audio === null || sampleUrlRef.current === null) return;
-    audio.pause();
-    audio.currentTime = 0;
-    audio.volume = 0.15 + event.intensity * 0.85;
-    // 長い発話ほどゆっくり、短い発話ほど速くする。内容は一切反映しない。
-    audio.playbackRate = Math.min(1.6, Math.max(0.65, 700 / Math.max(250, event.durationMs)));
-    void audio.play().catch(() => setError('わっしょーいを再生できませんでした'));
-  }, []);
+  const play = useCallback(
+    (event: WasshoiEvent): void => {
+      if (!controllerRef.current?.playRecordedSample(event)) {
+        if (sampleReady) setError('わっしょーいを再生できませんでした');
+      }
+    },
+    [sampleReady],
+  );
 
   const onEvent = useCallback(
     (event: WasshoiEvent): void => {
@@ -53,14 +54,9 @@ export function WasshoiDebug(): React.JSX.Element {
     setRunning(false);
   }, []);
 
-  useEffect(() => {
-    sampleUrlRef.current = sampleUrl;
-  }, [sampleUrl]);
-
   useEffect(
     () => () => {
       stop();
-      if (sampleUrlRef.current !== null) URL.revokeObjectURL(sampleUrlRef.current);
     },
     [stop],
   );
@@ -81,13 +77,14 @@ export function WasshoiDebug(): React.JSX.Element {
       const controller = await attachWasshoiInput(onEvent, {
         onStatusChange: handleStatusChange,
         onDebug: setSnapshot,
+        config: { threshold },
       });
       controllerRef.current = controller;
       setRunning(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [handleStatusChange, onEvent]);
+  }, [handleStatusChange, onEvent, threshold]);
 
   const toggleRecording = useCallback(async (): Promise<void> => {
     const controller = controllerRef.current;
@@ -99,12 +96,8 @@ export function WasshoiDebug(): React.JSX.Element {
         setRecording(true);
         return;
       }
-      const sample = await controller.stopRecording();
-      const nextUrl = URL.createObjectURL(sample);
-      setSampleUrl((previous) => {
-        if (previous !== null) URL.revokeObjectURL(previous);
-        return nextUrl;
-      });
+      await controller.stopRecording();
+      setSampleReady(true);
       setRecording(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -131,7 +124,8 @@ export function WasshoiDebug(): React.JSX.Element {
           <Row label="RMS" value={(snapshot?.rms ?? 0).toFixed(3)} />
           <Row label="INTENSITY" value={(snapshot?.intensity ?? 0).toFixed(2)} />
           <Row label="DURATION" value={`${Math.round(snapshot?.durationMs ?? 0)} ms`} />
-          <Row label="SAMPLE" value={sampleUrl === null ? 'NOT READY' : 'READY'} />
+          <Row label="THRESHOLD" value={threshold.toFixed(3)} />
+          <Row label="SAMPLE" value={sampleReady ? 'READY' : 'NOT READY'} />
         </dl>
 
         <output className={styles.event} aria-label="最後のWasshoiEvent">
@@ -141,6 +135,20 @@ export function WasshoiDebug(): React.JSX.Element {
         </output>
 
         {error !== null && <p className={styles.error}>{error}</p>}
+
+        {!running && (
+          <label className={styles.threshold}>
+            発話判定の閾値
+            <input
+              type="range"
+              min="0.001"
+              max="0.05"
+              step="0.001"
+              value={threshold}
+              onChange={(event) => setThreshold(Number(event.target.value))}
+            />
+          </label>
+        )}
 
         {!running ? (
           <button type="button" className={styles.button} onClick={() => void start()}>
@@ -154,7 +162,7 @@ export function WasshoiDebug(): React.JSX.Element {
             <button
               type="button"
               className={styles.button}
-              disabled={sampleUrl === null}
+              disabled={!sampleReady}
               onClick={preview}
             >
               わっしょーいを試聴する
@@ -164,9 +172,6 @@ export function WasshoiDebug(): React.JSX.Element {
             </button>
           </>
         )}
-        {/* ユーザーがこの画面で録音した効果音であり、字幕トラックを持たない。 */}
-        {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio ref={audioRef} src={sampleUrl ?? undefined} />
       </section>
     </main>
   );

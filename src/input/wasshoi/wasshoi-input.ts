@@ -17,6 +17,8 @@ export interface WasshoiInputController {
   startRecording(): void;
   stopRecording(): Promise<Blob>;
   isRecording(): boolean;
+  /** 録音済みの本人Sampleを、許可済みのAudioContextから再生する。 */
+  playRecordedSample(event: WasshoiEvent): boolean;
   stop(): void;
 }
 
@@ -72,6 +74,7 @@ export async function attachWasshoiInput(
   let timerId: number | null = null;
   let recorder: MediaRecorder | null = null;
   let recordingResult: Promise<Blob> | null = null;
+  let recordedSample: AudioBuffer | null = null;
   let stopped = false;
   let lastEvent: WasshoiEvent | null = null;
 
@@ -167,9 +170,30 @@ export async function attachWasshoiInput(
         throw new Error('録音を開始していません');
       }
       recorder.stop();
-      return recordingResult;
+      const blob = await recordingResult;
+      // audio要素のplay()はタイマー起点だと自動再生制限に止められることがある。
+      // マイク許可時に開始済みのAudioContextへデコードしておけば、発話終了時にも
+      // 確実に「わっしょーい」を鳴らせる。
+      recordedSample = await context.decodeAudioData(await blob.arrayBuffer());
+      return blob;
     },
     isRecording: () => recorder?.state === 'recording',
+    playRecordedSample(event) {
+      if (stopped || recordedSample === null || context.state !== 'running') return false;
+      const sourceNode = context.createBufferSource();
+      const gainNode = context.createGain();
+      sourceNode.buffer = recordedSample;
+      gainNode.gain.value = 0.15 + event.intensity * 0.85;
+      // 長い発話ほどゆっくり、短い発話ほど速くする。内容は一切反映しない。
+      sourceNode.playbackRate.value = Math.min(
+        1.6,
+        Math.max(0.65, 700 / Math.max(250, event.durationMs)),
+      );
+      sourceNode.connect(gainNode);
+      gainNode.connect(context.destination);
+      sourceNode.start();
+      return true;
+    },
     stop: () => stop(),
   };
 }
