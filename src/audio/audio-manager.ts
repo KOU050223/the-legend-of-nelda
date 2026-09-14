@@ -49,6 +49,12 @@ export function soundForEvent(event: GameEvent): SoundId | null {
       if (event.to === 'BOSS_DOWN') return 'boss-down';
       return null;
 
+    // 大ダウン中の追撃も反撃成立と同じ手応えを鳴らす。State は BOSS_DOWN の
+    // ままなので COMBAT_STATE_CHANGED は流れないが、実際にHPが削れている以上
+    // 無音のままにはできない。
+    case 'BOSS_DOWN_FOLLOW_UP_HIT':
+      return 'counter-success';
+
     default:
       return null;
   }

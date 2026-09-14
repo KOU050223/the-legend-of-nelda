@@ -80,14 +80,16 @@ describe('syncVfxWithGameEvents', () => {
   });
 
   it('Visual Cue の向きが描画側へ届く', () => {
-    // 軌跡を左右どちらから描くかの判断材料。
+    // 軌跡を左右どちらから描くかの判断材料。枕の軌跡は発動 (ACTIVATION) の
+    // 演出なので (レビュー指摘)、ACTIVATION Cue で検証する。
     const { eventBus } = setup();
 
     eventBus.emit({
       type: 'ATTACK_VISUAL_CUE',
       attackId: 'PILLOW_SWEEP',
       cue: pillowSweepVisualCue('RIGHT'),
-      durationMs: 1_300,
+      durationMs: 400,
+      phase: 'ACTIVATION',
     });
 
     expect(useVfxStore.getState().active[0]?.cueId).toBe(pillowSweepVisualCue('RIGHT'));

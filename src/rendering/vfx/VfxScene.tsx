@@ -42,6 +42,8 @@ export function VfxScene({
   const shockwaveRef = useRef<Mesh>(null);
   const trailRef = useRef<Mesh>(null);
   const futonRef = useRef<Mesh>(null);
+  const pillowBraceRef = useRef<Mesh>(null);
+  const yawnWindupRef = useRef<Mesh>(null);
 
   useFrame(() => {
     const now = performance.now();
@@ -55,6 +57,8 @@ export function VfxScene({
     applyShockwave(shockwaveRef.current, findVfx(active, 'SHOCKWAVE'), now, scale);
     applySweepTrail(trailRef.current, findVfx(active, 'SWEEP_TRAIL'), now, scale);
     applyFutonBrace(futonRef.current, findVfx(active, 'FUTON_BRACE'), now, scale);
+    applyPillowBrace(pillowBraceRef.current, findVfx(active, 'PILLOW_BRACE'), now, scale);
+    applyYawnWindup(yawnWindupRef.current, findVfx(active, 'YAWN_WINDUP'), now, scale);
   });
 
   return (
@@ -82,6 +86,20 @@ export function VfxScene({
       <mesh ref={trailRef} position={[0, 1.4, 1.2]} visible={false}>
         <planeGeometry args={[5.2, 0.5]} />
         <meshBasicMaterial color="#ffd9a0" transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* 枕を構えて引いた向き。軌跡 (ATTACK) より前の TELEGRAPH で見せる、
+          回避方向の唯一の視覚情報 (仕様 §6.1、風切りSEは無方向)。 */}
+      <mesh ref={pillowBraceRef} position={[0, 1.4, 0.8]} visible={false}>
+        <boxGeometry args={[1.6, 0.4, 0.4]} />
+        <meshBasicMaterial color="#ffd9a0" transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* あくびの構え。口元を押さえ猫背になる (仕様 §8)。方向は持たない。
+          SHOCKWAVE (発動) と見分けられるよう、色は睡眠粒子に近い紫にする。 */}
+      <mesh ref={yawnWindupRef} position={[0, 1.0, 1.3]} visible={false}>
+        <sphereGeometry args={[0.35, 16, 16]} />
+        <meshBasicMaterial color="#c9a6ff" transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -135,7 +153,14 @@ function applyShockwave(
   setOpacity(mesh, (1 - progress) * vfx.strength * scale);
 }
 
-/** 横薙ぎの軌跡。Cue ID の向きに合わせて画面を横切らせる。 */
+/**
+ * 横薙ぎの軌跡。Cue ID の向きに合わせて画面を横切らせる。
+ *
+ * ATTACK 開始時に ACTIVATION Cue として届く (vfx-cue.ts)。尺は ATTACK の
+ * 長さそのもの (約0.3〜0.4秒、仕様 §7「発動」) なので、その全体を使って
+ * 軌跡を出す。構え (TELEGRAPH) 側の向きの手がかりは PILLOW_BRACE が別に
+ * 担うので、ここは実際の swing の見た目に専念できる。
+ */
 function applySweepTrail(
   mesh: Mesh | null,
   vfx: ReturnType<typeof findVfx>,
@@ -156,8 +181,10 @@ function applySweepTrail(
 
   mesh.visible = true;
   mesh.position.setX(travel * 3);
-  // 予兆の後半で濃くする。構えの間から出しっぱなしにしない。
-  setOpacity(mesh, Math.max(0, progress - 0.5) * 2 * vfx.strength * scale);
+  // 出始めと消え際だけ薄くして、振り切る動きの手前と後で唐突に
+  // 現れ消えしないようにする。
+  const fade = Math.min(1, progress * 4, (1 - progress) * 4);
+  setOpacity(mesh, fade * vfx.strength * scale);
 }
 
 /**
@@ -189,6 +216,63 @@ function applyFutonBrace(
   mesh.position.setX((fromRight ? 1 : -1) * (3.2 - progress * 1.2));
   // 予兆の進みに合わせて濃くする。召喚されてくる見え方にする。
   setOpacity(mesh, Math.min(1, progress * 1.6) * vfx.strength * scale);
+}
+
+/**
+ * 枕を引いた向き。左右どちらに構えたかを位置で示す。
+ *
+ * 仕様 §6.1 の「攻撃方向を視覚的に判断できる」に当たる。風切りSEは
+ * 無方向 (§22) なので、TELEGRAPH 中はここがプレイヤーの回避方向の
+ * 唯一の手がかりになる。軌跡 (SWEEP_TRAIL) は ATTACK 側で別に出す。
+ */
+function applyPillowBrace(
+  mesh: Mesh | null,
+  vfx: ReturnType<typeof findVfx>,
+  now: number,
+  scale: number,
+): void {
+  if (!mesh) return;
+
+  if (!vfx || scale <= 0) {
+    mesh.visible = false;
+    return;
+  }
+
+  const progress = vfxProgress(vfx, now);
+  const fromRight = vfx.cueId?.endsWith('-right') ?? false;
+
+  mesh.visible = true;
+  // 構えて引く動きなので、中央から引いた側へ離れていくように動かす。
+  mesh.position.setX((fromRight ? 1 : -1) * (0.6 + progress * 1.2));
+  setOpacity(mesh, Math.min(1, progress * 1.6) * vfx.strength * scale);
+}
+
+/**
+ * あくびの構え。口元を押さえ猫背になる (仕様 §8)。
+ *
+ * 方向を持たない (ガードは無音区間から測るため、視覚に向きの情報は乗らない)。
+ * 何も出さないと予兆区間が絵として無音に見えるので、構えの気配だけを示す。
+ */
+function applyYawnWindup(
+  mesh: Mesh | null,
+  vfx: ReturnType<typeof findVfx>,
+  now: number,
+  scale: number,
+): void {
+  if (!mesh) return;
+
+  if (!vfx || scale <= 0) {
+    mesh.visible = false;
+    return;
+  }
+
+  const progress = vfxProgress(vfx, now);
+
+  mesh.visible = true;
+  // 息を吸って膨らむ気配をスケールで示す。
+  const size = 0.6 + progress * 0.5;
+  mesh.scale.set(size, size, size);
+  setOpacity(mesh, Math.min(1, progress * 1.2) * vfx.strength * scale);
 }
 
 function setOpacity(mesh: Mesh, opacity: number): void {

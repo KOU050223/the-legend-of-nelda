@@ -16,6 +16,10 @@ export type VfxKind =
   | 'DIM'
   /** ふかふか布団を構えた向き。左右どちらから来るかを見せる。 */
   | 'FUTON_BRACE'
+  /** 枕を構えて引いた向き。左右どちらから来るかを見せる (仕様 §6.1)。 */
+  | 'PILLOW_BRACE'
+  /** あくびの構え。口元を押さえ猫背になる (仕様 §8)。方向は持たない。 */
+  | 'YAWN_WINDUP'
   /** カメラシェイク。被弾と枕の着弾で強さを変える。 */
   | 'SHAKE'
   /** ガード成功のフラッシュ。 */
@@ -35,22 +39,49 @@ export interface VfxCue {
 }
 
 /**
- * Visual Cue ID から予兆の演出を引く。
+ * Visual Cue ID から予兆 (TELEGRAPH) の演出を引く。
  *
  * Cue ID は技側が向きを埋め込む (`pillow-sweep-telegraph-left` など) ため
  * 前方一致で畳む。
  * 向きそのものは軌跡を左右どちらから描くかに使うので、呼び出し側が
  * Cue ID の文字列を別途見る。
+ *
+ * 枕の軌跡・あくびの衝撃波そのものは仕様上「発動」区分の演出なので、
+ * ここでは返さない (TELEGRAPH の尺で終わる Cue のまま返すと、ATTACK が
+ * 始まる前に演出が消えてしまう。docs/single-player-poc-spec.md §7 / §9、
+ * レビュー指摘)。ただし枕は構え自体が回避方向の唯一の視覚情報
+ * (§6.1「攻撃方向を視覚的に判断できる」、風切りSEは無方向) なので、
+ * 軌跡とは別に構えの向きを返す。あくびは構えに方向を持たない
+ * (§8: ガードは無音区間から測るので、構えは方向を示す必要がない) が、
+ * 構え自体が何も出ないと予兆が無音に見えるため最小限の絵を出す。
+ * ATTACK 開始時に届く ACTIVATION Cue は activationVfxFor が担当する。
  */
 export function telegraphVfxFor(cue: string, durationMs: number): VfxCue | null {
+  if (cue.startsWith('futon-summon-')) {
+    return { kind: 'DIM', durationMs, strength: 0.7 };
+  }
+  if (cue.startsWith('pillow-sweep-')) {
+    return { kind: 'PILLOW_BRACE', durationMs, strength: 1 };
+  }
+  if (cue.startsWith('yawn-inhale')) {
+    return { kind: 'YAWN_WINDUP', durationMs, strength: 0.6 };
+  }
+  return null;
+}
+
+/**
+ * Visual Cue ID から発動 (ATTACK) の演出を引く。
+ *
+ * telegraphVfxFor と違い、こちらは実際に攻撃判定が生じる瞬間の絵
+ * (枕の軌跡・あくびの衝撃波) を返す。ATTACK State 開始時に同じ Cue ID が
+ * `phase: 'ACTIVATION'` で再送されたときだけ呼ぶ。
+ */
+export function activationVfxFor(cue: string, durationMs: number): VfxCue | null {
   if (cue.startsWith('pillow-sweep-')) {
     return { kind: 'SWEEP_TRAIL', durationMs, strength: 0.6 };
   }
   if (cue.startsWith('yawn-inhale')) {
     return { kind: 'SHOCKWAVE', durationMs, strength: 0.8 };
-  }
-  if (cue.startsWith('futon-summon-')) {
-    return { kind: 'DIM', durationMs, strength: 0.7 };
   }
   return null;
 }
@@ -68,6 +99,14 @@ export function vfxForEvent(event: GameEvent): VfxCue[] {
       // 予兆の尺が来ない場合はイベント側の既定に任せる。TELEGRAPH の長さを
       // ここで二重に持つとバランス調整とずれる (game-event.ts のコメント)。
       const durationMs = event.durationMs ?? 0;
+
+      // ATTACK 開始時の再送 (レビュー指摘: 発動区分の演出を予兆の尺で終わる
+      // Cue に乗せると ATTACK が始まる前に消える)。
+      if (event.phase === 'ACTIVATION') {
+        const activation = activationVfxFor(event.cue, durationMs);
+        return activation ? [activation] : [];
+      }
+
       const cue = telegraphVfxFor(event.cue, durationMs);
       if (!cue) return [];
 
@@ -117,6 +156,14 @@ export function vfxForEvent(event: GameEvent): VfxCue[] {
         return [{ kind: 'SHAKE', durationMs: 500, strength: 0.8 }];
       }
       return [];
+
+    // 大ダウン中の追撃。State が進まないぶん COMBAT_STATE_CHANGED は来ないが、
+    // 実際にHPが削れているので DAMAGE と同じ手応えの演出を出す。
+    case 'BOSS_DOWN_FOLLOW_UP_HIT':
+      return [
+        { kind: 'HIT_STOP', durationMs: 180, strength: 1 },
+        { kind: 'SHAKE', durationMs: 260, strength: 0.6 },
+      ];
 
     default:
       return [];

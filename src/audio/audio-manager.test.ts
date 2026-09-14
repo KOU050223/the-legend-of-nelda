@@ -113,6 +113,12 @@ describe('soundForEvent', () => {
     );
   });
 
+  it('大ダウン中の追撃も反撃成立と同じ手応えで鳴る', () => {
+    // State は BOSS_DOWN のまま進まないため COMBAT_STATE_CHANGED は来ないが、
+    // HPは実際に削れているので無音のままにはできない。
+    expect(soundForEvent({ type: 'BOSS_DOWN_FOLLOW_UP_HIT' })).toBe('counter-success');
+  });
+
   it('Visual Cue では音を鳴らさない', () => {
     // 視覚と聴覚は別レイヤー。片方の購読者へもう片方の情報を渡さない。
     expect(

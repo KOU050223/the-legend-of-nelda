@@ -120,15 +120,46 @@ const SOUNDS = {
     });
   },
 
-  // 布団: 専用ジングル。上行する3音で「奥義が来る」ことを知らせる (§22)。
+  // 布団: 専用ジングル → 低い寝息 → 着弾直前の「ポフッ」(§10 / §22)。
+  //
+  // 長さは ふかふか布団の TELEGRAPH (src/game/attacks/fluffy-futon.ts の
+  // TELEGRAPH_MS) に合わせる。Cue は予兆の頭で鳴らしっぱなしにするので、
+  // 素材が短いと後半 (寝息・ポフッ) がまるごと無音になり、着弾のタイミングを
+  // 音で知る手段が消える。TELEGRAPH_MS を変えたらここも変える。
   'futon-jingle': () => {
+    // Math.floor によるサンプル数の丸めで TELEGRAPH_MS をわずかに割り込まない
+    // よう、境界の1サンプルぶん余裕を持たせる。
+    const seconds = 2.3 + 1 / SAMPLE_RATE;
+    const jingleEnd = 1.2 / seconds;
+    const puffStart = (seconds - 0.25) / seconds;
+
     const steps = [523.25, 659.25, 783.99];
-    return synth(1.2, (time, progress) => {
-      const step = Math.min(steps.length - 1, Math.floor(progress * steps.length));
-      const local = progress * steps.length - step;
-      const tone = Math.sin(2 * Math.PI * steps[step] * time);
-      const soft = Math.sin(2 * Math.PI * steps[step] * 2 * time) * 0.2;
-      return (tone + soft) * envelope(local, { attack: 0.05, release: 0.4 }) * 0.4;
+    const noise = createNoise(7);
+    let filtered = 0;
+
+    return synth(seconds, (time, progress) => {
+      // ジングル: 上行する3音で「奥義が来る」ことを知らせる。
+      if (progress < jingleEnd) {
+        const local = progress / jingleEnd;
+        const step = Math.min(steps.length - 1, Math.floor(local * steps.length));
+        const stepLocal = local * steps.length - step;
+        const tone = Math.sin(2 * Math.PI * steps[step] * time);
+        const soft = Math.sin(2 * Math.PI * steps[step] * 2 * time) * 0.2;
+        return (tone + soft) * envelope(stepLocal, { attack: 0.05, release: 0.4 }) * 0.4;
+      }
+
+      // 着弾直前の「ポフッ」。低い破裂音で着弾のタイミングを知らせる。
+      if (progress >= puffStart) {
+        const local = (progress - puffStart) / (1 - puffStart);
+        const body = Math.sin(2 * Math.PI * (140 - local * 60) * time);
+        return (body * 0.7 + noise() * 0.3) * Math.exp(-local * 7) * 0.6;
+      }
+
+      // 低い寝息。ジングルとポフッの間を無音にしない。
+      const local = (progress - jingleEnd) / (puffStart - jingleEnd);
+      filtered = lowpass(filtered, noise(), 0.03);
+      const breath = Math.sin(2 * Math.PI * 90 * time) * 0.15;
+      return (filtered * 0.5 + breath) * envelope(local, { attack: 0.1, release: 0.1 }) * 0.35;
     });
   },
 

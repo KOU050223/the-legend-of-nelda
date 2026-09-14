@@ -51,6 +51,37 @@ describe('createHtmlAudioOutput', () => {
   it('操作前に拒否されたCueを最初の操作で鳴らし直す', async () => {
     // 戦闘は操作を待たずに進むので、最初の予兆SEは自動再生として拒否されうる。
     // 拒否は握り潰す仕様のため、取り返さないと最初の技だけ無音になる。
+    //
+    // REPLAY_GRACE_MS の猶予は短い (あくびの0.15秒無音より狭く取る必要がある)
+    // ので、実タイマーで vi.waitFor のポーリング間隔 (既定50ms) 分の遅延が
+    // 挟まると猶予を食い潰しかねない。フェイクタイマーで経過0のまま検証する。
+    vi.useFakeTimers();
+
+    const play = stubPlay('reject');
+    const output = createHtmlAudioOutput();
+    dispose = () => output.dispose();
+
+    output.play('yawn-inhale', 1);
+    // play() の拒否は Promise 経由なので、マイクロタスクを1周させて拾う。
+    await vi.advanceTimersByTimeAsync(0);
+    expect(playCount(play)).toBe(1);
+
+    // 拒否された直後に最初の操作が来る。
+    const retried = stubPlay('resolve');
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
+
+    // 操作だけでは何も要求していないので、鳴ったなら取り返した1件。
+    expect(playCount(retried)).toBe(1);
+
+    vi.useRealTimers();
+  });
+
+  it('拒否から時間が経った操作では鳴らし直さない', async () => {
+    // 猶予を過ぎた取り返しは、Cue を本来のタイミングと無関係な時刻で
+    // 鳴らすことになる (あくびの発射直前無音がずれる、布団のポフッが
+    // 着弾とかけ離れる)。誤った手がかりを出すくらいなら諦めて捨てる。
+    vi.useFakeTimers();
+
     const play = stubPlay('reject');
     const output = createHtmlAudioOutput();
     dispose = () => output.dispose();
@@ -58,12 +89,16 @@ describe('createHtmlAudioOutput', () => {
     output.play('yawn-inhale', 1);
     await vi.waitFor(() => expect(playCount(play)).toBe(1));
 
-    // 拒否されたあとに最初の操作が来る。
+    vi.advanceTimersByTime(500);
+
     const retried = stubPlay('resolve');
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
 
-    // 操作だけでは何も要求していないので、鳴ったなら取り返した1件。
-    await vi.waitFor(() => expect(playCount(retried)).toBe(1));
+    // 鳴らし直していないことを、時間を置いても確認する。
+    vi.advanceTimersByTime(100);
+    expect(playCount(retried)).toBe(0);
+
+    vi.useRealTimers();
   });
 
   it('拒否されなかったCueは操作時に鳴り直さない', async () => {

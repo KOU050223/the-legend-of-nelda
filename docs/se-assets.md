@@ -31,7 +31,7 @@ cp path/to/本素材.wav public/audio/se/pillow-sweep-wind.wav
 | ------------------------ | ------------------ | ------------------------- |
 | `pillow-sweep-wind.wav`  | 枕薙ぎ払いの予兆   | 風切り音 / 直前に音程上昇 |
 | `yawn-inhale.wav`        | あくび衝撃波の予兆 | 吸気音 / 直前に無音       |
-| `futon-jingle.wav`       | ふかふか布団の予兆 | 専用ジングル              |
+| `futon-jingle.wav`       | ふかふか布団の予兆 | 専用ジングル → 低い寝息 → 着弾直前の「ポフッ」(TELEGRAPH全体を通しで再生) |
 | `hit-impact.wav`         | 被弾               | ヒットSE                  |
 | `dodge-success.wav`      | 回避成功           | 短い成功SE                |
 | `guard-success.wav`      | ガード成功         | 衝突SE                    |

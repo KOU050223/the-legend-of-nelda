@@ -74,8 +74,27 @@ export function createHtmlAudioOutput(): AudioOutput {
    */
   let unlocked = false;
 
-  /** 解除待ちの再生要求。最新の1つだけを持つ。 */
-  let pending: { soundId: SoundId; volume: number } | null = null;
+  /**
+   * 解除待ちの再生要求。最新の1つだけを持つ。
+   *
+   * `requestedAt` は拒否された瞬間の時刻。解除がその直後に来る (ボタン連打の
+   * ようなケース) 前提の取り返しなので、間が空いた要求まで鳴らし直すと
+   * タイミングが狂う (あくびの発射直前0.15秒無音が、無関係な遅い時刻に
+   * ずれて鳴り直る、布団のポフッが着弾とかけ離れた位置で鳴るなど)。
+   */
+  let pending: { soundId: SoundId; volume: number; requestedAt: number } | null = null;
+
+  /**
+   * 取り返しの対象にする猶予 (ms)。
+   *
+   * 自動再生の拒否は Promise 解決までにブラウザの遅延が挟まるが、それ自体は
+   * 数十ms程度。あくびの「発射直前の約0.15秒だけ無音」(§8) のように、
+   * 素材の後半をタイミングの手がかりに使う Cue があるため、猶予は
+   * その0.15秒よりはっきり短く抑える。ここより長いと、無音の境界が
+   * 過ぎたあとの操作でも鳴らし直してしまい、Cue が本来の再生タイミングから
+   * 外れて聞こえる方が実害が大きいので、鳴らし直さず諦める側に倒す。
+   */
+  const REPLAY_GRACE_MS = 50;
 
   function unlock(): void {
     if (unlocked) return;
@@ -83,7 +102,15 @@ export function createHtmlAudioOutput(): AudioOutput {
 
     const queued = pending;
     pending = null;
-    if (queued) start(queued.soundId, queued.volume);
+    if (!queued) return;
+
+    // 猶予を過ぎた要求は、鳴らし直すと Cue のタイミングを誤って伝える
+    // (システムリマインダー通りの理由: 例えばあくびの吸気は「発射直前の
+    // 0.15秒だけ無音」が仕様なので、経過後に頭から鳴らすとその無音が
+    // 着弾と無関係な位置へ移動し、誤った手がかりになる)。諦めて捨てる。
+    if (Date.now() - queued.requestedAt > REPLAY_GRACE_MS) return;
+
+    start(queued.soundId, queued.volume);
   }
 
   // 最初の操作で解除する。キーボードが主操作だが、どの経路でも拾えるよう
@@ -114,7 +141,7 @@ export function createHtmlAudioOutput(): AudioOutput {
           playing.delete(instance);
           // 操作前で拒否された可能性がある。最新の要求だけ残し、最初の操作で
           // 鳴らし直す。古い Cue をあとからまとめて鳴らさないよう1つに絞る。
-          if (!unlocked) pending = { soundId, volume };
+          if (!unlocked) pending = { soundId, volume, requestedAt: Date.now() };
         });
       }
     } catch {
