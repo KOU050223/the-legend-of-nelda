@@ -308,9 +308,12 @@ describe('attachMicrophoneNoteInput', () => {
     stop();
   });
 
-  it('解析が失敗し続けたら解析を止めてエラーとして扱う', async () => {
+  // 畳むと言いながらマイクを掴んだままにしない。呼び出し側が error を
+  // 終端とみなして stop() を捨てても、インジケータが点いたままにならないこと。
+  it('解析が失敗し続けたらマイクごと解放してエラーとして扱う', async () => {
     const timer = createManualTimer();
     const session = createFakeSession();
+    const track = createFakeTrack();
     const statuses: MicrophoneInputStatus[] = [];
 
     const stop = await attachMicrophoneNoteInput(() => undefined, {
@@ -320,7 +323,7 @@ describe('attachMicrophoneNoteInput', () => {
           throw new Error('detect failed');
         },
       },
-      getUserMedia: () => Promise.resolve(createFakeStream(createFakeTrack())),
+      getUserMedia: () => Promise.resolve(createFakeStream(track)),
       createSession: session.create,
       onStatusChange: (status) => statuses.push(status),
       setInterval: timer.setInterval,
@@ -331,6 +334,39 @@ describe('attachMicrophoneNoteInput', () => {
 
     expect(statuses.at(-1)).toBe('error');
     expect(timer.running).toBe(false);
+    expect(track.stopped).toBe(true);
+    expect(session.disposed).toBe(true);
+
+    // 自動停止のあとに stop() を呼んでも二重に後始末しない。
+    stop();
+    expect(statuses.at(-1)).toBe('error');
+  });
+
+  it('自動停止のときも鳴っている音を終わらせる', async () => {
+    const timer = createManualTimer();
+    const session = createFakeSession();
+    const events: NoteEvent[] = [];
+    let shouldFail = false;
+
+    const stop = await attachMicrophoneNoteInput((event) => events.push(event), {
+      clock: createFakeClock(),
+      detector: {
+        detect: (_samples, _rate, timestampMs) => {
+          if (shouldFail) throw new Error('detect failed');
+          return { ...voicedFrame(C5), timestampMs };
+        },
+      },
+      getUserMedia: () => Promise.resolve(createFakeStream(createFakeTrack())),
+      createSession: session.create,
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    timer.tick(3);
+    shouldFail = true;
+    timer.tick(10);
+
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-off']);
     stop();
   });
 

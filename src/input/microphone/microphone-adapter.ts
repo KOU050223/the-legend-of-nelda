@@ -296,6 +296,9 @@ export async function attachMicrophoneNoteInput(
   const MAX_CONSECUTIVE_FAILURES = 10;
   let consecutiveFailures = 0;
 
+  /** 解析が回復しないときの自動停止。teardown の定義後に入る。 */
+  let giveUp: (() => void) | null = null;
+
   const analyze = (): void => {
     // 解析やリスナーが投げても 33ms ごとに例外を出し続けない。
     try {
@@ -314,11 +317,10 @@ export async function attachMicrophoneNoteInput(
         console.error('マイク入力の解析に失敗', error);
       }
 
-      // 毎フレーム失敗し続けるなら回復しない。ログと CPU を浪費せず畳む。
+      // 毎フレーム失敗し続けるなら回復しない。マイクを掴んだままにせず畳む。
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         console.error('マイク入力の解析が続けて失敗したため停止する');
-        onStatusChange?.('error');
-        stopTimer(timerId);
+        giveUp?.();
       }
     }
   };
@@ -338,16 +340,18 @@ export async function attachMicrophoneNoteInput(
     if (event !== null) onNote(event);
   };
 
-  const timerId = startTimer(analyze, ANALYSIS_INTERVAL_MS);
-  onStatusChange?.('active');
-
+  let timerId: number | null = null;
   let stopped = false;
-  return () => {
-    // 二重呼び出しでも Track を止め直したり close を二度呼んだりしない。
+
+  /**
+   * 解析停止・ノード切断・マイク解放・note-off までを一度だけ行う。
+   * 呼び出し側の stop() と、解析が回復しないときの自動停止で共有する。
+   */
+  const teardown = (finalStatus: MicrophoneInputStatus): void => {
     if (stopped) return;
     stopped = true;
 
-    stopTimer(timerId);
+    if (timerId !== null) stopTimer(timerId);
 
     // 鳴ったままの音を note-on の出しっぱなしで終わらせない。購読側が
     // 「今鳴っている音」を持つ場合、対の note-off が無いと停止後も残る。
@@ -363,8 +367,20 @@ export async function attachMicrophoneNoteInput(
 
     stopStream();
     stabilizer.reset();
-    onStatusChange?.('idle');
+    onStatusChange?.(finalStatus);
 
     if (sounding !== null) onNote({ type: 'note-off', note: sounding });
+  };
+
+  giveUp = () => {
+    teardown('error');
+  };
+
+  timerId = startTimer(analyze, ANALYSIS_INTERVAL_MS);
+  onStatusChange?.('active');
+
+  // 二重呼び出しでも Track を止め直したり close を二度呼んだりしない。
+  return () => {
+    teardown('idle');
   };
 }

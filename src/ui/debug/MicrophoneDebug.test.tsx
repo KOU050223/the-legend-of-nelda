@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { hzToNote } from '@/input/microphone/note-classifier';
-import type { NoteEventListener } from '@/input/microphone/types';
+import type { MicrophoneInputStatus, NoteEventListener } from '@/input/microphone/types';
 
 import { MicrophoneDebug } from './MicrophoneDebug';
 
@@ -34,9 +34,9 @@ function captureListener(): () => NoteEventListener {
   };
 }
 
-/** 画面上で label に対応する値を読む。 */
+/** 画面上で label に対応する値を読む。見出しと同名の項目があるため dt に絞る。 */
 function valueOf(label: string): string {
-  const term = screen.getByText(label);
+  const term = screen.getByText(label, { selector: 'dt' });
   const value = term.nextElementSibling?.textContent;
   if (value === undefined || value === null) throw new Error(`${label} の値が無い`);
   return value;
@@ -188,6 +188,26 @@ describe('MicrophoneDebug', () => {
     expect(valueOf('Note')).toBe('E5');
     expect(valueOf('Solfège')).toBe('ミ');
     expect(valueOf('Command')).toBe('MI');
+  });
+
+  // Adapter が自分で畳んだとき、ボタンが「停止する」のまま残らないこと。
+  it('解析が止まったら起動前の表示へ戻す', async () => {
+    let notifyStatus: ((status: MicrophoneInputStatus) => void) | undefined;
+    attachMock.mockImplementation((_onNote, options) => {
+      notifyStatus = options?.onStatusChange;
+      return Promise.resolve(detach);
+    });
+
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+    await screen.findByRole('button', { name: 'マイク入力を停止する' });
+
+    await act(async () => {
+      notifyStatus?.('error');
+    });
+
+    expect(screen.getByRole('button', { name: 'マイク入力を有効にする' })).toBeInTheDocument();
+    expect(valueOf('Microphone')).toBe('ERROR');
   });
 
   it('画面を離れたらマイクを解放する', async () => {

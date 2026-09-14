@@ -74,6 +74,22 @@ export function MicrophoneDebug(): React.JSX.Element {
     setStableNote(event.type === 'note-off' ? null : event.note);
   }, []);
 
+  /**
+   * Adapter は解析が回復しないとき自分で畳む。その場合ボタンは
+   * 「停止する」のままにせず、起動していない表示へ戻す。
+   */
+  const handleStatusChange = useCallback((next: MicrophoneInputStatus): void => {
+    if (disposedRef.current) return;
+    setStatus(next);
+
+    if (next === 'error' || next === 'idle') {
+      stopRef.current = null;
+      startingRef.current = false;
+      setRunning(false);
+      setStableNote(null);
+    }
+  }, []);
+
   const start = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
@@ -84,7 +100,7 @@ export function MicrophoneDebug(): React.JSX.Element {
       // 閾値は CONFIG を渡し、下の表示と実際に使う値がずれないようにする。
       const detach = await attachMicrophoneNoteInput(handleNote, {
         config: CONFIG,
-        onStatusChange: setStatus,
+        onStatusChange: handleStatusChange,
         onDebug: setSnapshot,
       });
 
@@ -98,12 +114,13 @@ export function MicrophoneDebug(): React.JSX.Element {
       startingRef.current = false;
       setRunning(true);
     } catch (error) {
+      // 画面を離れた / 先に停止された場合、遅れて届いた失敗は表示しない。
+      const abandoned = disposedRef.current || !startingRef.current;
       startingRef.current = false;
-      // 画面を離れたあとに失敗が返ってくることがある。表示する相手はもういない。
-      if (disposedRef.current) return;
+      if (abandoned) return;
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [handleNote]);
+  }, [handleNote, handleStatusChange]);
 
   const frame = snapshot?.frame ?? null;
   const rawNote = frame === null ? null : frameToNote(frame);
