@@ -79,6 +79,26 @@ describe('ボスの攻撃がプレイヤーHPを削る', () => {
 
     expect(playerById(battle, 'pay').snapshot().hp).toBe(CHARACTER_STATS.PAY.maxHp);
   });
+
+  it('一度回避した後も、無敵が切れていれば次の攻撃で削られる', () => {
+    const { battle, clock } = setup({ attack: 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+
+    // 序盤に1回回避しておく。無敵はすぐ切れる。
+    battle.submit('pay', { type: 'DODGE' });
+    clock.advance(CHARACTER_STATS.PAY.dodgeInvulnerableMs + 100);
+    battle.update(0.016);
+
+    // 回避で動いた分を戻し、改めて危険範囲の中に立たせる。
+    const pay = playerById(battle, 'pay');
+    pay.restore({ ...pay.snapshot(), position: { x: 10, z: 0 } });
+
+    battle.update(0.016);
+    clock.advance(spec.telegraphMs + 1);
+    battle.update(0.016);
+
+    expect(pay.snapshot().hp).toBeLessThan(CHARACTER_STATS.PAY.maxHp);
+  });
 });
 
 describe('プレイヤーの攻撃がボスHPを削る', () => {

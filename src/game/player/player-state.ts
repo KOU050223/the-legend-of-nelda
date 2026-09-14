@@ -186,7 +186,9 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       // INTERACT / REVIVE / CHARACTER_ACTION は、装置や仲間といった
-      // 相手がある行動なので、相手を知っている呼び出し側が解決する。
+      // 相手がある行動なので、相手を知っている呼び出し側が解決する
+      // (src/game/session/boss-battle.ts)。ここで握り潰しているのではなく、
+      // プレイヤー1人では決められないという理由で持たない。
     },
 
     update(deltaSeconds) {

@@ -77,7 +77,7 @@ export interface BossBattle {
  * `aimAttack` は見ないので、ブルーライト照射が動けない相手を追い続ける。
  * 技が1サイクル丸ごと無駄になり、外から見ると壊れているように見える。
  */
-function activeTargets(players: readonly Player[]): BossTarget[] {
+function activeTargets(players: readonly Player[], now: number): BossTarget[] {
   const targets: BossTarget[] = [];
   for (const player of players) {
     const snapshot = player.snapshot();
@@ -86,7 +86,11 @@ function activeTargets(players: readonly Player[]): BossTarget[] {
       id: snapshot.id,
       position: snapshot.position,
       // 回避の無敵中は判定を素通りする (§4.2)。
-      invulnerable: snapshot.invulnerableUntil !== null,
+      //
+      // `invulnerableUntil` は「無敵が明ける時刻」で、明けても null へは
+      // 戻らない。null かどうかだけで見ると、一度回避したプレイヤーが
+      // 以降ずっと無敵になる。
+      invulnerable: snapshot.invulnerableUntil !== null && now < snapshot.invulnerableUntil,
     });
   }
   return targets;
@@ -155,13 +159,20 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         return;
       }
 
-      // INTERACT / CHARACTER_ACTION は装置・ギミック側 (別Issue) が受け取る。
+      // INTERACT と CHARACTER_ACTION はここまで来るが、まだ誰も消費しない。
+      //
+      // INTERACT の相手になる装置・祭壇は #54（アンカー座標）と
+      // ショートスリーパー結界のIssueが持ち、CHARACTER_ACTION の中身は
+      // #45 とオラ大輔の専用アクション設計が未確定
+      // (docs/phase2-gameplay-spec.md §18 の P0 保留事項)。
+      // どちらもその実装がこの層へ繋がる。キーは割り当ててあるので、
+      // 受け手ができた時点でここへ分岐を足せばそのまま動く。
       player.submit(action);
     },
 
     update(deltaSeconds) {
       for (const player of players) player.update(deltaSeconds);
-      boss.update(activeTargets(players));
+      boss.update(activeTargets(players, clock.now()));
     },
 
     outcome() {
