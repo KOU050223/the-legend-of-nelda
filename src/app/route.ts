@@ -10,13 +10,12 @@ const routePaths: Record<AppRoute, string> = {
 };
 
 export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>): AppRoute {
+  if (new URLSearchParams(location.search).get('debug') === 'ora') {
+    return 'ORA_DEBUG';
+  }
+
   if (import.meta.env.DEV) {
-    if (
-      location.pathname === '/debug/ora' ||
-      new URLSearchParams(location.search).get('debug') === 'ora'
-    ) {
-      return 'ORA_DEBUG';
-    }
+    if (location.pathname === '/debug/ora') return 'ORA_DEBUG';
     if (
       location.pathname === '/world' ||
       new URLSearchParams(location.search).get('scene') === 'world'
