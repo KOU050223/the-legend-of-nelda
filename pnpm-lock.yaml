@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ar-js-org/aruco-rs':
+        specifier: 0.1.0
+        version: 0.1.0
       '@react-three/drei':
         specifier: 10.7.8
         version: 10.7.8(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.186.0))(@types/react@19.2.18)(@types/three@0.186.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.186.0)
@@ -80,6 +83,9 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@ar-js-org/aruco-rs@0.1.0':
+    resolution: {integrity: sha512-Xp5U2ig+F6J4bQD6TDHnQLs0blkBEyrmfWUYwJ8dtZwxJMmDHSa7jYuwYO+RLNe9CBqx74uBqmI94yunWxb82w==}
 
   '@asamuzakjp/css-color@6.0.7':
     resolution: {integrity: sha512-vC/bk1Lz7Tn/EfU9/apOTBk80/8dyGyWMowPoV1tJ52muDGsDqt2HPT2klrFUiY60MQmQv9q8yIht15JnBgDGw==}
@@ -2018,6 +2024,8 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@ar-js-org/aruco-rs@0.1.0': {}
 
   '@asamuzakjp/css-color@6.0.7':
     dependencies:
