@@ -1,5 +1,6 @@
 import type { PlayerAction } from '@/game/types';
 
+import { isFromInteractiveElement } from './interactive-element';
 import { DEFAULT_KEY_BINDINGS } from './key-bindings';
 
 export type PlayerActionListener = (action: PlayerAction) => void;
@@ -31,6 +32,10 @@ export function attachKeyboardInput(
 
   const handleKeyDown = (event: KeyboardEvent): void => {
     if (event.repeat) return;
+
+    // 設定UIなどを操作している間はゲーム入力にしない。preventDefault() まで
+    // 進むとスライダーもチェックボックスも動かせなくなる。
+    if (isFromInteractiveElement(event)) return;
 
     const action = bindings[event.code];
     if (action === undefined) return;

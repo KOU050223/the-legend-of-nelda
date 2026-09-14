@@ -35,6 +35,8 @@ describe('Hud', () => {
       sleepinessMax: MAX_SLEEPINESS,
       lastAction: null,
       lastAttackId: null,
+      sequencePhase: 'TUTORIAL',
+      assistVisible: false,
       eventFeedback: null,
     });
   });
@@ -209,5 +211,48 @@ describe('Hud', () => {
     expect(screen.queryByText('SLEEP DEMON')).not.toBeInTheDocument();
     expect(screen.queryByText('HORI SLEEPINESS')).not.toBeInTheDocument();
     expect(screen.queryByText('READY')).not.toBeInTheDocument();
+  });
+
+  it('チュートリアルの手では技に応じた操作補助を出す', () => {
+    // SEQ-003。
+    useGameStore.setState({ assistVisible: true, lastAttackId: 'YAWN_WAVE' });
+
+    render(<Hud />);
+
+    expect(screen.getByText('GUARD')).toBeInTheDocument();
+  });
+
+  it('本戦の手では操作補助を出さない', () => {
+    // SEQ-004。答えそのものを本戦で表示しない。
+    useGameStore.setState({ assistVisible: false, lastAttackId: 'YAWN_WAVE' });
+
+    render(<Hud />);
+
+    expect(screen.queryByText('GUARD')).not.toBeInTheDocument();
+  });
+
+  it('補助表示は枕では回避、布団では回避と攻撃の2段階を示す', () => {
+    useGameStore.setState({ assistVisible: true, lastAttackId: 'PILLOW_SWEEP' });
+
+    const { rerender } = render(<Hud />);
+
+    expect(screen.getByText('\u2190 / \u2192 DODGE')).toBeInTheDocument();
+
+    act(() => {
+      useGameStore.setState({ lastAttackId: 'FLUFFY_FUTON' });
+    });
+    rerender(<Hud />);
+
+    expect(screen.getByText('\u2190 / \u2192 DODGE \u2192 ATTACK')).toBeInTheDocument();
+  });
+
+  it('TUTORIAL_UIレイヤーを切ると補助表示だけを消せる', () => {
+    // docs/single-player-poc-spec.md §20 の情報レイヤー個別 ON/OFF。
+    useGameStore.setState({ assistVisible: true, lastAttackId: 'YAWN_WAVE', sleepiness: 42 });
+
+    render(<Hud layers={{ TUTORIAL_UI: false } satisfies Partial<Record<HudLayer, boolean>>} />);
+
+    expect(screen.queryByText('GUARD')).not.toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
   });
 });

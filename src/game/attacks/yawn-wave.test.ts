@@ -242,13 +242,28 @@ describe('あくび衝撃波', () => {
   });
 
   // CUE-006
-  it('1サイクル中にVisual / Audio Cueを1回ずつしか発行しない', () => {
+  it('1サイクル中にAudio Cueを1回しか発行しない', () => {
     const { advanceTo, events } = setup();
 
     advanceTo(HIT_AT + 10_000);
 
-    expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'ATTACK_AUDIO_CUE')).toHaveLength(1);
+  });
+
+  // 衝撃波・ブラーは仕様上「発動」区分の演出で、TELEGRAPH の尺で終わる
+  // Cue のままでは ATTACK が始まる前に消えてしまう (vfx-cue.ts のレビュー指摘)。
+  // ATTACK 開始時に同じ Cue を ACTIVATION として再送する。
+  it('Visual Cueは予兆で1回、ATTACK開始でACTIVATIONとしてもう1回発行する', () => {
+    const { advanceTo, events } = setup();
+
+    advanceTo(HIT_AT + 10_000);
+
+    const visualCues = events.filter((event) => event.type === 'ATTACK_VISUAL_CUE');
+
+    expect(visualCues).toMatchObject([
+      { attackId: 'YAWN_WAVE', cue: yawnWave.visualCue },
+      { attackId: 'YAWN_WAVE', cue: yawnWave.visualCue, phase: 'ACTIVATION' },
+    ]);
   });
 
   // Cue は文字列IDだけを持ち、予兆の尺を添える。無音の分節は Audio 側の責務。

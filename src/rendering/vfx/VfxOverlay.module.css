@@ -1,0 +1,30 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Canvas より手前、HUD (z-index: 2) より奥。全画面を覆う演出なので、
+     HUD の文字の上へ出すとゲージも文言も読めなくなる。 */
+  z-index: 1;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  transition: opacity 90ms linear;
+}
+
+/* ガード成功のフラッシュ。 */
+.flash {
+  background: radial-gradient(circle at 50% 55%, #ffffff 0%, #bcd9ff 45%, transparent 75%);
+  mix-blend-mode: screen;
+}
+
+/* ふかふか布団の背景暗転。 */
+.dim {
+  background: radial-gradient(circle at 50% 55%, transparent 20%, #05030c 85%);
+}
+
+/* あくび衝撃波のブラー。 */
+.blur {
+  backdrop-filter: blur(6px);
+}

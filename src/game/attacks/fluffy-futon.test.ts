@@ -4,8 +4,20 @@ import { createFakeClock } from '../clock';
 import { createCombatStateMachine } from '../combat/state-machine';
 import { createCombatVitals } from '../combat/vitals';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
-import { createBossAttackController } from './boss-attack';
+import { createBossAttackController, type BossAttack } from './boss-attack';
 import { createFluffyFutonAttack } from './fluffy-futon';
+
+/**
+ * 大ダウン中の追撃に単価を持たせた定義。
+ *
+ * 既定の BOSS_DOWN_FOLLOW_UP_DAMAGE は 0 で、仕様 §17 の攻撃順に
+ * 追撃の入る余地が無いため (combat-balance.ts の算術)。ここで検証したいのは
+ * 「大ダウン中に追撃が通り、1発ごとにダメージが入る」という機構そのものなので、
+ * 単価を明示して回す。
+ */
+function withFollowUpDamage(attack: BossAttack, damage = 10): BossAttack {
+  return { ...attack, bossDownFollowUpDamage: damage };
+}
 
 /** 構え + 溜め。ここを進めると ATTACK へ入る。 */
 const TELEGRAPH_MS = 2300;
@@ -98,10 +110,12 @@ describe('究極奥義・ふかふか布団', () => {
       // 第2段階 = COUNTER_WINDOW。回避成功がそのままカウンター受付へ繋がる。
       expect(machine.state).toBe('COUNTER_WINDOW');
       // Visual Cue に構えた向きが乗る。Rendering 側が左右を描き分けられないと
-      // プレイヤーが回避方向を判断できない (§10)。
+      // プレイヤーが回避方向を判断できない (§10)。ATTACK 開始時に同じ Cue が
+      // ACTIVATION として再送されるので (vfx-cue.ts のレビュー指摘)、2件届く。
       // durationMs は予兆の尺として共通基盤が添えるため内容を固定しない。
       expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toMatchObject([
         { type: 'ATTACK_VISUAL_CUE', attackId: 'FLUFFY_FUTON', cue },
+        { type: 'ATTACK_VISUAL_CUE', attackId: 'FLUFFY_FUTON', cue, phase: 'ACTIVATION' },
       ]);
       // 聴覚の予兆は左右を区別しない。
       expect(events.filter((event) => event.type === 'ATTACK_AUDIO_CUE')).toMatchObject([
@@ -285,9 +299,9 @@ describe('究極奥義・ふかふか布団', () => {
   // 仕様 §11 の「約2.5〜3秒反撃可能」。カウンター成立の DAMAGE (§15 の約0.4秒) を
   // 抜けたあとに BOSS_DOWN が続き、その間プレイヤーは追撃できる。
   it('カウンター成功後に大ダウンが発生し、その間は追撃できる', () => {
-    const { advance, controller, machine, vitals } = setup();
+    const { advance, controller, machine, vitals, events } = setup();
 
-    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    controller.start(withFollowUpDamage(createFluffyFutonAttack({ random: PICK_RIGHT })));
     dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
     advance(300);
     controller.submitAction('ATTACK');
@@ -300,16 +314,24 @@ describe('究極奥義・ふかふか布団', () => {
     expect(machine.state).toBe('BOSS_DOWN');
 
     // 大ダウン中は追撃できる。1発ごとに追撃ダメージが入る。
-    advance(500);
+    // 間隔は再入力ロック (counterMs) 以上を空ける。連打しても
+    // ロックのぶんしか通らないのが仕様 §13「最初の入力のみ採用」。
+    advance(700);
     expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
     expect(vitals.bossHp).toBe(60);
 
-    advance(500);
+    // State は BOSS_DOWN のまま進まないため、追撃のヒットは
+    // COMBAT_STATE_CHANGED ではなく専用イベントで Audio / VFX へ届く
+    // (このイベントが無いと、HPが削れているのにヒット音もシェイクも出ない)。
+    expect(events.filter((e) => e.type === 'BOSS_DOWN_FOLLOW_UP_HIT')).toHaveLength(1);
+
+    advance(700);
     expect(controller.submitAction('ATTACK')).toBe('ACCEPTED');
     expect(vitals.bossHp).toBe(50);
+    expect(events.filter((e) => e.type === 'BOSS_DOWN_FOLLOW_UP_HIT')).toHaveLength(2);
 
     // 2.8秒の直前まで大ダウンが続く。
-    advance(2800 - 1000 - 1);
+    advance(2800 - 1400 - 1);
     expect(machine.state).toBe('BOSS_DOWN');
 
     advance(1);
@@ -370,8 +392,9 @@ describe('究極奥義・ふかふか布団', () => {
     expect(transitions.filter((state) => state === 'DAMAGE')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'BOSS_HP_CHANGED')).toHaveLength(1);
     expect(vitals.bossHp).toBe(70);
-    // Cue も1攻撃につき1回だけ。
-    expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toHaveLength(1);
+    // Cue は連打では増えない。Visual は TELEGRAPH の予兆 + ATTACK の
+    // ACTIVATION 再送で2件 (vfx-cue.ts のレビュー指摘)、Audio は予兆の1件のみ。
+    expect(events.filter((event) => event.type === 'ATTACK_VISUAL_CUE')).toHaveLength(2);
     expect(events.filter((event) => event.type === 'ATTACK_AUDIO_CUE')).toHaveLength(1);
   });
 
@@ -379,7 +402,7 @@ describe('究極奥義・ふかふか布団', () => {
   it('大ダウン中の追撃は連打してもロック中は通らない', () => {
     const { advance, controller, events, vitals } = setup();
 
-    controller.start(createFluffyFutonAttack({ random: PICK_RIGHT }));
+    controller.start(withFollowUpDamage(createFluffyFutonAttack({ random: PICK_RIGHT })));
     dodgeThenOpenWindow(advance, controller, 'DODGE_LEFT');
     advance(300);
     controller.submitAction('ATTACK');

@@ -50,11 +50,20 @@ export interface CombatVitals {
    */
   readonly addSleepiness: (amount: number) => number;
 
-  /** 反撃成功として、その技の bossDamage をボスへ与える。 */
-  readonly applyCounterDamage: (attackId: AttackId) => number;
+  /**
+   * 反撃成功として、その技の bossDamage をボスへ与える。
+   *
+   * `scale` はその一撃だけの倍率。1 未満にすると軽減、0 にすると無傷になる。
+   * チュートリアルの反撃でボスHPを削らないために使う
+   * (docs/single-player-poc-spec.md §17 はダメージを本戦の行にだけ書いている)。
+   */
+  readonly applyCounterDamage: (attackId: AttackId, scale?: number) => number;
 
-  /** 被弾として、その技の sleepinessDamage をプレイヤーへ与える。 */
-  readonly applyAttackSleepiness: (attackId: AttackId) => number;
+  /**
+   * 被弾として、その技の sleepinessDamage をプレイヤーへ与える。
+   * `scale` の意味は applyCounterDamage と同じ (§16 の初回失敗時のペナルティ軽減)。
+   */
+  readonly applyAttackSleepiness: (attackId: AttackId, scale?: number) => number;
 
   /**
    * 戦闘終了なら終了状態を返す。継続中なら null。
@@ -171,12 +180,12 @@ export function createCombatVitals(options: CombatVitalsOptions = {}): CombatVit
 
     addSleepiness,
 
-    applyCounterDamage(attackId) {
-      return damageBoss(damageTable[attackId].bossDamage);
+    applyCounterDamage(attackId, scale = 1) {
+      return damageBoss(damageTable[attackId].bossDamage * scale);
     },
 
-    applyAttackSleepiness(attackId) {
-      return addSleepiness(damageTable[attackId].sleepinessDamage);
+    applyAttackSleepiness(attackId, scale = 1) {
+      return addSleepiness(damageTable[attackId].sleepinessDamage * scale);
     },
 
     resolveBattleEnd() {

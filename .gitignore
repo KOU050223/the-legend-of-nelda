@@ -5,13 +5,17 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# cloudflare workers
+.wrangler/
+
 # nix / direnv
 .direnv/
-result
-result-*
+/result
+/result-*
 
 # test
 coverage/
+.vitest/
 
 # editor / os
 .DS_Store

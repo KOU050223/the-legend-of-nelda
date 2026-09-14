@@ -1,3 +1,4 @@
+import type { SequencePhase } from '../sequence/attack-sequence';
 import type { CombatState, JudgeResult } from '../types/combat-state';
 import type { PlayerAction } from '../types/player-action';
 
@@ -32,13 +33,47 @@ export type InputRejectionReason = 'TOO_EARLY' | 'WHIFF';
  */
 export type GameEvent =
   | { type: 'ATTACK_STARTED'; attackId: string }
-  | { type: 'ATTACK_VISUAL_CUE'; attackId: string; cue: string; durationMs?: number }
+  | {
+      /**
+       * シーケンスが1手進んだ。チュートリアルの補助表示は、UI がこの
+       * イベントだけを見て切り替える。UI から Attack Sequence を直接
+       * 引かせないための唯一の経路 (docs/technical-design.md §9)。
+       */
+      type: 'SEQUENCE_STEP_STARTED';
+      phase: SequencePhase;
+      /** 操作補助表示を出す手か (SEQ-003)。本戦では常に false (SEQ-004)。 */
+      assist: boolean;
+      attackId: string;
+      /** シーケンス全体を通した0始まりの通し番号。 */
+      stepIndex: number;
+    }
+  | {
+      type: 'ATTACK_VISUAL_CUE';
+      attackId: string;
+      cue: string;
+      durationMs?: number;
+      /**
+       * どの局面の Cue か。省略時は予兆 (TELEGRAPH)。
+       *
+       * 枕の軌跡やあくびの衝撃波は、予兆中に出すと発動前に尺が尽きて消える
+       * (仕様の「発動」区分でのみ描かれる演出のため)。Cue ID 自体は技につき
+       * 1つのまま (game-event.ts 冒頭のコメント) で、ATTACK State 開始時に
+       * 同じ Cue を `ACTIVATION` として再送する。
+       */
+      phase?: 'ACTIVATION';
+    }
   | { type: 'ATTACK_AUDIO_CUE'; attackId: string; cue: string; durationMs?: number }
   | { type: 'ATTACK_HIT_TIMING'; attackId: string; at: number }
   | { type: 'ATTACK_ENDED'; attackId: string }
   | { type: 'JUDGED'; result: JudgeResult }
   | { type: 'COMBAT_STATE_CHANGED'; from: CombatState; to: CombatState }
   | { type: 'INPUT_REJECTED'; action: PlayerAction; reason: InputRejectionReason }
+  /**
+   * BOSS_DOWN 中の追撃が命中した。State は BOSS_DOWN のまま進まないため
+   * (COMBAT_STATE_CHANGED を再発火すると DAMAGE の演出が重複する)、
+   * ダメージが実際に入ったことを Audio / VFX へ知らせる専用イベント。
+   */
+  | { type: 'BOSS_DOWN_FOLLOW_UP_HIT' }
   | { type: 'BOSS_HP_CHANGED'; hp: number }
   | { type: 'SLEEPINESS_CHANGED'; value: number };
 

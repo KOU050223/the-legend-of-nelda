@@ -1,13 +1,21 @@
-import { createBossAttackController, type BossAttack } from '@/game/attacks/boss-attack';
-import { createFluffyFutonAttack } from '@/game/attacks/fluffy-futon';
-import { createPillowSweep } from '@/game/attacks/pillow-sweep';
-import { yawnWave } from '@/game/attacks/yawn-wave';
+import { createAudioManager } from '@/audio/audio-manager';
+import { createHtmlAudioOutput, type AudioOutput } from '@/audio/audio-output';
+import { createBossAttackController } from '@/game/attacks/boss-attack';
 import { createRealClock, type GameClock } from '@/game/clock';
 import { createCombatStateMachine } from '@/game/combat/state-machine';
 import { createCombatVitals } from '@/game/combat/vitals';
 import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
+import {
+  createAttackSequence,
+  type AttackSequence,
+  type SequenceStepDefinition,
+} from '@/game/sequence/attack-sequence';
 import type { PlayerAction } from '@/game/types';
+import { readPresentationSettings } from '@/presentation/presentation-store';
+import { useVfxStore } from '@/rendering/vfx/vfx-store';
+import { syncVfxWithGameEvents } from '@/rendering/vfx/vfx-sync';
 import { useGameStore } from '@/store/game-store';
+import { syncResultWithGameEvents } from '@/ui/result/result-presentation';
 import { syncHudWithGameEvents } from '@/ui/hud/game-event-sync';
 
 /**
@@ -41,32 +49,30 @@ export interface CombatSessionOptions {
   frameLoop?: FrameLoop;
   /** 技の出し分けに使う乱数。テストから固定する。 */
   random?: () => number;
+  /** チュートリアル順の差し替え。空配列を渡せばチュートリアルを飛ばせる。 */
+  tutorialSequence?: readonly SequenceStepDefinition[];
+  /** 本戦の攻撃順の差し替え (完了条件「本戦の攻撃順を設定から調整できる」)。 */
+  mainSequence?: readonly SequenceStepDefinition[];
+  /** 出題順そのものを差し替える。指定した場合 tutorialSequence / mainSequence は使わない。 */
+  sequence?: AttackSequence;
+  /**
+   * 攻撃と攻撃の間隔 (ms)。省略時は仕様 §15 の IDLE 約1秒。
+   *
+   * State Machine は IDLE に滞在時間を持たず、間隔はシーケンス側の担当と
+   * 定めてある (state-machine.ts の CombatTimings)。その受け口がここ。
+   */
+  idleIntervalMs?: number;
+  /**
+   * SE の再生先。既定はブラウザの Audio。
+   *
+   * 演出の接続を切っても戦闘は成立するので、テストからは無音の出力を渡す
+   * (jsdom に実オーディオが無い)。
+   */
+  audioOutput?: AudioOutput;
 }
 
-/**
- * Phase 1 の攻撃順。
- *
- * 出題の設計 (頻度・難易度カーブ・連携) は仕様がまだ定めていないため、
- * ここでは定義済みの3技を順に出すだけの暫定実装にする。HUD が実際の戦闘
- * イベントで動くことを確かめるための最小構成で、出題ロジックそのものは
- * 別Issueで詰める。
- */
-function createAttackRotation(random: () => number): () => BossAttack {
-  const factories: ReadonlyArray<() => BossAttack> = [
-    () => createPillowSweep({ random }),
-    () => yawnWave,
-    () => createFluffyFutonAttack({ random }),
-  ];
-
-  let next = 0;
-
-  return () => {
-    // 剰余で必ず範囲内に収まるが、配列アクセスの型を絞るために既定を置く。
-    const factory = factories[next % factories.length] ?? factories[0]!;
-    next += 1;
-    return factory();
-  };
-}
+/** 攻撃と攻撃の間隔の既定値。docs/single-player-poc-spec.md §15 の IDLE 約1秒。 */
+const DEFAULT_IDLE_INTERVAL_MS = 1_000;
 
 /**
  * Game Logic を1つ組み立てて HUD へ接続する。
@@ -79,7 +85,15 @@ export function createCombatSession({
   clock = createRealClock(),
   frameLoop = requestAnimationFrameLoop,
   random = Math.random,
+  tutorialSequence,
+  mainSequence,
+  sequence,
+  idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS,
+  audioOutput = createHtmlAudioOutput(),
 }: CombatSessionOptions = {}): CombatSession {
+  useGameStore.getState().reset();
+  useVfxStore.getState().clear();
+  let disposed = false;
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
 
@@ -91,6 +105,15 @@ export function createCombatSession({
   });
   controller = createBossAttackController({ clock, machine, vitals, eventBus });
 
+  const attackSequence =
+    sequence ??
+    createAttackSequence({
+      random,
+      // exactOptionalPropertyTypes のため、未指定のキーは渡さずに既定へ任せる。
+      ...(tutorialSequence ? { tutorial: tutorialSequence } : {}),
+      ...(mainSequence ? { mainBattle: mainSequence } : {}),
+    });
+
   // ゲージの分母は戦闘生成時の設定値。表示側が既定値を直接読むと、
   // 上限を変えたときに割合がずれる。
   useGameStore.getState().setVitalsMaximums({
@@ -98,30 +121,98 @@ export function createCombatSession({
     sleepinessMax: vitals.sleepinessMax,
   });
 
+  // 出題位置も戦闘ごとに初期化する。外から渡されたシーケンスは前の戦闘で
+  // 使ったものかもしれず、そのままだと本戦の途中から再開してしまう
+  // (RESULT-008 の「Attack Sequence位置」)。
+  attackSequence.reset();
+
+  // 進行の表示状態は戦闘ごとに初期化する。store はセッションより長く生きるので、
+  // 前の戦闘が本戦の途中や補助表示ありの手で終わっていると、その値のまま
+  // 次の INTRO が始まってしまう (仕様 §17 の 0〜5秒は登場演出で、
+  // 補助表示を出す区間ではない)。
+  useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
+
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
-  const nextAttack = createAttackRotation(random);
+  const resultPresentation = syncResultWithGameEvents(eventBus, clock);
+
+  // 演出は HUD と同じく「イベントを購読して状態を書く」だけの購読者として足す。
+  // Game Logic 側は購読者の有無を知らないので、ここを外しても戦闘は変わらない
+  // (Issue #11 完了条件 / docs/technical-design.md §6)。
+  const unsubscribeVfx = syncVfxWithGameEvents({
+    eventBus,
+    getSettings: readPresentationSettings,
+  });
+  const disposeAudio = createAudioManager({
+    eventBus,
+    output: audioOutput,
+    getSettings: readPresentationSettings,
+  });
+
+  /** IDLE へ入った時刻。次の技を出すまでの間隔をここから測る。 */
+  let idleSince: number | null = null;
 
   const stopLoop = frameLoop(() => {
+    if (disposed) return;
+    resultPresentation.update();
     controller.update();
     machine.update();
 
     // IDLE は次の技を待つ状態。戦闘が終わっていれば startAttack が false を
     // 返すのでここでは State だけを見る。
-    if (machine.state === 'IDLE') {
-      controller.start(nextAttack());
+    if (machine.state !== 'IDLE') {
+      idleSince = null;
+      return;
     }
+
+    // 攻撃と攻撃の間隔を空ける。State Machine は IDLE に滞在時間を持たない
+    // 設計なので (次の攻撃を待つ状態そのもの)、間隔はここで測る。
+    if (idleSince === null) {
+      idleSince = clock.now();
+
+      // 手が終わった時点で補助表示を畳む。次の SEQUENCE_STEP_STARTED まで
+      // 待つと、チュートリアル最後の布団の「回避 → 攻撃」の答えが
+      // この間隔のあいだ出たままになる。段は次に出る手のものへ進めるので、
+      // チュートリアルを出し切った時点で表示は本戦へ切り替わる。
+      useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
+    }
+
+    if (clock.now() - idleSince < idleIntervalMs) {
+      return;
+    }
+    idleSince = null;
+
+    const step = attackSequence.next();
+
+    // シーケンスの情報は攻撃そのものより先に流す。UI が補助表示を
+    // 切り替えてから予兆の Cue が届く順にしておくため。
+    eventBus.emit({
+      type: 'SEQUENCE_STEP_STARTED',
+      phase: step.phase,
+      assist: step.assist,
+      attackId: step.attackId,
+      stepIndex: step.index,
+    });
+
+    controller.start(step.attack);
   });
 
   return {
     eventBus,
 
     submitAction(action) {
+      if (disposed || machine.state === 'BOSS_DEFEATED' || machine.state === 'PLAYER_LOSE') return;
       controller.submitAction(action);
     },
 
     dispose() {
+      if (disposed) return;
+      disposed = true;
       stopLoop();
+      resultPresentation.dispose();
       unsubscribeHud();
+      unsubscribeVfx();
+      useVfxStore.getState().clear();
+      disposeAudio();
       controller.dispose();
     },
   };

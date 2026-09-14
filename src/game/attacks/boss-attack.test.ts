@@ -83,7 +83,15 @@ describe('共通ボス攻撃基盤', () => {
     },
     {
       cue: 'audio' as const,
-      expected: ['ATTACK_STARTED', 'ATTACK_VISUAL_CUE', 'ATTACK_HIT_TIMING', 'JUDGED'],
+      // Visual Cue は TELEGRAPH の予兆に加え、ATTACK 開始時に ACTIVATION として
+      // 再送される (vfx-cue.ts のレビュー指摘: 発動区分の演出が予兆の尺で消えるため)。
+      expected: [
+        'ATTACK_STARTED',
+        'ATTACK_VISUAL_CUE',
+        'ATTACK_VISUAL_CUE',
+        'ATTACK_HIT_TIMING',
+        'JUDGED',
+      ],
     },
   ])('$cue Cueを無効化しても攻撃サイクルと残るCueは動作する', ({ cue, expected }) => {
     const { advance, attackEventTypes, controller, machine } = setup();
@@ -115,8 +123,17 @@ describe('共通ボス攻撃基盤', () => {
     controller.start(dummyAttack);
     advance(2000);
 
+    // Visual Cue は TELEGRAPH の予兆に加え、ATTACK 開始時に ACTIVATION として
+    // 再送される (vfx-cue.ts のレビュー指摘)。Audio は予兆の1回のみ。
     expect(visualCues).toEqual([
       { type: 'ATTACK_VISUAL_CUE', attackId: 'PILLOW_SWEEP', cue: 'pillow-pull', durationMs: 2000 },
+      {
+        type: 'ATTACK_VISUAL_CUE',
+        attackId: 'PILLOW_SWEEP',
+        cue: 'pillow-pull',
+        durationMs: dummyAttack.timings!.ATTACK,
+        phase: 'ACTIVATION',
+      },
     ]);
     expect(audioCues).toEqual([
       { type: 'ATTACK_AUDIO_CUE', attackId: 'PILLOW_SWEEP', cue: 'wind-up', durationMs: 2000 },
@@ -159,10 +176,13 @@ describe('共通ボス攻撃基盤', () => {
     expect(machine.state).toBe('IDLE');
     expect(vitals.bossHp).toBe(90);
     expect(staleInputAccepted).not.toBe('ACCEPTED');
+    // Visual Cue は TELEGRAPH の予兆に加え、ATTACK 開始時に ACTIVATION として
+    // 再送される (vfx-cue.ts のレビュー指摘)。
     expect(attackEventTypes()).toEqual([
       'ATTACK_STARTED',
       'ATTACK_VISUAL_CUE',
       'ATTACK_AUDIO_CUE',
+      'ATTACK_VISUAL_CUE',
       'ATTACK_HIT_TIMING',
       'JUDGED',
       'ATTACK_ENDED',
