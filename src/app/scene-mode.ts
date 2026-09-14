@@ -9,7 +9,23 @@
  * `pnpm build` では false になる)。
  */
 export function isWorldSceneRequested(): boolean {
-  if (!import.meta.env.DEV) return false;
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('scene') === 'world';
+  return requestedScene() === 'world';
+}
+
+/**
+ * `?scene=boss` で堀大輔の危険範囲を目視確認できるようにする開発用の口。
+ * (Issue #58)
+ *
+ * `?scene=world` と同じく暫定入口で、本番ビルドでは無効にする。ボスアリーナ
+ * 本体は #54 のスコープなので、ここは「危険範囲が視覚的に読めるか」を
+ * 確かめるための最小の画面に留める。
+ */
+export function isBossSceneRequested(): boolean {
+  return requestedScene() === 'boss';
+}
+
+function requestedScene(): string | null {
+  if (!import.meta.env.DEV) return null;
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('scene');
 }

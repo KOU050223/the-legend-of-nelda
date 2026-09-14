@@ -89,6 +89,15 @@ export type GameEvent =
    * 2系統に割りたくないため。既存の購読者はすべて default 節を持つので、
    * Phase 2 のイベントは無視される。
    */
+  /**
+   * Phase 2 のボスHP。Phase 1 の BOSS_HP_CHANGED とは別イベントにする。
+   *
+   * あちらは分母が `INITIAL_BOSS_HP` (100) であることを購読側が前提にしており
+   * (game-store の bossHpMax 既定値)、堀大輔のHP (HORI_INITIAL_HP = 1000) を
+   * そのまま流すとゲージが 900% を指す。分母をイベント自身へ持たせて、
+   * 購読側が設定値を直接読まなくても割合を出せるようにする。
+   */
+  | { type: 'HORI_HP_CHANGED'; hp: number; hpMax: number }
   | { type: 'BOSS_PHASE_CHANGED'; from: BossPhase; to: BossPhase }
   | { type: 'BOSS_ATTACK_STARTED'; attackId: HoriAttackId; telegraphMs: number }
   | { type: 'BOSS_ATTACK_HIT'; attackId: HoriAttackId; targetId: string; damage: number }

@@ -71,7 +71,13 @@ describe('堀大輔のHPとフェーズ', () => {
     boss.damage(100);
 
     expect(boss.snapshot().hp).toBe(HORI_INITIAL_HP - 100);
-    expect(emitted).toContainEqual({ type: 'BOSS_HP_CHANGED', hp: HORI_INITIAL_HP - 100 });
+    // Phase 1 の BOSS_HP_CHANGED とは別イベント。分母を添えるので、
+    // 購読側が INITIAL_BOSS_HP (= 100) を前提にしてゲージが壊れない。
+    expect(emitted).toContainEqual({
+      type: 'HORI_HP_CHANGED',
+      hp: HORI_INITIAL_HP - 100,
+      hpMax: HORI_INITIAL_HP,
+    });
   });
 
   it('HPは0未満にも初期値超にもならない', () => {
@@ -290,6 +296,21 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
       ),
     );
     expect(covered.length).toBeLessThan(zones.length);
+  });
+
+  it('早朝ルーティン突進はボス自身が軌道上を進むが、危険範囲は動かない', () => {
+    const { boss, clock } = setup({ pickAttack: () => 'MORNING_DASH' });
+    boss.update(three);
+    const spec = DEFAULT_HORI_ATTACKS.MORNING_DASH;
+    const zoneBefore = boss.dangerZones(three)[0];
+
+    clock.advance(spec.telegraphMs + 200);
+    boss.update(three);
+
+    const moved = boss.snapshot().position;
+    expect(Math.hypot(moved.x, moved.z)).toBeGreaterThan(0);
+    // 予兆で見せた軌道が動くと「横へ回避する」が成立しない。
+    expect(boss.dangerZones(three)[0]?.origin).toEqual(zoneBefore?.origin);
   });
 
   it('早朝ルーティン突進は直線で、予兆の後に狙いが変わらない', () => {

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
+import { BossScene } from '@/rendering/scene/BossScene';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
@@ -9,7 +10,7 @@ import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 
-import { isWorldSceneRequested } from './scene-mode';
+import { isBossSceneRequested, isWorldSceneRequested } from './scene-mode';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -35,6 +36,15 @@ export function App(): React.JSX.Element {
       <div className={styles.root}>
         <GameScene />
         <MicrophoneDebugPanel />
+      </div>
+    );
+  }
+
+  // 堀大輔の危険範囲の目視確認 (Issue #58)。戦闘一式は起動しない。
+  if (isBossSceneRequested()) {
+    return (
+      <div className={styles.root}>
+        <BossScene />
       </div>
     );
   }

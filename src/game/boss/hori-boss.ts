@@ -1,5 +1,6 @@
 import {
   BOSS_DOWN_DURATION_MS,
+  DEFAULT_HORI_ATTACKS,
   HORI_ATTACK_IDS,
   HORI_INITIAL_HP,
   HORI_MOVE_SPEED,
@@ -151,6 +152,11 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
   /**
    * HPの変化を1段ずつフェーズへ反映する。1回のダメージで複数の境界を
    * 跨いでも `advancePhase` が1段しか進めないため、結界を飛ばせない。
+   *
+   * **結界フェーズからは呼ばないこと。** `advancePhase('BARRIER_1', 0.7)` は
+   * 無条件に FIELD_ADDED を返すので、ここから呼ぶと協力ギミックを
+   * 解除せずに素通りできてしまう。結界を抜ける唯一の経路は breakBarrier()。
+   * damage() が isInvulnerablePhase で早期 return しているのはそのため。
    */
   function syncPhase(): void {
     const next = advancePhase(phase, hp / hpMax);
@@ -214,6 +220,31 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
     activeAttack = { ...activeAttack, hitTargetIds: hitIds };
   }
 
+  /**
+   * 早朝ルーティン突進の判定中、ボス自身が軌道上を進む。
+   *
+   * 危険範囲 (`aim.origin` 起点の直線) は動かさない。予兆で見せた軌道と
+   * 実際に当たる範囲が同じでなければ「横へ回避する」が成立しないため
+   * (§9.4)。動くのはボスの見た目の位置だけで、判定は据え置く。
+   */
+  function advanceDash(): void {
+    if (activeAttack === null || activeAttack.attackId !== 'MORNING_DASH') return;
+
+    const spec = DEFAULT_HORI_ATTACKS.MORNING_DASH;
+    if (spec.shape.kind !== 'LINE') return;
+
+    const elapsedInActive = clock.now() - activeAttack.startedAt - activeAttack.timing.telegraphMs;
+    const travelled = Math.min(
+      spec.shape.length,
+      (bossMoveSpeed(phase) * Math.max(0, elapsedInActive)) / 1000,
+    );
+    const { origin, rotationY: aimRotation } = activeAttack.aim;
+    position = {
+      x: origin.x + -Math.sin(aimRotation) * travelled,
+      z: origin.z + -Math.cos(aimRotation) * travelled,
+    };
+  }
+
   function attackPhase(): AttackPhase {
     if (activeAttack === null) return 'DONE';
     return phaseAt(clock.now() - activeAttack.startedAt, activeAttack.timing);
@@ -237,7 +268,10 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
 
       if (activeAttack !== null) {
         const current = attackPhase();
-        if (current === 'ACTIVE') resolveHits(targets);
+        if (current === 'ACTIVE') {
+          advanceDash();
+          resolveHits(targets);
+        }
         if (current === 'DONE') {
           events.emit({ type: 'BOSS_ATTACK_ENDED', attackId: activeAttack.attackId });
           activeAttack = null;
@@ -256,7 +290,7 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
         return hp;
       }
       hp = Math.min(hpMax, Math.max(0, hp - amount));
-      events.emit({ type: 'BOSS_HP_CHANGED', hp });
+      events.emit({ type: 'HORI_HP_CHANGED', hp, hpMax });
       syncPhase();
       return hp;
     },
