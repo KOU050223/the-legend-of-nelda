@@ -13,6 +13,15 @@ import {
 
 import styles from './WasshoiDebug.module.css';
 
+const THRESHOLD_STORAGE_KEY = 'nelda.wasshoi.threshold';
+
+function loadThreshold(): number {
+  const stored = Number(window.localStorage.getItem(THRESHOLD_STORAGE_KEY));
+  return Number.isFinite(stored) && stored >= 0.001 && stored <= 0.05
+    ? stored
+    : DEFAULT_VOICE_ACTIVITY_CONFIG.threshold;
+}
+
 /** Issue #50 の独立した手動確認画面。ゲーム本体・マルチプレイ通信には接続しない。 */
 export function WasshoiDebug(): React.JSX.Element {
   const [status, setStatus] = useState<WasshoiInputStatus>('idle');
@@ -21,7 +30,11 @@ export function WasshoiDebug(): React.JSX.Element {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<WasshoiInputController | null>(null);
-  const [threshold, setThreshold] = useState(DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
+  const [threshold, setThreshold] = useState(loadThreshold);
+
+  useEffect(() => {
+    window.localStorage.setItem(THRESHOLD_STORAGE_KEY, String(threshold));
+  }, [threshold]);
 
   const play = useCallback(async (event: WasshoiEvent): Promise<void> => {
     const controller = controllerRef.current;
@@ -40,11 +53,13 @@ export function WasshoiDebug(): React.JSX.Element {
         rms: previous?.rms ?? 0,
         durationMs: 0,
         intensity: 0,
+        noiseFloor: previous?.noiseFloor ?? 0,
+        effectiveThreshold: previous?.effectiveThreshold ?? threshold,
         lastEvent: event,
       }));
       void play(event);
     },
-    [play],
+    [play, threshold],
   );
 
   const stop = useCallback((): void => {
@@ -101,6 +116,11 @@ export function WasshoiDebug(): React.JSX.Element {
           <Row label="INTENSITY" value={(snapshot?.intensity ?? 0).toFixed(2)} />
           <Row label="DURATION" value={`${Math.round(snapshot?.durationMs ?? 0)} ms`} />
           <Row label="THRESHOLD" value={threshold.toFixed(3)} />
+          <Row label="NOISE FLOOR" value={(snapshot?.noiseFloor ?? 0).toFixed(3)} />
+          <Row
+            label="EFFECTIVE GATE"
+            value={(snapshot?.effectiveThreshold ?? threshold).toFixed(3)}
+          />
           <Row label="WASSHOI ENGINE" value={running ? 'READY' : 'IDLE'} />
           <Row label="LAST OUTPUT" value={lastOutput} />
         </dl>

@@ -1,4 +1,5 @@
 import { createVoiceActivityDetector } from './voice-activity-detector';
+import { createAdaptiveNoiseGate } from './adaptive-noise-gate';
 import { playSystemWasshoi } from './system-wasshoi-engine';
 import {
   DEFAULT_VOICE_ACTIVITY_CONFIG,
@@ -56,11 +57,19 @@ export async function attachWasshoiInput(
 ): Promise<WasshoiInputController> {
   const config = { ...DEFAULT_VOICE_ACTIVITY_CONFIG, ...options.config };
   const detector = createVoiceActivityDetector(config);
+  const noiseGate = createAdaptiveNoiseGate(config.threshold);
   options.onStatusChange?.('requesting-permission');
 
   let stream: MediaStream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        autoGainControl: true,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
   } catch (error) {
     options.onStatusChange?.(toStatus(error));
     throw error;
@@ -100,6 +109,8 @@ export async function attachWasshoiInput(
       rms,
       durationMs: detector.getDurationMs(nowMs),
       intensity: detector.getIntensity(),
+      noiseFloor: noiseGate.getNoiseFloor(),
+      effectiveThreshold: detector.getThreshold(),
       lastEvent,
     });
   };
@@ -110,6 +121,9 @@ export async function attachWasshoiInput(
       analyser.getFloatTimeDomainData(samples);
       const nowMs = performance.now();
       const rms = rmsOf(samples);
+      if (detector.getState() === 'silence') {
+        detector.setThreshold(noiseGate.observeSilence(rms));
+      }
       const event = detector.update(rms, nowMs);
       if (event !== null) {
         lastEvent = event;
