@@ -138,7 +138,7 @@ export async function attachWasshoiInput(
   options.onStatusChange?.('active');
 
   return {
-    playWasshoi: (event) => (stopped ? Promise.resolve(false) : playSystemWasshoi(context, event)),
+    playWasshoi: (event) => Promise.resolve(stopped ? false : playSystemWasshoi(event)),
     stop: () => stop(),
   };
 }

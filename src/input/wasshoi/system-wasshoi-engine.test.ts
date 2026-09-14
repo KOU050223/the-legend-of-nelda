@@ -10,8 +10,8 @@ describe('toWasshoiPlaybackParameters', () => {
       durationMs: 250,
     });
 
-    expect(parameters.gain).toBeCloseTo(0.143);
-    expect(parameters.phraseDurationMs).toBe(557.5);
+    expect(parameters.volume).toBeCloseTo(0.2775);
+    expect(parameters.rate).toBe(1.5);
   });
 
   it('大声で長い発話は大きく長いわっしょーいにする', () => {
@@ -26,8 +26,7 @@ describe('toWasshoiPlaybackParameters', () => {
       durationMs: 2_000,
     });
 
-    expect(loudLong.gain).toBeGreaterThan(quietShort.gain);
-    expect(loudLong.phraseDurationMs).toBeGreaterThan(quietShort.phraseDurationMs);
-    expect(loudLong.playbackRate).toBeLessThan(quietShort.playbackRate);
+    expect(loudLong.volume).toBeGreaterThan(quietShort.volume);
+    expect(loudLong.rate).toBeLessThan(quietShort.rate);
   });
 });
