@@ -26,15 +26,13 @@ export function TitleScreen(): React.JSX.Element {
 
   return (
     <div className={styles.title}>
-      <div className={styles.sky} />
-      <div className={styles.mountains} />
-      <div className={styles.ridge} />
+      <img className={styles.background} src="/title/bg.png" alt="" aria-hidden="true" />
       <img
         className={styles.hero}
         src="/title/hero.png"
         alt="崖の上に立つ勇者"
-        width={63}
-        height={67}
+        width={58}
+        height={66}
       />
 
       <div className={styles.menu}>

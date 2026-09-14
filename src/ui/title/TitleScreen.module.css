@@ -1,73 +1,40 @@
 /*
- * 元ネタのタイトル画面と同じ構図 (左下に勇者 / 右にロゴとメニュー) を、
- * 画像アセットを増やさず CSS のグラデーションと clip-path だけで作る。
- * 狙っている雰囲気がチープさなので、作り込むより記号的な山と空で足りる。
+ * 元ネタのタイトル画面と同じ構図 (左下に勇者 / 右にロゴとメニュー)。
+ * 背景は CSS のグラデーションではなく 320x180 のドット絵を拡大して敷く。
+ * 勇者がドット絵なので、背景も同じ粒でないと画の統一感が出ないため。
+ * 生成は scripts/generate-title-bg.py。
  */
 .title {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  background: #6fbce4;
   font-family: 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
 }
 
-.sky {
+.background {
   position: absolute;
   inset: 0;
-  background: linear-gradient(#3fa9dd 0%, #7fd0ea 45%, #cdeef5 75%, #e7f7f2 100%);
+  width: 100%;
+  height: 100%;
+  /*
+   * 縦横比は保つ (fill だと縦長の画面で雲が縦に伸びて絵が崩れる)。
+   * はみ出す分は切り、勇者の立つ左下の崖が必ず残るよう左下を基準にする。
+   */
+  object-fit: cover;
+  object-position: left bottom;
+  image-rendering: pixelated;
 }
 
-/* 奥の雪山。薄い青で遠さを出す。 */
-.mountains {
-  position: absolute;
-  inset: 38% 0 0;
-  background: #9dc9dd;
-  clip-path: polygon(
-    0% 100%,
-    0% 52%,
-    12% 18%,
-    22% 46%,
-    34% 24%,
-    46% 58%,
-    58% 10%,
-    70% 50%,
-    82% 26%,
-    92% 54%,
-    100% 34%,
-    100% 100%
-  );
-}
-
-/* 手前の緑の尾根。 */
-.ridge {
-  position: absolute;
-  inset: 58% 0 0;
-  background: linear-gradient(#6ea86a, #3f7a4d);
-  clip-path: polygon(
-    0% 100%,
-    0% 44%,
-    10% 22%,
-    20% 50%,
-    32% 30%,
-    44% 62%,
-    56% 34%,
-    68% 58%,
-    80% 28%,
-    90% 52%,
-    100% 30%,
-    100% 100%
-  );
-}
-
-/* 左下の勇者。ドット絵なので拡大は最近傍で。 */
+/* 左下の勇者。背景の崖の上に立たせる。 */
 .hero {
   position: absolute;
-  left: 9%;
-  bottom: 8%;
+  left: 4%;
+  /* 足元が背景の崖の天面に着く位置。 */
+  bottom: 17%;
   width: auto;
-  height: 34vh;
+  height: min(40vh, 36vw);
   image-rendering: pixelated;
-  /* 元写真の切り口が下端に直線で残るので、尾根へ向けて消す。 */
-  mask-image: linear-gradient(to bottom, #000 78%, transparent 97%);
   filter: drop-shadow(3px 3px 0 #2c3a3155);
 }
 
