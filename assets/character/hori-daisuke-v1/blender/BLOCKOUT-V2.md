@@ -27,13 +27,13 @@ READMEの頭幅0.155は頭高0.135と整合しないため、写真と自然な�
 
 以下は保存したv2を再読み込みして出力し、すべて目視確認した850×850のWorkbenchレンダー。`previews-v2/` はローカル確認用でGitから除外している。
 
-| 視点 | 髪・Tシャツ付き上半身 | 髪なし顔グレー |
-|---|---|---|
-| 正面 | [画像](previews-v2/v2-bust-Front.png) | [画像](previews-v2/v2-face-gray-Front.png) |
-| 左側面 +X | [画像](previews-v2/v2-bust-Left.png) | [画像](previews-v2/v2-face-gray-Left.png) |
-| 右側面 -X | [画像](previews-v2/v2-bust-Right.png) | [画像](previews-v2/v2-face-gray-Right.png) |
-| 背面 | [画像](previews-v2/v2-bust-Back.png) | [画像](previews-v2/v2-face-gray-Back.png) |
-| 左前45度 | [画像](previews-v2/v2-bust-LeftFront45.png) | [画像](previews-v2/v2-face-gray-LeftFront45.png) |
+| 視点      | 髪・Tシャツ付き上半身                       | 髪なし顔グレー                                   |
+| --------- | ------------------------------------------- | ------------------------------------------------ |
+| 正面      | [画像](previews-v2/v2-bust-Front.png)       | [画像](previews-v2/v2-face-gray-Front.png)       |
+| 左側面 +X | [画像](previews-v2/v2-bust-Left.png)        | [画像](previews-v2/v2-face-gray-Left.png)        |
+| 右側面 -X | [画像](previews-v2/v2-bust-Right.png)       | [画像](previews-v2/v2-face-gray-Right.png)       |
+| 背面      | [画像](previews-v2/v2-bust-Back.png)        | [画像](previews-v2/v2-face-gray-Back.png)        |
+| 左前45度  | [画像](previews-v2/v2-bust-LeftFront45.png) | [画像](previews-v2/v2-face-gray-LeftFront45.png) |
 
 追加確認: [真上](previews-v2/v2-bust-Top.png)、髪付き顔の[正面](previews-v2/v2-face-hair-Front.png)・[側面](previews-v2/v2-face-hair-Left.png)・[斜視](previews-v2/v2-face-hair-LeftFront45.png)。
 
