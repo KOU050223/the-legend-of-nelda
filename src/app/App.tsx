@@ -10,6 +10,7 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 
 import { useScreenStore } from './screen';
@@ -39,6 +40,10 @@ export function App(): React.JSX.Element {
   }
   if (debug === 'hori') {
     return <HoriDebugPage />;
+  }
+
+  if (new URLSearchParams(window.location.search).get('debug') === 'wasshoi') {
+    return <WasshoiDebug />;
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
