@@ -1,29 +1,17 @@
-import { useRef } from 'react';
-import type { Group } from 'three';
-
-import { GameCamera } from '../camera/GameCamera';
-import { PlayerCharacter } from '../character/PlayerCharacter';
-import { World } from '../world/World';
-import type { MovementInput } from '@/game/movement/types';
-
-export interface WorldSceneProps {
-  getInput: () => MovementInput;
-}
+import { BossArenaScene } from '../boss/BossArenaScene';
 
 /**
- * ワールド探索モード。Character基盤 (Issue #41) の動作確認用シーン。
+ * ワールド。草原に堀大輔が居て、その場で戦う。
  *
- * Combat向けの GameScene とは責務を分け、Player Character + Follow Camera +
- * World を組み合わせる。既存Combatの見た目・挙動には影響しない。
+ * 戦闘専用の別マップ・別シーンは作らない
+ * (docs/phase2-gameplay-spec.md §2「1つの広めのボスマップ」
+ * 「マップそのものをボス戦ギミックの一部として利用する」)。探索用と
+ * 戦闘用でシーンを分けると、草原の定義が二重になり、片方だけ直して
+ * もう片方がずれる。
+ *
+ * 中身 (World / ボス / プレイヤー / 追従カメラ) は BossArenaScene が持つ。
+ * ここは GameScene から呼ばれる入口としてだけ残してある。
  */
-export function WorldScene({ getInput }: WorldSceneProps): React.JSX.Element {
-  const characterRoot = useRef<Group>(null);
-
-  return (
-    <>
-      <World />
-      <PlayerCharacter root={characterRoot} getInput={getInput} />
-      <GameCamera mode="follow" followTarget={characterRoot} />
-    </>
-  );
+export function WorldScene(): React.JSX.Element {
+  return <BossArenaScene />;
 }

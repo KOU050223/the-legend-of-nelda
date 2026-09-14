@@ -10,6 +10,8 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
+import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 
 import { useScreenStore } from './screen';
 import { currentRoute, subscribeToRoute } from './route';
@@ -39,16 +41,26 @@ export function App(): React.JSX.Element {
     }
   }, [route]);
 
-  // デバッグ画面はタイトルを経由しない、URL直開き用の入口。
+  // `?debug=ora` `?debug=hori` はタイトルより先に見る。URLで直接開く動作確認用の
+  // 入口なので、タイトルを経由させると既存の手順が変わってしまう
+  // (`?scene=world` と同じ扱い)。
+  const debug = new URLSearchParams(window.location.search).get('debug');
   if (route === 'ORA_DEBUG') {
     return <OraDebugPage />;
+  }
+  if (debug === 'hori') {
+    return <HoriDebugPage />;
+  }
+
+  if (new URLSearchParams(window.location.search).get('debug') === 'wasshoi') {
+    return <WasshoiDebug />;
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
 
-  // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
-  // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
-  // 時計・入力ロックが進んでしまい、Character基盤の確認にならない。
+  // ワールドは Phase 1 の戦闘一式を起動しない。あちらは PlayerAction 前提で、
+  // WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の時計・入力ロックが
+  // 進んでしまう。Phase 2 は GameAction で動く (docs/technical-design.md §5.2)。
   if (screen === 'WORLD') {
     return (
       <div className={styles.root}>

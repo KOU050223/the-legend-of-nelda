@@ -1,4 +1,19 @@
-import type { MoveCharacterOptions, PlanarPosition } from './types';
+import type { CircularBounds, MoveCharacterOptions, PlanarPosition } from './types';
+
+/**
+ * 原点を中心とした円の中へ位置を丸める。
+ *
+ * 半径だけを丸めて角度は保つため、壁へ斜めに押し当てたときに接線方向の
+ * 成分が残り、止まらずに壁沿いへ滑る。ブルーライト照射から走って逃げる
+ * 場面 (docs/phase2-gameplay-spec.md §9.2) で壁に張り付かないようにするため。
+ */
+export function clampToBounds(position: PlanarPosition, bounds: CircularBounds): PlanarPosition {
+  const distance = Math.hypot(position.x, position.z);
+  if (distance <= bounds.radius || distance === 0) return { x: position.x, z: position.z };
+
+  const scale = bounds.radius / distance;
+  return { x: position.x * scale, z: position.z * scale };
+}
 
 /**
  * 入力から次フレームの位置を計算する Pure Function。
@@ -10,27 +25,31 @@ import type { MoveCharacterOptions, PlanarPosition } from './types';
  * forward の正方向は -Z とする。
  *
  * 斜め入力は速度が √2 倍にならないよう normalize する。
+ *
+ * `bounds` を渡した場合、返す位置は必ずその中へ収まる。入力の有無に
+ * よらずクランプするので、呼び出し側が経路ごとに気を配らなくてよい。
  */
 export function moveCharacter({
   position,
   input,
   speed,
   delta,
+  bounds,
 }: MoveCharacterOptions): PlanarPosition {
   const { forward, right } = input;
 
   const length = Math.hypot(forward, right);
-  if (length === 0) return { x: position.x, z: position.z };
-
-  const normalizedForward = forward / length;
-  const normalizedRight = right / length;
-
   const distance = speed * delta;
 
-  return {
-    x: position.x + normalizedRight * distance,
-    z: position.z - normalizedForward * distance,
-  };
+  const next =
+    length === 0
+      ? { x: position.x, z: position.z }
+      : {
+          x: position.x + (right / length) * distance,
+          z: position.z - (forward / length) * distance,
+        };
+
+  return bounds ? clampToBounds(next, bounds) : next;
 }
 
 /**

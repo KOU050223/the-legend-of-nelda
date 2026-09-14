@@ -22,6 +22,9 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
     ) {
       return 'WORLD';
     }
+    if (new URLSearchParams(location.search).get('scene') === 'combat') {
+      return 'BATTLE';
+    }
   }
 
   if (location.pathname === '/battle') return 'BATTLE';

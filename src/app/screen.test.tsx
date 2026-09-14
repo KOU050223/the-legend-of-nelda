@@ -18,14 +18,35 @@ vi.mock('@/rendering/scene/GameScene', () => ({
   },
 }));
 
+/**
+ * 確認用ページは 3D Canvas を持つため jsdom では描けない。ここで見たいのは
+ * 「?debug=hori でこの画面へ入るか」だけなので、目印に差し替える。
+ */
+vi.mock('@/ui/hori-debug/HoriDebugPage', () => ({
+  HoriDebugPage: () => <div data-testid="hori-debug" />,
+}));
+
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     useGameStore.getState().reset();
     useScreenStore.setState({ screen: 'TITLE' });
     window.history.replaceState({}, '', '/');
     gameSceneProps.length = 0;
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('?debug=hori はタイトルを経由せずモデル確認画面を出す', () => {
+    window.history.replaceState({}, '', '/?debug=hori');
+
+    render(<App />);
+
+    expect(screen.getByTestId('hori-debug')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
+  });
 
   it('最初に開くのはタイトルで、戦闘は始まっていない (Issue #63)', () => {
     render(<App />);
@@ -78,5 +99,16 @@ describe('ルートの画面遷移', () => {
 
     expect(useScreenStore.getState().screen).toBe('TITLE');
     expect(screen.getByRole('heading', { name: '寝ルダの伝説' })).toBeInTheDocument();
+  });
+
+  it('ワールドでは Phase 1 の戦闘一式を起動しない (#58)', () => {
+    // ワールドには堀大輔が居て Phase 2 の戦闘が動く。Phase 1 は
+    // PlayerAction 前提でキー割り当ても噛み合わず、両方起動すると
+    // WASD が移動と回避の両方に解釈される。
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ワールドへ' }));
+
+    expect(screen.queryByRole('region', { name: '演出設定' })).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 
 import { currentRoute, navigateToScreen } from './route';
-
 export type Screen = 'TITLE' | 'BATTLE' | 'WORLD';
 
 interface ScreenStore {

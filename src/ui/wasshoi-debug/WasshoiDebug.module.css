@@ -1,0 +1,120 @@
+.page {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 1.5rem;
+  background: radial-gradient(circle at top, #382660, #120d20 62%);
+  color: #f9f0ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.panel {
+  display: flex;
+  width: min(100%, 38rem);
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: clamp(1.25rem, 5vw, 2.5rem);
+  border: 1px solid rgb(255 229 255 / 35%);
+  border-radius: 1rem;
+  background: rgb(17 10 31 / 82%);
+  box-shadow: 0 1rem 4rem rgb(0 0 0 / 35%);
+}
+
+.eyebrow,
+.description,
+.error {
+  margin: 0;
+}
+.eyebrow {
+  color: #f4b8ff;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 8vw, 3.1rem);
+}
+.description {
+  color: #d7c9e3;
+  line-height: 1.7;
+}
+.guide {
+  margin: -0.25rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-left: 3px solid #bd70dc;
+  background: rgb(189 112 220 / 12%);
+  color: #f1d8ff;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1.25rem;
+  margin: 0.5rem 0;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.row dt {
+  color: #b9a9cb;
+}
+.row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.event {
+  overflow-wrap: anywhere;
+  padding: 0.8rem;
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 8%);
+  color: #dfffcf;
+  font-size: 0.78rem;
+}
+.button,
+.secondaryButton {
+  padding: 0.75rem 1rem;
+  border: 1px solid #f2c8ff;
+  border-radius: 0.45rem;
+  background: #9138ad;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+.secondaryButton {
+  border-color: rgb(255 255 255 / 30%);
+  background: transparent;
+}
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: #d7c9e3;
+  font-size: 0.8rem;
+}
+
+.samplePlayer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 8%);
+}
+.samplePlayer p {
+  margin: 0;
+  color: #d7c9e3;
+  font-size: 0.78rem;
+}
+.audio {
+  width: 100%;
+}
+.error {
+  color: #ffafb8;
+}
