@@ -59,6 +59,13 @@ export function WasshoiDebug(): React.JSX.Element {
     controllerRef.current = null;
     setRecording(false);
     setRunning(false);
+    // 録音Sampleはマイク入力のAudioContextにだけ保持している。停止後にREADYのまま
+    // 残すと、再有効化した別セッションで再生できるように見えてしまうため捨てる。
+    setSampleReady(false);
+    setSampleUrl((previous) => {
+      if (previous !== null) URL.revokeObjectURL(previous);
+      return null;
+    });
   }, []);
 
   useEffect(
@@ -74,6 +81,11 @@ export function WasshoiDebug(): React.JSX.Element {
       controllerRef.current = null;
       setRecording(false);
       setRunning(false);
+      setSampleReady(false);
+      setSampleUrl((previous) => {
+        if (previous !== null) URL.revokeObjectURL(previous);
+        return null;
+      });
     }
   }, []);
 
@@ -132,6 +144,7 @@ export function WasshoiDebug(): React.JSX.Element {
         <p className={styles.description}>
           発話内容は保存も送信もしません。声量と長さだけを「わっしょーい」に変換します。
         </p>
+        <p className={styles.guide}>録音後はマイク入力を停止せず、そのまま普通に話してください。</p>
 
         <dl className={styles.rows}>
           <Row label="MIC" value={status.toUpperCase()} />
@@ -192,7 +205,7 @@ export function WasshoiDebug(): React.JSX.Element {
               わっしょーいを試聴する（プレーヤー）
             </button>
             <button type="button" className={styles.secondaryButton} onClick={stop}>
-              マイク入力を停止する
+              録音を破棄してマイク入力を停止する
             </button>
           </>
         )}

@@ -38,6 +38,15 @@ h1 {
   color: #d7c9e3;
   line-height: 1.7;
 }
+.guide {
+  margin: -0.25rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-left: 3px solid #bd70dc;
+  background: rgb(189 112 220 / 12%);
+  color: #f1d8ff;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
 .rows {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
