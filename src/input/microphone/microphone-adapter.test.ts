@@ -19,6 +19,7 @@ import type { MicrophoneInputStatus, NoteEvent, PitchFrame } from './types';
  */
 
 const C5 = 72;
+const E5 = 76;
 
 function createFakeTrack(): AudioInputTrack & { stopped: boolean } {
   const track = {
@@ -223,13 +224,17 @@ describe('attachMicrophoneNoteInput', () => {
     expect(events).toEqual([]);
   });
 
-  it('解析の後始末が失敗してもマイクは解放する', async () => {
+  // 後始末が失敗しても、停止処理の残り（マイク解放・note-off・idle）を飛ばさない。
+  it('解析の後始末が失敗してもマイク解放と通知を最後までやりきる', async () => {
     const track = createFakeTrack();
     const timer = createManualTimer();
+    const events: NoteEvent[] = [];
+    const statuses: MicrophoneInputStatus[] = [];
+    const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
 
-    const stop = await attachMicrophoneNoteInput(() => undefined, {
+    const stop = await attachMicrophoneNoteInput((event) => events.push(event), {
       clock: createFakeClock(),
-      detector: createScriptedDetector([]),
+      detector: createScriptedDetector(frames),
       getUserMedia: () => Promise.resolve(createFakeStream(track)),
       createSession: () => ({
         sampleRate: 48_000,
@@ -239,12 +244,35 @@ describe('attachMicrophoneNoteInput', () => {
           throw new Error('dispose failed');
         },
       }),
+      onStatusChange: (status) => statuses.push(status),
       setInterval: timer.setInterval,
       clearInterval: timer.clearInterval,
     });
 
-    expect(() => stop()).toThrow('dispose failed');
+    timer.tick(3);
+    stop();
+
     expect(track.stopped).toBe(true);
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-off']);
+    expect(statuses.at(-1)).toBe('idle');
+  });
+
+  it('持ち替えをゲームへ通知する', async () => {
+    const frames = [
+      voicedFrame(C5),
+      voicedFrame(C5),
+      voicedFrame(C5),
+      voicedFrame(E5),
+      voicedFrame(E5),
+      voicedFrame(E5),
+    ];
+    const { stop, timer, events } = await attachHarness({ frames });
+
+    timer.tick(6);
+
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-change']);
+    expect(events.at(-1)?.note.name).toBe('E');
+    stop();
   });
 
   it('停止後はフレームを解析しない', async () => {

@@ -65,24 +65,27 @@ export interface AudioAnalysisSession {
   dispose(): void;
 }
 
-export type AudioAnalysisSessionFactory = (stream: AudioInputStream) => AudioAnalysisSession;
+export type AudioAnalysisSessionFactory = (
+  stream: AudioInputStream,
+) => AudioAnalysisSession | Promise<AudioAnalysisSession>;
 
 /**
  * 本物の Web Audio で解析セッションを組む。
  * AnalyserNode は解析のみで destination へは繋がない。繋ぐとマイク音が
  * そのまま再生されハウリングする。
  */
-function createWebAudioSession(stream: AudioInputStream): AudioAnalysisSession {
+async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAnalysisSession> {
   if (!(stream instanceof MediaStream)) {
     throw new TypeError('Web Audio には本物の MediaStream が必要');
   }
 
   const context = new AudioContext();
 
-  // ユーザー操作のスタックから外れて生成すると suspended のまま始まることがあり、
-  // その場合 getFloatTimeDomainData が常に無音を返して「動かない」状態になる。
+  // getUserMedia の await でユーザー操作のスタックから外れるため、suspended の
+  // まま始まることがある。その状態だと getFloatTimeDomainData が常に無音を返し、
+  // 「エラーも出ないのに反応しない」状態になるので、再開できたかまで確かめる。
   if (context.state === 'suspended') {
-    context.resume().catch(() => undefined);
+    await context.resume();
   }
 
   const source = context.createMediaStreamSource(stream);
@@ -193,7 +196,7 @@ export async function attachMicrophoneNoteInput(
 
   let session: AudioAnalysisSession;
   try {
-    session = (options.createSession ?? createWebAudioSession)(stream);
+    session = await (options.createSession ?? createWebAudioSession)(stream);
   } catch (error) {
     // 解析を組めなければマイクを掴んだままにしない。
     stopStream();
@@ -239,13 +242,15 @@ export async function attachMicrophoneNoteInput(
     // 「今鳴っている音」を持つ場合、対の note-off が無いと停止後も残る。
     const sounding = stabilizer.getStableNote();
 
+    // 後始末の失敗で停止処理そのものを止めない。ここで例外を伝播させると
+    // マイク解放も note-off も idle 通知も飛ばしてしまう。
     try {
       session.dispose();
-    } finally {
-      // dispose が投げてもマイクは必ず手放す。
-      stopStream();
+    } catch {
+      // 解放できないノードは諦める。マイクの停止を優先する。
     }
 
+    stopStream();
     stabilizer.reset();
     onStatusChange?.('idle');
 

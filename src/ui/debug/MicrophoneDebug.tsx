@@ -86,6 +86,8 @@ export function MicrophoneDebug(): React.JSX.Element {
       setRunning(true);
     } catch (error) {
       startingRef.current = false;
+      // 画面を離れたあとに失敗が返ってくることがある。表示する相手はもういない。
+      if (disposedRef.current) return;
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
 
