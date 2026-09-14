@@ -7,13 +7,9 @@ import type { WasshoiEvent } from '@/input/wasshoi/types';
 import { WasshoiDebug } from './WasshoiDebug';
 
 const stop = vi.fn<() => void>();
-const startRecording = vi.fn<() => void>();
-const stopRecording = vi.fn<() => Promise<Blob>>(() => Promise.resolve(new Blob(['wasshoi'])));
+const playWasshoi = vi.fn<(event: WasshoiEvent) => Promise<boolean>>(() => Promise.resolve(true));
 const controller: WasshoiInputController = {
-  startRecording,
-  stopRecording,
-  isRecording: () => false,
-  playRecordedSample: () => Promise.resolve(true),
+  playWasshoi,
   stop,
 };
 
@@ -39,18 +35,15 @@ describe('WasshoiDebug', () => {
     expect(screen.getByRole('button', { name: 'マイク入力を有効にする' })).toBeInTheDocument();
   });
 
-  it('有効化後に本人のわっしょーいを録音できる', async () => {
+  it('有効化後は録音せずにわっしょーいエンジンをREADYにする', async () => {
     render(<WasshoiDebug />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'マイク入力を有効にする' }));
     });
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '「わっしょーい」を録音する' }));
-    });
-
-    expect(startRecording).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: '録音を完了する' })).toBeInTheDocument();
+    expect(screen.getByText('WASSHOI ENGINE')).toHaveTextContent('WASSHOI ENGINE');
+    expect(screen.getByText('READY')).toBeInTheDocument();
+    expect(screen.queryByText('「わっしょーい」を録音する')).not.toBeInTheDocument();
   });
 
   it('発話が終わると最後のWasshoiEventを表示する', async () => {
@@ -70,6 +63,8 @@ describe('WasshoiDebug', () => {
 
     expect(screen.getByLabelText('最後のWasshoiEvent')).toHaveTextContent('"intensity":0.72');
     expect(screen.getByLabelText('最後のWasshoiEvent')).toHaveTextContent('"durationMs":840');
+    expect(playWasshoi).toHaveBeenCalledWith({ type: 'WASSHOI', intensity: 0.72, durationMs: 840 });
+    expect(screen.getByText('PLAYED')).toBeInTheDocument();
   });
 
   it('画面を離れるとマイク入力を停止する', async () => {

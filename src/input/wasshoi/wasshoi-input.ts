@@ -1,4 +1,5 @@
 import { createVoiceActivityDetector } from './voice-activity-detector';
+import { playSystemWasshoi } from './system-wasshoi-engine';
 import {
   DEFAULT_VOICE_ACTIVITY_CONFIG,
   type VoiceActivityConfig,
@@ -14,11 +15,8 @@ export type WasshoiInputStatus =
   | 'error';
 
 export interface WasshoiInputController {
-  startRecording(): void;
-  stopRecording(): Promise<Blob>;
-  isRecording(): boolean;
-  /** 録音済みの本人Sampleを、許可済みのAudioContextから再生する。 */
-  playRecordedSample(event: WasshoiEvent): Promise<boolean>;
+  /** システム生成のわっしょーいを、許可済みのAudioContextから再生する。 */
+  playWasshoi(event: WasshoiEvent): Promise<boolean>;
   stop(): void;
 }
 
@@ -50,7 +48,7 @@ function toStatus(error: unknown): WasshoiInputStatus {
 
 /**
  * Pay大輔用のマイク入力。生音声を出力先へconnectせず、RMSから作った
- * WasshoiEventだけを外へ出す。録音したSampleも現在のブラウザセッションだけに保持する。
+ * WasshoiEventだけを外へ出す。マイクの生音声は出力先へ接続・保存しない。
  */
 export async function attachWasshoiInput(
   onEvent: (event: WasshoiEvent) => void,
@@ -72,9 +70,6 @@ export async function attachWasshoiInput(
   let source: MediaStreamAudioSourceNode | null = null;
   let analyser: AnalyserNode | null = null;
   let timerId: number | null = null;
-  let recorder: MediaRecorder | null = null;
-  let recordingResult: Promise<Blob> | null = null;
-  let recordedSample: AudioBuffer | null = null;
   let stopped = false;
   let lastEvent: WasshoiEvent | null = null;
 
@@ -130,8 +125,6 @@ export async function attachWasshoiInput(
     if (stopped) return;
     stopped = true;
     if (timerId !== null) window.clearInterval(timerId);
-    if (recorder?.state === 'recording') recorder.stop();
-
     const finalEvent = detector.reset();
     if (finalEvent !== null) onEvent(finalEvent);
     source?.disconnect();
@@ -145,65 +138,7 @@ export async function attachWasshoiInput(
   options.onStatusChange?.('active');
 
   return {
-    startRecording() {
-      if (stopped) throw new Error('マイク入力が停止しています');
-      if (recorder?.state === 'recording') return;
-      if (typeof MediaRecorder === 'undefined')
-        throw new Error('このブラウザは録音に対応していません');
-
-      const chunks: BlobPart[] = [];
-      const activeRecorder = new MediaRecorder(stream);
-      recorder = activeRecorder;
-      recordingResult = new Promise<Blob>((resolve, reject) => {
-        activeRecorder.addEventListener('dataavailable', (event) => chunks.push(event.data));
-        activeRecorder.addEventListener('error', () =>
-          reject(new Error('わっしょーい録音に失敗しました')),
-        );
-        activeRecorder.addEventListener('stop', () =>
-          resolve(new Blob(chunks, { type: activeRecorder.mimeType || 'audio/webm' })),
-        );
-      });
-      activeRecorder.start();
-    },
-    async stopRecording() {
-      if (recorder?.state !== 'recording' || recordingResult === null) {
-        throw new Error('録音を開始していません');
-      }
-      recorder.stop();
-      const blob = await recordingResult;
-      // audio要素のplay()はタイマー起点だと自動再生制限に止められることがある。
-      // マイク許可時に開始済みのAudioContextへデコードしておけば、発話終了時にも
-      // 確実に「わっしょーい」を鳴らせる。
-      recordedSample = await context.decodeAudioData(await blob.arrayBuffer());
-      return blob;
-    },
-    isRecording: () => recorder?.state === 'recording',
-    async playRecordedSample(event) {
-      if (stopped || recordedSample === null) return false;
-      try {
-        // 入力だけを解析している間、ブラウザがContextをsuspendすることがある。
-        // 再生直前に再開してからBufferSourceを作ることで、発話終了後にも鳴らす。
-        if (context.state === 'suspended') await context.resume();
-        if (context.state !== 'running') return false;
-
-        const sourceNode = context.createBufferSource();
-        const gainNode = context.createGain();
-        sourceNode.buffer = recordedSample;
-        gainNode.gain.value = 0.15 + event.intensity * 0.85;
-        // 長い発話ほどゆっくり、短い発話ほど速くする。内容は一切反映しない。
-        sourceNode.playbackRate.value = Math.min(
-          1.6,
-          Math.max(0.65, 700 / Math.max(250, event.durationMs)),
-        );
-        sourceNode.connect(gainNode);
-        gainNode.connect(context.destination);
-        sourceNode.start();
-        return true;
-      } catch (error) {
-        console.error('録音済みわっしょーいの再生に失敗', error);
-        return false;
-      }
-    },
+    playWasshoi: (event) => (stopped ? Promise.resolve(false) : playSystemWasshoi(context, event)),
     stop: () => stop(),
   };
 }
