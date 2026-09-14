@@ -15,6 +15,11 @@ import { WorldScene } from './WorldScene';
 /** 現在の戦闘フィールドの広さ。既存の見た目を維持する (Issue #41)。 */
 const COMBAT_GROUND_SIZE = 24;
 
+/** Combat用の背景色。戦闘の暗い雰囲気を維持する。 */
+const COMBAT_BACKGROUND = '#14121f';
+/** ワールド探索モード用の空色。簡易ステージが屋外に見えるようにする。 */
+const WORLD_BACKGROUND = '#8fc7e8';
+
 /**
  * Phase 1 の最小3D Scene。
  * 2.5D固定カメラ型を想定しているため、Camera は原則固定とする。
@@ -26,9 +31,9 @@ export function GameScene(): React.JSX.Element {
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>
-      <color attach="background" args={['#14121f']} />
+      <color attach="background" args={[showWorldScene ? WORLD_BACKGROUND : COMBAT_BACKGROUND]} />
 
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={showWorldScene ? 0.7 : 0.4} />
       <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
 
       {showWorldScene ? (
