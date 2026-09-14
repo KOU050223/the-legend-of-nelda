@@ -56,9 +56,13 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  /* 縁取りは text-stroke だと塗りを潰すので、影を四方へ重ねて作る。 */
-  filter: drop-shadow(2px 0 0 #8c3c1a) drop-shadow(-2px 0 0 #8c3c1a) drop-shadow(0 2px 0 #8c3c1a)
-    drop-shadow(0 -2px 0 #8c3c1a) drop-shadow(0 5px 0 #6e2a1288);
+  /*
+   * 縁取りは text-stroke だと塗りを潰すので、影を四方へ重ねて作る。
+   * drop-shadow は前段の結果をさらに縁取るので、指定値がそのまま太さには
+   * ならない。1px でも四方に重なれば縁として十分に出る。
+   */
+  filter: drop-shadow(1px 0 0 #8c3c1a) drop-shadow(-1px 0 0 #8c3c1a) drop-shadow(0 1px 0 #8c3c1a)
+    drop-shadow(0 -1px 0 #8c3c1a) drop-shadow(0 4px 0 #6e2a1277);
 }
 
 .subtitle {
