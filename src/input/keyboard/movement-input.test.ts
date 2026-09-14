@@ -83,6 +83,24 @@ describe('attachMovementInput', () => {
     expect(adapter.getInput()).toEqual({ forward: -1, right: -1 });
   });
 
+  it('前進と後退のキーを同時に押すと forward は 0 で打ち消し合う', () => {
+    adapter = attachMovementInput();
+
+    dispatchKeyDown('KeyW');
+    dispatchKeyDown('KeyS');
+
+    expect(adapter.getInput()).toEqual({ forward: 0, right: 0 });
+  });
+
+  it('左と右のキーを同時に押すと right は 0 で打ち消し合う', () => {
+    adapter = attachMovementInput();
+
+    dispatchKeyDown('KeyA');
+    dispatchKeyDown('KeyD');
+
+    expect(adapter.getInput()).toEqual({ forward: 0, right: 0 });
+  });
+
   it('同じ方向に割り当たったキー (KeyW と ArrowUp) を同時押ししても forward は 1 のまま', () => {
     // 各キーを押されたぶんだけ加算すると、KeyW + ArrowUp + KeyD が
     // {forward: 2, right: 1} になり、moveCharacter の normalize が

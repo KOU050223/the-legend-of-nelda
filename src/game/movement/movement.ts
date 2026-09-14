@@ -20,7 +20,7 @@ export function moveCharacter({
   const { forward, right } = input;
 
   const length = Math.hypot(forward, right);
-  if (length === 0) return position;
+  if (length === 0) return { x: position.x, z: position.z };
 
   const normalizedForward = forward / length;
   const normalizedRight = right / length;

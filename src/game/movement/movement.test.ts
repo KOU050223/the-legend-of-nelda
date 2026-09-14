@@ -73,6 +73,21 @@ describe('moveCharacter', () => {
     expect(next).toEqual(position);
   });
 
+  it('入力なしのときも呼び出し元の position オブジェクトとは別の値を返す', () => {
+    // 入力ありの経路は常に新しいオブジェクトを作るため、入力なしの経路だけ
+    // 呼び出し元の position をそのまま返すと、呼び出し側がその後 position を
+    // 書き換えたときに意図せず影響してしまう非対称さがある。
+    const position = { x: 1.5, z: -2.5 };
+    const next = moveCharacter({
+      position,
+      input: { forward: 0, right: 0 },
+      speed: 4,
+      delta: 0.5,
+    });
+
+    expect(next).not.toBe(position);
+  });
+
   it('delta = 0.5, speed = 4 なら2 units移動する', () => {
     const next = moveCharacter({
       position: { x: 0, z: 0 },
@@ -101,5 +116,11 @@ describe('facingRotationY', () => {
 
   it('right = 1 のとき -90度 (-π/2) を向く', () => {
     expect(facingRotationY({ forward: 0, right: 1 })).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it('right = -1 のとき +90度 (π/2) を向く', () => {
+    // right軸の符号を反転させ間違えると片側でしか気づけないため、
+    // 正負両方を確認する。
+    expect(facingRotationY({ forward: 0, right: -1 })).toBeCloseTo(Math.PI / 2);
   });
 });
