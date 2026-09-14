@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { ResultCamera } from '../result/ResultCamera';
 
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
@@ -7,7 +7,7 @@ import { PlayerMesh } from '../player/PlayerMesh';
 /**
  * Phase 1 の最小3D Scene。
  * 2.5D固定カメラ型を想定しているため、Camera は原則固定とする。
- * OrbitControls は Graybox 確認用で、本実装で外してよい。
+ * 決着時のみ ResultCamera が固定位置から演出する。
  * (docs/technical-design.md §3.1)
  */
 export function GameScene(): React.JSX.Element {
@@ -26,7 +26,7 @@ export function GameScene(): React.JSX.Element {
         <meshStandardMaterial color="#241f33" />
       </mesh>
 
-      <OrbitControls enablePan={false} />
+      <ResultCamera />
     </Canvas>
   );
 }

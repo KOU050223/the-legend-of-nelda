@@ -10,6 +10,7 @@ import {
 } from '@/game/sequence/attack-sequence';
 import type { PlayerAction } from '@/game/types';
 import { useGameStore } from '@/store/game-store';
+import { syncResultWithGameEvents } from '@/ui/result/result-presentation';
 import { syncHudWithGameEvents } from '@/ui/hud/game-event-sync';
 
 /**
@@ -77,6 +78,8 @@ export function createCombatSession({
   sequence,
   idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS,
 }: CombatSessionOptions = {}): CombatSession {
+  useGameStore.getState().reset();
+  let disposed = false;
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
 
@@ -116,11 +119,14 @@ export function createCombatSession({
   useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
 
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
+  const resultPresentation = syncResultWithGameEvents(eventBus, clock);
 
   /** IDLE へ入った時刻。次の技を出すまでの間隔をここから測る。 */
   let idleSince: number | null = null;
 
   const stopLoop = frameLoop(() => {
+    if (disposed) return;
+    resultPresentation.update();
     controller.update();
     machine.update();
 
@@ -167,11 +173,15 @@ export function createCombatSession({
     eventBus,
 
     submitAction(action) {
+      if (disposed || machine.state === 'BOSS_DEFEATED' || machine.state === 'PLAYER_LOSE') return;
       controller.submitAction(action);
     },
 
     dispose() {
+      if (disposed) return;
+      disposed = true;
       stopLoop();
+      resultPresentation.dispose();
       unsubscribeHud();
       controller.dispose();
     },

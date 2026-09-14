@@ -251,6 +251,8 @@ describe('createCombatSession', () => {
     // 決着は最終手。チュートリアルの布団で満たされない形で確かめる。
     expect(steps.at(-1)).toEqual({ index: 11, phase: 'MAIN', attackId: 'FLUFFY_FUTON' });
     expect(useGameStore.getState().combatState).toBe('BOSS_DEFEATED');
+    // RESULT-002: 最終布団FINISHも通常の勝利演出へ接続する。
+    expect(useGameStore.getState().result?.outcome).toBe('victory');
   });
 
   it('チュートリアルの反撃ではボスHPを削らない', () => {
