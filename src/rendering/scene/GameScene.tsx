@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { ResultCamera } from '../result/ResultCamera';
 
 import { readPresentationSettings } from '@/presentation/presentation-store';
 
@@ -10,7 +10,7 @@ import { VfxScene } from '../vfx/VfxScene';
 /**
  * Phase 1 の最小3D Scene。
  * 2.5D固定カメラ型を想定しているため、Camera は原則固定とする。
- * OrbitControls は Graybox 確認用で、本実装で外してよい。
+ * 決着時のみ ResultCamera が固定位置から演出する。
  * (docs/technical-design.md §3.1)
  */
 export function GameScene(): React.JSX.Element {
@@ -23,8 +23,7 @@ export function GameScene(): React.JSX.Element {
 
       {/*
         カメラシェイクはシーンの中身を包んだ group を動かして表現する。
-        OrbitControls が毎フレーム camera を上書きするため、camera 自体を
-        揺らしても打ち消される。
+        通常戦闘のVFXはgroup、決着後のカメラはResultCameraが担当する。
       */}
       <VfxScene getSettings={readPresentationSettings}>
         <BossMesh />
@@ -36,7 +35,7 @@ export function GameScene(): React.JSX.Element {
         </mesh>
       </VfxScene>
 
-      <OrbitControls enablePan={false} />
+      <ResultCamera />
     </Canvas>
   );
 }

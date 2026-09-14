@@ -12,8 +12,10 @@ import {
 } from '@/game/sequence/attack-sequence';
 import type { PlayerAction } from '@/game/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
+import { useVfxStore } from '@/rendering/vfx/vfx-store';
 import { syncVfxWithGameEvents } from '@/rendering/vfx/vfx-sync';
 import { useGameStore } from '@/store/game-store';
+import { syncResultWithGameEvents } from '@/ui/result/result-presentation';
 import { syncHudWithGameEvents } from '@/ui/hud/game-event-sync';
 
 /**
@@ -89,6 +91,9 @@ export function createCombatSession({
   idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS,
   audioOutput = createHtmlAudioOutput(),
 }: CombatSessionOptions = {}): CombatSession {
+  useGameStore.getState().reset();
+  useVfxStore.getState().clear();
+  let disposed = false;
   const eventBus = createGameEventBus();
   const vitals = createCombatVitals({ eventBus });
 
@@ -128,6 +133,7 @@ export function createCombatSession({
   useGameStore.getState().recordSequenceStep({ phase: attackSequence.phase, assist: false });
 
   const unsubscribeHud = syncHudWithGameEvents(eventBus);
+  const resultPresentation = syncResultWithGameEvents(eventBus, clock);
 
   // 演出は HUD と同じく「イベントを購読して状態を書く」だけの購読者として足す。
   // Game Logic 側は購読者の有無を知らないので、ここを外しても戦闘は変わらない
@@ -146,6 +152,8 @@ export function createCombatSession({
   let idleSince: number | null = null;
 
   const stopLoop = frameLoop(() => {
+    if (disposed) return;
+    resultPresentation.update();
     controller.update();
     machine.update();
 
@@ -192,13 +200,18 @@ export function createCombatSession({
     eventBus,
 
     submitAction(action) {
+      if (disposed || machine.state === 'BOSS_DEFEATED' || machine.state === 'PLAYER_LOSE') return;
       controller.submitAction(action);
     },
 
     dispose() {
+      if (disposed) return;
+      disposed = true;
       stopLoop();
+      resultPresentation.dispose();
       unsubscribeHud();
       unsubscribeVfx();
+      useVfxStore.getState().clear();
       disposeAudio();
       controller.dispose();
     },

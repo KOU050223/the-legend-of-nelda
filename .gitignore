@@ -10,8 +10,8 @@ dist/
 
 # nix / direnv
 .direnv/
-result
-result-*
+/result
+/result-*
 
 # test
 coverage/

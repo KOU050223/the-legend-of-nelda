@@ -25,6 +25,8 @@ export type EventFeedback =
  * 戦闘ルールそのものはここではなく src/game/ 側へ置く。
  */
 interface GameStore {
+  result: { outcome: 'victory' | 'defeat'; elapsedMs: number } | null;
+  reset: () => void;
   combatState: CombatState;
   bossHp: number;
   /** ボスHPゲージの分母。戦闘生成時の設定値をそのまま持つ。 */
@@ -62,6 +64,8 @@ interface GameStore {
 }
 
 export const useGameStore = create<GameStore>((set) => ({
+  result: null,
+  reset: () => set(useGameStore.getInitialState()),
   combatState: 'INTRO',
   bossHp: INITIAL_BOSS_HP,
   bossHpMax: INITIAL_BOSS_HP,
