@@ -12,6 +12,7 @@ Phase 1 では **1人用ボス戦 PoC** を実装する。基準環境は Deskto
 - [`docs/testing-strategy.md`](./docs/testing-strategy.md) — テスト方針
 - [`docs/testing-guide.md`](./docs/testing-guide.md) — テストの書き方・追加方法
 - [`docs/dependency-policy.md`](./docs/dependency-policy.md) — 依存バージョン方針
+- [`docs/deployment.md`](./docs/deployment.md) — Cloudflare Workers へのデプロイ・URL確認
 
 ---
 
@@ -64,6 +65,7 @@ pnpm dev
 | `pnpm typecheck`    | TypeScript の型チェックのみ実行する               |
 | `pnpm test`         | Vitest を1回実行する                              |
 | `pnpm test:watch`   | Vitest を watch モードで実行する                  |
+| `pnpm deploy`       | ビルドしてCloudflare Workersへデプロイする        |
 | `pnpm deps:check`   | 依存の更新有無を確認する                          |
 
 ---
@@ -148,6 +150,27 @@ push 前にローカルで同じ順に流しておくとよい。
 ```bash
 pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
 ```
+
+---
+
+## デプロイ
+
+フロントエンドは **Cloudflare Workers (Static Assets)** へデプロイする。
+デプロイは Cloudflare Workers Builds（CloudflareのGit連携）が実行し、GitHub Actions からは行わない。
+
+```text
+本番URL            https://nelda.uozumi05.workers.dev        （main へマージで更新）
+ブランチプレビュー  PR作成時に自動発行され、PRコメントへ投稿される
+```
+
+ローカルからデプロイする場合:
+
+```bash
+pnpm deploy   # pnpm build && wrangler deploy
+```
+
+URLの形式・Cloudflare側の設定・失敗時の確認箇所は
+[`docs/deployment.md`](./docs/deployment.md) を参照する。
 
 ---
 

@@ -1,0 +1,26 @@
+{
+  // Cloudflare Workers (Static Assets) のデプロイ設定。
+  // 詳細とダッシュボード側の設定は docs/deployment.md を参照する。
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  // ダッシュボード上の Worker 名と一致させること。
+  // 一致しないと Workers Builds が
+  // "The name in your Wrangler configuration file ... must match the name of your Worker"
+  // で失敗する。ブランチプレビュー URL の alias 長を抑えるため短くしている。
+  "name": "nelda",
+
+  "compatibility_date": "2026-09-14",
+
+  // https://<name>.<subdomain>.workers.dev を有効にする（本番 URL）。
+  "workers_dev": true,
+
+  // https://<version>-<name>.<subdomain>.workers.dev を有効にする（プレビュー URL）。
+  "preview_urls": true,
+
+  // Vite のビルド成果物（dist/）をそのまま配信する。
+  // Worker スクリプト（main）は持たず、静的アセットのみの Worker とする。
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+  },
+}
