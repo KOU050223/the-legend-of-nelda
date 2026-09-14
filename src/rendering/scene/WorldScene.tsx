@@ -1,71 +1,17 @@
-import { useRef } from 'react';
-import type { Group } from 'three';
-
-import { ARENA_BOUNDS, SPAWN_POINTS } from '@/game/arena/arena';
-import type { MovementInput, PlanarPosition } from '@/game/movement/types';
-
-import { GameCamera } from '../camera/GameCamera';
-import { CharacterModel } from '../character/CharacterModel';
-import { PlayerCharacter } from '../character/PlayerCharacter';
-import { World } from '../world/World';
+import { BossArenaScene } from '../boss/BossArenaScene';
 
 /**
- * 3人ぶんの見た目の色。役割の割り当て (誰がどれか) は #45 / #55 で決まるため、
- * ここではスポーン地点の並び順に色を当てるだけにする。
- */
-const CHARACTER_COLORS = ['#e07a3f', '#3f8f5f', '#5f7fd0'] as const;
-
-const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
-
-export interface WorldSceneProps {
-  getInput: () => MovementInput;
-}
-
-/**
- * ボスアリーナのシーン (Issue #54)。
+ * ワールド。草原に堀大輔が居て、その場で戦う。
  *
- * 3人分のスポーン地点にキャラクターを立て、そのうち1体を入力で動かす。
- * 残り2体は位置の確認用で、動かす手段 (入力の多重化・通信) は #55 / #47 の担当。
+ * 戦闘専用の別マップ・別シーンは作らない
+ * (docs/phase2-gameplay-spec.md §2「1つの広めのボスマップ」
+ * 「マップそのものをボス戦ギミックの一部として利用する」)。探索用と
+ * 戦闘用でシーンを分けると、草原の定義が二重になり、片方だけ直して
+ * もう片方がずれる。
  *
- * Combat向けの GameScene とは責務を分け、Player Character + Follow Camera +
- * World を組み合わせる。既存Combatの見た目・挙動には影響しない。
+ * 中身 (World / ボス / プレイヤー / 追従カメラ) は BossArenaScene が持つ。
+ * ここは GameScene から呼ばれる入口としてだけ残してある。
  */
-export function WorldScene({ getInput }: WorldSceneProps): React.JSX.Element {
-  const characterRoot = useRef<Group>(null);
-
-  return (
-    <>
-      <World />
-      <StandbyCharacter spawn={LEFT_SPAWN} color={CHARACTER_COLORS[0]} />
-      <PlayerCharacter
-        root={characterRoot}
-        getInput={getInput}
-        spawn={PLAYER_SPAWN}
-        bounds={ARENA_BOUNDS}
-        color={CHARACTER_COLORS[1]}
-      />
-      <StandbyCharacter spawn={RIGHT_SPAWN} color={CHARACTER_COLORS[2]} />
-      <GameCamera mode="follow" followTarget={characterRoot} />
-    </>
-  );
-}
-
-/**
- * 動かないキャラクター。スポーン地点が3人分あることを確かめるために立てる。
- *
- * 位置を毎フレーム書き換えないので、`position` を宣言的に渡してよい
- * (動く側の PlayerCharacter が初期化時に一度だけ当てているのとは事情が違う)。
- */
-function StandbyCharacter({
-  spawn,
-  color,
-}: {
-  spawn: PlanarPosition;
-  color: string;
-}): React.JSX.Element {
-  return (
-    <group position={[spawn.x, 0, spawn.z]}>
-      <CharacterModel color={color} />
-    </group>
-  );
+export function WorldScene(): React.JSX.Element {
+  return <BossArenaScene />;
 }

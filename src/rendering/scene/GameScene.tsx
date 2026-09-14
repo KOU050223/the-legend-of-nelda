@@ -1,10 +1,8 @@
-import { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ResultCamera } from '../result/ResultCamera';
 
 import { readPresentationSettings } from '@/presentation/presentation-store';
-import { attachMovementInput, type MovementInputAdapter } from '@/input/keyboard/movement-input';
-import { isWorldSceneRequested } from '@/app/scene-mode';
+import { requestedScene } from '@/app/scene-mode';
 
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
@@ -24,7 +22,7 @@ export interface GameSceneProps {
   /**
    * ワールド探索モードの中身を出すかどうか。
    *
-   * 呼び出し側が決める。ここで `isWorldSceneRequested()` を直接見ると、
+   * 呼び出し側が決める。ここで URL を直接見ると、
    * URLに `?scene=world` が無いままタイトルの「ワールドへ」で遷移したとき、
    * 画面はワールドのつもりなのに Combat の中身が描かれてしまうため。
    * 省略時は従来どおりURLで決める (既存の呼び出しを変えない)。
@@ -39,7 +37,7 @@ export interface GameSceneProps {
  * (docs/technical-design.md §3.1)
  */
 export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
-  const showWorldScene = world ?? isWorldSceneRequested();
+  const showWorldScene = world ?? requestedScene() === 'world';
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>
@@ -49,7 +47,7 @@ export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
       <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
 
       {showWorldScene ? (
-        <WorldSceneEntry />
+        <WorldScene />
       ) : (
         <>
           {/*
@@ -68,26 +66,4 @@ export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
       )}
     </Canvas>
   );
-}
-
-/**
- * Canvas の子として movement input を購読する。
- *
- * `attachMovementInput` は DOM の keydown/keyup/blur を window へ登録する。
- * App.tsx の Battle と同じ理由 (StrictMode の二重マウントでも購読が二重に
- * 残らないようにするため) で、生成と破棄を同じ Effect に閉じ込める。
- */
-function WorldSceneEntry(): React.JSX.Element {
-  const adapterRef = useRef<MovementInputAdapter | null>(null);
-
-  useEffect(() => {
-    const adapter = attachMovementInput();
-    adapterRef.current = adapter;
-    return () => {
-      adapter.detach();
-      adapterRef.current = null;
-    };
-  }, []);
-
-  return <WorldScene getInput={() => adapterRef.current?.getInput() ?? { forward: 0, right: 0 }} />;
 }

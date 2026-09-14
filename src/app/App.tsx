@@ -43,9 +43,9 @@ export function App(): React.JSX.Element {
 
   if (screen === 'TITLE') return <TitleScreen />;
 
-  // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
-  // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
-  // 時計・入力ロックが進んでしまい、Character基盤の確認にならない。
+  // ワールドは Phase 1 の戦闘一式を起動しない。あちらは PlayerAction 前提で、
+  // WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の時計・入力ロックが
+  // 進んでしまう。Phase 2 は GameAction で動く (docs/technical-design.md §5.2)。
   if (screen === 'WORLD') {
     return (
       <div className={styles.root}>

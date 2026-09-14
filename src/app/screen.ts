@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 
-import { isWorldSceneRequested } from './scene-mode';
+import { requestedScene } from './scene-mode';
 
 /**
  * ルートに出す画面。Issue #63 でタイトルを入口にしたが、ルーターは足していない。
- * 画面数が「タイトル / 戦闘 / ワールド」の3つで、URLを共有したい要求も
- * 出ていないため、依存を増やさず store だけで切り替える。
+ * 画面数が少なく、URLを共有したい要求も出ていないため、依存を増やさず
+ * store だけで切り替える。
  */
 export type Screen = 'TITLE' | 'BATTLE' | 'WORLD';
 
@@ -15,11 +15,22 @@ interface ScreenStore {
 }
 
 /**
- * `?scene=world` を踏んだときはタイトルを挟まない。既存の動作確認手順
+ * `?scene=` を踏んだときはタイトルを挟まない。既存の動作確認手順
  * (scene-mode.ts) をタイトル経由に変えてしまわないため。
+ *
+ * 指定が無ければタイトルから始まる。`scene-mode.ts` の既定は `combat` だが、
+ * 戦闘へ直接入るのではなくタイトルを経由するのが Issue #63 以降の入口。
  */
 function initialScreen(): Screen {
-  return isWorldSceneRequested() ? 'WORLD' : 'TITLE';
+  switch (requestedScene()) {
+    case 'world':
+      return 'WORLD';
+    case 'combat':
+      return 'BATTLE';
+    default:
+      // 指定なし / 知らない名前。タイトルから始める。
+      return 'TITLE';
+  }
 }
 
 export const useScreenStore = create<ScreenStore>((set) => ({

@@ -80,4 +80,15 @@ describe('ルートの画面遷移', () => {
 
     expect(gameSceneProps.at(-1)?.world).toBeFalsy();
   });
+
+  it('ワールドでは Phase 1 の戦闘一式を起動しない (#58)', () => {
+    // ワールドには堀大輔が居て Phase 2 の戦闘が動く。Phase 1 は
+    // PlayerAction 前提でキー割り当ても噛み合わず、両方起動すると
+    // WASD が移動と回避の両方に解釈される。
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ワールドへ' }));
+
+    expect(screen.queryByRole('region', { name: '演出設定' })).not.toBeInTheDocument();
+  });
 });
