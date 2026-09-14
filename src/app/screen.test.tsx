@@ -18,13 +18,34 @@ vi.mock('@/rendering/scene/GameScene', () => ({
   },
 }));
 
+/**
+ * 確認用ページは 3D Canvas を持つため jsdom では描けない。ここで見たいのは
+ * 「?debug=hori でこの画面へ入るか」だけなので、目印に差し替える。
+ */
+vi.mock('@/ui/hori-debug/HoriDebugPage', () => ({
+  HoriDebugPage: () => <div data-testid="hori-debug" />,
+}));
+
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     useGameStore.getState().reset();
     useScreenStore.setState({ screen: 'TITLE' });
     gameSceneProps.length = 0;
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('?debug=hori はタイトルを経由せずモデル確認画面を出す', () => {
+    window.history.replaceState({}, '', '/?debug=hori');
+
+    render(<App />);
+
+    expect(screen.getByTestId('hori-debug')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
+  });
 
   it('最初に開くのはタイトルで、戦闘は始まっていない (Issue #63)', () => {
     render(<App />);

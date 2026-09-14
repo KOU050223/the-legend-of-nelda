@@ -10,6 +10,7 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 
 import { useScreenStore } from './screen';
 import { createCombatSession } from './combat-session';
@@ -29,10 +30,15 @@ const MicrophoneDebug = import.meta.env.DEV
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
 
-  // `?debug=ora` はタイトルより先に見る。URLで直接開く動作確認用の入口なので、
-  // タイトルを経由させると既存の手順が変わってしまう (`?scene=world` と同じ扱い)。
-  if (new URLSearchParams(window.location.search).get('debug') === 'ora') {
+  // `?debug=ora` `?debug=hori` はタイトルより先に見る。URLで直接開く動作確認用の
+  // 入口なので、タイトルを経由させると既存の手順が変わってしまう
+  // (`?scene=world` と同じ扱い)。
+  const debug = new URLSearchParams(window.location.search).get('debug');
+  if (debug === 'ora') {
     return <OraDebugPage />;
+  }
+  if (debug === 'hori') {
+    return <HoriDebugPage />;
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
