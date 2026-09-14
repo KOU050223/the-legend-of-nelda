@@ -43,7 +43,7 @@ export function App(): React.JSX.Element {
   if (screen === 'WORLD') {
     return (
       <div className={styles.root}>
-        <GameScene />
+        <GameScene world />
         <MicrophoneDebugPanel />
       </div>
     );

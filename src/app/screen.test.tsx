@@ -6,12 +6,23 @@ import { useGameStore } from '@/store/game-store';
 import { App } from './App';
 import { useScreenStore } from './screen';
 
-vi.mock('@/rendering/scene/GameScene', () => ({ GameScene: () => null }));
+/**
+ * GameScene は中身ではなく「ワールドとして描くよう伝えられたか」だけ見たいので、
+ * 受け取った props を記録するだけのモックに差し替える。
+ */
+const gameSceneProps: { world?: boolean }[] = [];
+vi.mock('@/rendering/scene/GameScene', () => ({
+  GameScene: (props: { world?: boolean }) => {
+    gameSceneProps.push(props);
+    return null;
+  },
+}));
 
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
     useGameStore.getState().reset();
     useScreenStore.setState({ screen: 'TITLE' });
+    gameSceneProps.length = 0;
   });
   afterEach(cleanup);
 
@@ -29,5 +40,23 @@ describe('ルートの画面遷移', () => {
 
     expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: '演出設定' })).toBeInTheDocument();
+  });
+
+  it('「ワールドへ」で出るのは戦闘ではなくワールドの中身 (Issue #63)', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ワールドへ' }));
+
+    // URL に ?scene=world が無くても、画面がワールドならワールドとして描く。
+    // ここが戦闘のままだと、リンク先が Combat の見た目になってしまう。
+    expect(gameSceneProps.at(-1)?.world).toBe(true);
+  });
+
+  it('戦闘画面はワールドとして描かない (Issue #63)', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+
+    expect(gameSceneProps.at(-1)?.world).toBeFalsy();
   });
 });

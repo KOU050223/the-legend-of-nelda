@@ -20,14 +20,26 @@ const COMBAT_BACKGROUND = '#14121f';
 /** ワールド探索モード用の空色。簡易ステージが屋外に見えるようにする。 */
 const WORLD_BACKGROUND = '#8fc7e8';
 
+export interface GameSceneProps {
+  /**
+   * ワールド探索モードの中身を出すかどうか。
+   *
+   * 呼び出し側が決める。ここで `isWorldSceneRequested()` を直接見ると、
+   * URLに `?scene=world` が無いままタイトルの「ワールドへ」で遷移したとき、
+   * 画面はワールドのつもりなのに Combat の中身が描かれてしまうため。
+   * 省略時は従来どおりURLで決める (既存の呼び出しを変えない)。
+   */
+  world?: boolean;
+}
+
 /**
  * Phase 1 の最小3D Scene。
  * 2.5D固定カメラ型を想定しているため、Camera は原則固定とする。
  * 決着時のみ ResultCamera が固定位置から演出する。
  * (docs/technical-design.md §3.1)
  */
-export function GameScene(): React.JSX.Element {
-  const showWorldScene = isWorldSceneRequested();
+export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
+  const showWorldScene = world ?? isWorldSceneRequested();
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>

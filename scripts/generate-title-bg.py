@@ -1,5 +1,6 @@
 from PIL import Image
-import math, random
+import random
+from pathlib import Path
 
 W, H = 320, 180
 im = Image.new('RGB', (W, H))
@@ -200,6 +201,8 @@ flat = [v for c in used for v in c][: 256 * 3]
 pal.putpalette(flat + [0] * (768 - len(flat)))
 im = im.quantize(palette=pal, dither=Image.NONE).convert('RGB')
 print('colors', len(used))
-im.save('/private/tmp/claude-501/-Users-uozumikouhei-orca-workspaces-the-legend-of-nelda-feat-title-page/d6ab8b5b-0522-4bde-bde5-3086212f2ba9/scratchpad/bg.png')
-im.resize((W * 4, H * 4), Image.NEAREST).save('/private/tmp/claude-501/-Users-uozumikouhei-orca-workspaces-the-legend-of-nelda-feat-title-page/d6ab8b5b-0522-4bde-bde5-3086212f2ba9/scratchpad/bg-preview.png')
-print('ok')
+# 出力先はこのスクリプトの位置から辿る。実行するディレクトリに依存させない。
+OUT = Path(__file__).resolve().parent.parent / 'public' / 'title' / 'bg.png'
+OUT.parent.mkdir(parents=True, exist_ok=True)
+im.save(OUT)
+print('wrote', OUT)
