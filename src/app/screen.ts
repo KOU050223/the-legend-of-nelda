@@ -7,7 +7,7 @@ import { requestedScene } from './scene-mode';
  * 画面数が少なく、URLを共有したい要求も出ていないため、依存を増やさず
  * store だけで切り替える。
  */
-export type Screen = 'TITLE' | 'BATTLE' | 'WORLD' | 'BOSS';
+export type Screen = 'TITLE' | 'BATTLE' | 'WORLD';
 
 interface ScreenStore {
   screen: Screen;
@@ -22,14 +22,7 @@ interface ScreenStore {
  * 戦闘へ直接入るのではなくタイトルを経由するのが Issue #63 以降の入口。
  */
 function initialScreen(): Screen {
-  switch (requestedScene()) {
-    case 'world':
-      return 'WORLD';
-    case 'boss':
-      return 'BOSS';
-    default:
-      return 'TITLE';
-  }
+  return requestedScene() === 'world' ? 'WORLD' : 'TITLE';
 }
 
 export const useScreenStore = create<ScreenStore>((set) => ({

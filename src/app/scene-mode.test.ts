@@ -10,15 +10,7 @@ describe('起動するシーンの選択', () => {
 
   it('名前を指定するとそのシーンになる', () => {
     expect(requestedScene('?scene=world')).toBe('world');
-    expect(requestedScene('?scene=boss')).toBe('boss');
     expect(requestedScene('?scene=combat')).toBe('combat');
-  });
-
-  it('ボス戦の入口が生きている (#58)', () => {
-    // ここが既定へ落ちると、ボス戦画面へ到達する経路が消える。
-    // タイトル画面の導入 (#63) でシーン選択の仕組みが変わったので、
-    // 動作確認手順が黙って壊れないよう固定しておく。
-    expect(requestedScene('?scene=boss')).toBe('boss');
   });
 
   it('知らない名前は既定へ落ちる', () => {

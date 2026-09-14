@@ -18,11 +18,6 @@ vi.mock('@/rendering/scene/GameScene', () => ({
   },
 }));
 
-/** ボス戦は WebGL を立ち上げるので、出たことだけ分かれば足りる。 */
-vi.mock('@/rendering/scene/BossScene', () => ({
-  BossScene: () => <div data-testid="boss-scene" />,
-}));
-
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
     useGameStore.getState().reset();
@@ -65,14 +60,14 @@ describe('ルートの画面遷移', () => {
     expect(gameSceneProps.at(-1)?.world).toBeFalsy();
   });
 
-  it('ボス戦画面では Phase 1 の戦闘一式を起動しない (#58)', () => {
-    // Phase 1 は PlayerAction 前提で、Phase 2 とはキー割り当ても噛み合わない。
-    // 両方起動すると WASD が移動と回避の両方に解釈される。
-    useScreenStore.setState({ screen: 'BOSS' });
+  it('ワールドでは Phase 1 の戦闘一式を起動しない (#58)', () => {
+    // ワールドには堀大輔が居て Phase 2 の戦闘が動く。Phase 1 は
+    // PlayerAction 前提でキー割り当ても噛み合わず、両方起動すると
+    // WASD が移動と回避の両方に解釈される。
     render(<App />);
 
-    expect(screen.getByTestId('boss-scene')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ワールドへ' }));
+
     expect(screen.queryByRole('region', { name: '演出設定' })).not.toBeInTheDocument();
-    expect(gameSceneProps).toHaveLength(0);
   });
 });

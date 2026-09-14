@@ -239,7 +239,7 @@ Input Source → Input Adapter → Action → Game Logic
 現在、出力する Action の型が2つ併存している。**どちらを触るかは、実装する
 シーンで決まる。**
 
-| | Phase 1（`?scene=combat`） | Phase 2（`?scene=boss`） |
+| | Phase 1（戦闘画面） | Phase 2（ワールド） |
 | --- | --- | --- |
 | Action 型 | `PlayerAction` | `GameAction` |
 | 値 | `DODGE_LEFT` / `DODGE_RIGHT` / `GUARD` / `ATTACK` | `MOVE` / `ATTACK` / `DODGE` / `INTERACT` / `REVIVE` / `CHARACTER_ACTION` |

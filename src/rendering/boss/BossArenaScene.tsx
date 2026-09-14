@@ -19,12 +19,12 @@ import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 
 /**
- * ワールドの草原で堀大輔と戦うシーン。(#55 / #56 / #58)
+ * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
  *
- * 戦闘専用の別画面は作らず、ワールド探索と同じ草原・同じ追従カメラの上に
- * ボスを置く。docs/phase2-gameplay-spec.md §2 が「1つの広めのボスマップ」
- * 「マップそのものをボス戦ギミックの一部として利用する」としているため、
- * 探索と戦闘で見た目が変わると、その前提が崩れる。
+ * 戦闘専用の別シーンは作らない。docs/phase2-gameplay-spec.md §2 が
+ * 「1つの広めのボスマップ」「マップそのものをボス戦ギミックの一部として
+ * 利用する」としているため、探索用と戦闘用へ分けると草原の定義が二重になり、
+ * 片方だけ直してもう片方がずれる。
  *
  * 危険範囲は判定に使う `DangerZone` をそのまま描く。表示用に別の形を
  * 作らないことが「危険範囲が視覚的に読める」(#58) の前提。
@@ -49,7 +49,7 @@ const BATTLE_CAMERA_OFFSET = new Vector3(0, 16, 18);
 /** 注視点はキャラの足元より少し先。ボスとの間を画面へ収める。 */
 const BATTLE_LOOK_AT_HEIGHT = 2;
 
-/** `?attack=WAKE_UP_ALARM` のように技を固定する。開発用の口。 */
+/** `?attack=WAKE_UP_ALARM` のように技を固定する。動作確認用の口。 */
 function pinnedAttackId(): HoriAttackId | null {
   if (typeof window === 'undefined') return null;
   const requested = new URLSearchParams(window.location.search).get('attack');

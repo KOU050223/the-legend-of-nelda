@@ -19,10 +19,13 @@
 export const SCENES = [
   /** Phase 1 の固定カメラ戦闘。現在の既定 (docs/technical-design.md §3.2)。 */
   'combat',
-  /** ワールド探索モード。Character基盤 (#41) の動作確認用。 */
+  /**
+   * ワールド。草原に堀大輔が居て、その場で戦う (#55 / #56 / #58)。
+   *
+   * 探索用と戦闘用でシーンは分けない
+   * (docs/phase2-gameplay-spec.md §2「1つの広めのボスマップ」)。
+   */
   'world',
-  /** 堀大輔とのボス戦。Phase 2 (#55 / #56 / #58)。 */
-  'boss',
 ] as const;
 
 export type SceneName = (typeof SCENES)[number];
@@ -31,7 +34,7 @@ export type SceneName = (typeof SCENES)[number];
 export const DEFAULT_SCENE: SceneName = 'combat';
 
 /** 開発ビルドでしか選べないシーン。 */
-const DEV_ONLY_SCENES: ReadonlySet<SceneName> = new Set<SceneName>(['world', 'boss']);
+const DEV_ONLY_SCENES: ReadonlySet<SceneName> = new Set<SceneName>(['world']);
 
 function isSceneName(value: string | null): value is SceneName {
   return value !== null && (SCENES as readonly string[]).includes(value);

@@ -1,9 +1,7 @@
-import { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ResultCamera } from '../result/ResultCamera';
 
 import { readPresentationSettings } from '@/presentation/presentation-store';
-import { attachMovementInput, type MovementInputAdapter } from '@/input/keyboard/movement-input';
 import { requestedScene } from '@/app/scene-mode';
 
 import { BossMesh } from '../boss/BossMesh';
@@ -49,7 +47,7 @@ export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
       <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
 
       {showWorldScene ? (
-        <WorldSceneEntry />
+        <WorldScene />
       ) : (
         <>
           {/*
@@ -68,26 +66,4 @@ export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
       )}
     </Canvas>
   );
-}
-
-/**
- * Canvas の子として movement input を購読する。
- *
- * `attachMovementInput` は DOM の keydown/keyup/blur を window へ登録する。
- * App.tsx の Battle と同じ理由 (StrictMode の二重マウントでも購読が二重に
- * 残らないようにするため) で、生成と破棄を同じ Effect に閉じ込める。
- */
-function WorldSceneEntry(): React.JSX.Element {
-  const adapterRef = useRef<MovementInputAdapter | null>(null);
-
-  useEffect(() => {
-    const adapter = attachMovementInput();
-    adapterRef.current = adapter;
-    return () => {
-      adapter.detach();
-      adapterRef.current = null;
-    };
-  }, []);
-
-  return <WorldScene getInput={() => adapterRef.current?.getInput() ?? { forward: 0, right: 0 }} />;
 }
