@@ -221,6 +221,9 @@ function toStatus(error: unknown): MicrophoneInputStatus {
     case 'NotFoundError':
     case 'OverconstrainedError':
       return 'device-not-found';
+    case 'NotReadableError':
+      // 他のアプリがマイクを掴んでいる場合など。デバイスはあるので区別する。
+      return 'error';
     default:
       return 'error';
   }
@@ -289,13 +292,34 @@ export async function attachMicrophoneNoteInput(
   // Constraint が無視される環境があるため、要求値ではなく実値を Debug UI へ出す。
   const trackSettings = stream.getAudioTracks()[0]?.getSettings() ?? null;
 
+  /** 解析が連続で失敗したら諦める閾値。 */
+  const MAX_CONSECUTIVE_FAILURES = 10;
+  let consecutiveFailures = 0;
+
   const analyze = (): void => {
     // 解析やリスナーが投げても 33ms ごとに例外を出し続けない。
     try {
       analyzeFrame();
+      consecutiveFailures = 0;
     } catch (error) {
       onDebug?.({ frame: null, accepted: false, trackSettings });
-      console.error('マイク入力の解析に失敗', error);
+
+      // 失敗フレームも無音として渡す。ここを飛ばすと note-off の猶予が進まず、
+      // 鳴りっぱなしのまま止まらなくなる。
+      const event = stabilizer.update(null, clock.now());
+      if (event !== null) onNote(event);
+
+      consecutiveFailures += 1;
+      if (consecutiveFailures === 1) {
+        console.error('マイク入力の解析に失敗', error);
+      }
+
+      // 毎フレーム失敗し続けるなら回復しない。ログと CPU を浪費せず畳む。
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.error('マイク入力の解析が続けて失敗したため停止する');
+        onStatusChange?.('error');
+        stopTimer(timerId);
+      }
     }
   };
 

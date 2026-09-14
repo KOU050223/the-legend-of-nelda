@@ -275,6 +275,80 @@ describe('attachMicrophoneNoteInput', () => {
     stop();
   });
 
+  // 解析が落ち続けても鳴りっぱなしにしない。note-off の猶予は進める必要がある。
+  it('解析が失敗し続けても鳴り終わったと通知する', async () => {
+    const timer = createManualTimer();
+    const session = createFakeSession();
+    const clock = createFakeClock();
+    const events: NoteEvent[] = [];
+    let shouldFail = false;
+
+    const stop = await attachMicrophoneNoteInput((event) => events.push(event), {
+      clock,
+      detector: {
+        detect: (_samples, _rate, timestampMs) => {
+          if (shouldFail) throw new Error('detect failed');
+          return { ...voicedFrame(C5), timestampMs };
+        },
+      },
+      getUserMedia: () => Promise.resolve(createFakeStream(createFakeTrack())),
+      createSession: session.create,
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    timer.tick(3);
+    expect(events.map((event) => event.type)).toEqual(['note-on']);
+
+    shouldFail = true;
+    clock.advance(500);
+    timer.tick(1);
+
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-off']);
+    stop();
+  });
+
+  it('解析が失敗し続けたら解析を止めてエラーとして扱う', async () => {
+    const timer = createManualTimer();
+    const session = createFakeSession();
+    const statuses: MicrophoneInputStatus[] = [];
+
+    const stop = await attachMicrophoneNoteInput(() => undefined, {
+      clock: createFakeClock(),
+      detector: {
+        detect: () => {
+          throw new Error('detect failed');
+        },
+      },
+      getUserMedia: () => Promise.resolve(createFakeStream(createFakeTrack())),
+      createSession: session.create,
+      onStatusChange: (status) => statuses.push(status),
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    timer.tick(10);
+
+    expect(statuses.at(-1)).toBe('error');
+    expect(timer.running).toBe(false);
+    stop();
+  });
+
+  it('マイクを他のアプリが使っていたらエラーとして扱う', async () => {
+    const busy = new Error('busy');
+    busy.name = 'NotReadableError';
+
+    const statuses: MicrophoneInputStatus[] = [];
+    await expect(
+      attachMicrophoneNoteInput(() => undefined, {
+        getUserMedia: () => Promise.reject(busy),
+        onStatusChange: (status) => statuses.push(status),
+      }),
+    ).rejects.toThrow('busy');
+
+    expect(statuses.at(-1)).toBe('error');
+  });
+
   it('停止後はフレームを解析しない', async () => {
     const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
     const { stop, timer, events } = await attachHarness({ frames });

@@ -9,17 +9,19 @@ import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 
-/**
- * 動的 import にするのは、静的 import だと import.meta.env.DEV の死枝除去で
- * JS は消えても CSS Modules の副作用 import が main チャンクへ残るため。
- * 分離後も非同期チャンクとしては出力されるが、本番では読み込まれない。(Issue #43)
- */
-const MicrophoneDebug = lazy(async () => ({
-  default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug,
-}));
-
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
+
+/**
+ * 音声入力の閾値調整用パネル。(Issue #43)
+ *
+ * lazy() の呼び出しごと DEV ガードの内側へ置く。トップレベルに置くと
+ * import.meta.env.DEV が false でも動的 import の記述自体が残り、
+ * 本番バンドルへチャンク（CSS・pitchy 込み）が出力されてしまう。
+ */
+const MicrophoneDebug = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug }))
+  : null;
 
 export function App(): React.JSX.Element {
   const [battle, setBattle] = useState(0);
@@ -31,7 +33,7 @@ export function App(): React.JSX.Element {
         Battle の外へ置くのは、再戦のたびに key で再マウントされると
         調整中のマイクが毎回止まってしまうため。(Issue #43)
       */}
-      {import.meta.env.DEV && (
+      {MicrophoneDebug !== null && (
         <Suspense fallback={null}>
           <MicrophoneDebug />
         </Suspense>
