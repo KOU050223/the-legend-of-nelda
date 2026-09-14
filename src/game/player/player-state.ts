@@ -93,7 +93,17 @@ export interface Player {
    * 2人が同時に連打すれば倍の速さで進む (§5.3)。人数で分岐は書かない。
    */
   reviveNeighbor(target: Player): void;
+  /**
+   * 蘇生の連打を1回ぶん受け取る。必要回数に届いたら起き上がる。
+   *
+   * `reviveNeighbor` から呼ばれる。`restore` で書き戻す形にはしない。
+   * あちらは「同期されたスナップショットを読み込む」ためのもので、
+   * 読んでから書くまでの間に相手の状態が変わると取りこぼすため
+   * (蘇生と同期が同じ入口を共有していると、tick をまたいだ瞬間に壊れる)。
+   */
+  receiveRevive(revivedAt: number): void;
   snapshot(): PlayerSnapshot;
+  /** 同期されたスナップショットを読み込む。蘇生には使わない。 */
   restore(snapshot: PlayerSnapshot): void;
 }
 
@@ -259,22 +269,21 @@ export function createPlayer(options: PlayerOptions): Player {
 
       // 連打1回ぶん進める。2人が連打すれば単純に倍の速さで進む。
       // 人数での分岐は書かない。
-      const nextInputs = snapshot.reviveInputs + 1;
+      target.receiveRevive(clock.now());
+    },
 
-      if (nextInputs < requiredReviveInputs()) {
-        target.restore({ ...snapshot, reviveInputs: nextInputs });
-        return;
-      }
+    receiveRevive(revivedAt) {
+      if (status !== 'FALLING_ASLEEP') return;
 
-      target.restore({
-        ...snapshot,
-        status: 'ACTIVE',
-        hp: Math.round(snapshot.hpMax * DEFAULT_REVIVAL.revivedHpRatio),
-        sleepAt: null,
-        reviveInputs: 0,
-        // 起こされた直後に即座に倒れ直さないよう、短い無敵を付ける (§5.3)。
-        invulnerableUntil: clock.now() + DEFAULT_REVIVAL.revivedInvulnerableMs,
-      });
+      reviveInputs += 1;
+      if (reviveInputs < requiredReviveInputs()) return;
+
+      status = 'ACTIVE';
+      hp = Math.round(hpMax * DEFAULT_REVIVAL.revivedHpRatio);
+      sleepAt = null;
+      reviveInputs = 0;
+      // 起こされた直後に即座に倒れ直さないよう、短い無敵を付ける (§5.3)。
+      invulnerableUntil = revivedAt + DEFAULT_REVIVAL.revivedInvulnerableMs;
     },
 
     snapshot() {
