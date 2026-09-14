@@ -70,16 +70,85 @@ export type AudioAnalysisSessionFactory = (
 ) => AudioAnalysisSession | Promise<AudioAnalysisSession>;
 
 /**
- * 本物の Web Audio で解析セッションを組む。
- * AnalyserNode は解析のみで destination へは繋がない。繋ぐとマイク音が
- * そのまま再生されハウリングする。
+ * createMediaStreamSource は本物の MediaStream を要求する。型だけ絞った
+ * AudioInputStream から元の形へ戻すのはこの一箇所に閉じ込める。
  */
-async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAnalysisSession> {
-  if (!(stream instanceof MediaStream)) {
-    throw new TypeError('Web Audio には本物の MediaStream が必要');
-  }
+function toMediaStream(stream: AudioInputStream): MediaStream {
+  if (stream instanceof MediaStream) return stream;
+  throw new TypeError('Web Audio には本物の MediaStream が必要');
+}
 
-  const context = new AudioContext();
+/**
+ * この Adapter が AudioContext へ求める範囲。全体を要求するとテストから
+ * 差し替えるのに巨大な偽物か型アサーションが必要になる。
+ */
+/** 解析ノード。Adapter が触るのは窓長・波形取得・切断だけ。 */
+export interface AnalysisNode {
+  fftSize: number;
+  getFloatTimeDomainData(array: Float32Array<ArrayBuffer>): void;
+  disconnect(): void;
+}
+
+/**
+ * Adapter が AudioContext へ求める範囲。
+ *
+ * マイクと解析ノードの結線まで context 側の責務にしているのは、
+ * source ノードを型として公開すると connect の引数が反変になり、
+ * 本物の AudioNode でもテスト用の偽物でも型が合わなくなるため。
+ */
+export interface AnalysisAudioContext {
+  readonly state: AudioContextState;
+  readonly sampleRate: number;
+  resume(): Promise<void>;
+  /** マイクを解析ノードへ繋ぎ、解析ノードと切断処理を返す。 */
+  connectMicrophone(
+    stream: MediaStream,
+    fftSize: number,
+  ): {
+    analyser: AnalysisNode;
+    disconnect(): void;
+  };
+  close(): Promise<void>;
+}
+
+/** 本物の AudioContext を、この Adapter が使う形として見せる。 */
+export function toAnalysisContext(context: AudioContext): AnalysisAudioContext {
+  return {
+    get state() {
+      return context.state;
+    },
+    get sampleRate() {
+      return context.sampleRate;
+    },
+    resume: () => context.resume(),
+    connectMicrophone(stream, fftSize) {
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = fftSize;
+      // destination へは繋がない。繋ぐとマイク音がそのまま再生されハウリングする。
+      source.connect(analyser);
+
+      return {
+        analyser,
+        disconnect() {
+          source.disconnect();
+          analyser.disconnect();
+        },
+      };
+    },
+    close: () => context.close(),
+  };
+}
+
+/** jsdom には AudioContext が無いため、生成だけ差し替えられるようにする。 */
+export type AudioContextFactory = () => AnalysisAudioContext;
+
+/** 本物の Web Audio で解析セッションを組む。 */
+export async function createWebAudioSession(
+  stream: AudioInputStream,
+  createContext: AudioContextFactory = () => toAnalysisContext(new AudioContext()),
+): Promise<AudioAnalysisSession> {
+  const context = createContext();
 
   try {
     // getUserMedia の await でユーザー操作のスタックから外れるため、suspended の
@@ -94,10 +163,8 @@ async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAna
       throw new Error(`AudioContext を再開できない (state=${context.state})`);
     }
 
-    const source = context.createMediaStreamSource(stream);
-    const analyser = context.createAnalyser();
-    analyser.fftSize = FFT_SIZE;
-    source.connect(analyser);
+    const microphone = context.connectMicrophone(toMediaStream(stream), FFT_SIZE);
+    const analyser = microphone.analyser;
 
     return {
       sampleRate: context.sampleRate,
@@ -106,8 +173,7 @@ async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAna
         analyser.getFloatTimeDomainData(samples);
       },
       dispose() {
-        source.disconnect();
-        analyser.disconnect();
+        microphone.disconnect();
         // 二重 close などで reject しても、停止処理としては done 扱いでよい。
         context.close().catch(() => undefined);
       },
@@ -122,7 +188,6 @@ async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAna
 
 /** Debug UI へ現在値を流すためのフック。ゲーム本体は購読しない。 */
 export interface MicrophoneDebugSnapshot {
-  status: MicrophoneInputStatus;
   /** 棄却されたものも含む生フレーム。無音なら null。 */
   frame: PitchFrame | null;
   /** 閾値を満たしたか。 */
@@ -229,7 +294,7 @@ export async function attachMicrophoneNoteInput(
     try {
       analyzeFrame();
     } catch (error) {
-      onDebug?.({ status: 'error', frame: null, accepted: false, trackSettings });
+      onDebug?.({ frame: null, accepted: false, trackSettings });
       console.error('マイク入力の解析に失敗', error);
     }
   };
@@ -241,7 +306,7 @@ export async function attachMicrophoneNoteInput(
     const frame = detector.detect(samples, session.sampleRate, nowMs);
     const accepted = frame !== null && isAcceptableFrame(frame, config);
 
-    onDebug?.({ status: 'active', frame, accepted, trackSettings });
+    onDebug?.({ frame, accepted, trackSettings });
 
     // 棄却フレームは捨てずに null として渡す。ここで握りつぶすと
     // note-off の猶予時間が進まず、鳴り止んでも note-off が出ない。

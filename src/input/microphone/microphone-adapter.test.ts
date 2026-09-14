@@ -427,7 +427,6 @@ describe('attachMicrophoneNoteInput', () => {
     stop();
 
     expect(snapshots[0]).toMatchObject({
-      status: 'active',
       accepted: true,
       trackSettings: { channelCount: 1, sampleRate: 48_000 },
     });

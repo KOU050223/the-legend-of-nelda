@@ -232,7 +232,15 @@ describe('isAcceptableFrame', () => {
     expect(isAcceptableFrame(frameOf(C5, 0, { clarity: CONFIG.minClarity }), CONFIG)).toBe(true);
   });
 
-  it('周波数として成立しないフレームは採用しない', () => {
+  // 端のすぐ外側は落とす (docs/testing-guide.md §9)。
+  it('音域の端をわずかに外れたら採用しない', () => {
+    expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 199 }), CONFIG)).toBe(false);
+    expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: 2001 }), CONFIG)).toBe(false);
+  });
+
+  it('数値として成立しないフレームは採用しない', () => {
     expect(isAcceptableFrame(frameOf(C5, 0, { frequencyHz: Number.NaN }), CONFIG)).toBe(false);
+    expect(isAcceptableFrame(frameOf(C5, 0, { rms: Number.NaN }), CONFIG)).toBe(false);
+    expect(isAcceptableFrame(frameOf(C5, 0, { clarity: Number.NaN }), CONFIG)).toBe(false);
   });
 });
