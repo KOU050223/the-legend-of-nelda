@@ -745,6 +745,12 @@ Phase 2:
 
 Phase 1でGame LogicとPresentationを分離しておくことで、Phase 2ではClient / Role / Cue Routerを追加しても戦闘ルール本体を大きく書き換えないことを目標とする。
 
+## 20.1 音声チャネルとRole別配信
+
+Phase 2では、ゲーム内のWebRTC音声チャネルを正式な会話経路とする。オドルノDaisukeとオラ大輔は通常音声を送るが、Pay大輔は生音声を送らず、ローカルで作成した `WasshoiEvent` だけをゲームイベントとして他2人へ送る。
+
+また、`Role-based Cue Router` はClientの表示制御ではなく、Realtime Game Sessionのサーバー側責務とする。対象外RoleへはCue自体を配送しない。詳細な境界と後続Issueの契約は [`20260914_phase2_voice-channel-and-role-routing.md`](./20260914_phase2_voice-channel-and-role-routing.md) を参照する。
+
 ---
 
 # 21. Phase 2以降の技術候補
@@ -780,7 +786,13 @@ Phase 1でGame LogicとPresentationを分離しておくことで、Phase 2で�
 候補:
 
 - Web Audio API
-- WebRTC
+
+決定済み:
+
+- WebRTC（ゲーム内の通常会話の音声トラック）
+- Web Audio API / AudioWorklet（Pay大輔の生音声解析とWasshoi再生）
+
+Pay大輔の音声はWebRTC音声トラックへ接続せず、`WasshoiEvent` としてのみ伝送する。
 
 ## Device Sensor
 
