@@ -49,6 +49,7 @@ nix develop -c pnpm --version
 | `react-dom` | 19.2.8 | 19.3.0 | 同上（`react` とバージョンを揃える）。 |
 | `@types/react` | 19.2.18 | 19.3.0 | `react` のバージョンへ合わせる。 |
 | `@types/react-dom` | 19.2.7 | 19.3.0 | `react-dom` のバージョンへ合わせる。 |
+| `@types/node` | 24.13.4 | 26.5.1 | Node.js 24系を採用しているため、対応する型定義の24系へ合わせる。Node.js本体を26系へ更新するまで据え置く。 |
 | `pnpm` | 11.25.0 | 12.4.1 | Nix を環境の source of truth とするため、nixpkgs が提供する版へ `packageManager` を合わせている。nixpkgs 側が上がったら追従する。 |
 
 `react` は `^19.2.8` と書くと semver 上 19.3.0 を許容してしまうため、

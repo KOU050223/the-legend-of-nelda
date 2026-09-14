@@ -8,6 +8,7 @@ import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
+import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 
 import { isWorldSceneRequested } from './scene-mode';
 import { createCombatSession } from './combat-session';
@@ -26,6 +27,10 @@ const MicrophoneDebug = import.meta.env.DEV
 
 export function App(): React.JSX.Element {
   const [battle, setBattle] = useState(0);
+
+  if (new URLSearchParams(window.location.search).get('debug') === 'ora') {
+    return <OraDebugPage />;
+  }
 
   // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
   // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
