@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -14,6 +14,7 @@ import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 
 import { useScreenStore } from './screen';
+import { currentRoute, subscribeToRoute } from './route';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -30,12 +31,21 @@ const MicrophoneDebug = import.meta.env.DEV
 
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
+  const route = useSyncExternalStore(subscribeToRoute, currentRoute, () => 'TITLE');
+
+  useEffect(() => {
+    if (route === 'BATTLE' || route === 'WORLD') {
+      useScreenStore.setState({ screen: route });
+    } else if (route === 'TITLE') {
+      useScreenStore.setState({ screen: 'TITLE' });
+    }
+  }, [route]);
 
   // `?debug=ora` `?debug=hori` はタイトルより先に見る。URLで直接開く動作確認用の
   // 入口なので、タイトルを経由させると既存の手順が変わってしまう
   // (`?scene=world` と同じ扱い)。
   const debug = new URLSearchParams(window.location.search).get('debug');
-  if (debug === 'ora') {
+  if (route === 'ORA_DEBUG') {
     return <OraDebugPage />;
   }
   if (debug === 'hori') {

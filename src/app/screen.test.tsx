@@ -31,6 +31,7 @@ describe('ルートの画面遷移', () => {
     window.history.replaceState({}, '', '/');
     useGameStore.getState().reset();
     useScreenStore.setState({ screen: 'TITLE' });
+    window.history.replaceState({}, '', '/');
     gameSceneProps.length = 0;
   });
   afterEach(() => {
@@ -79,6 +80,25 @@ describe('ルートの画面遷移', () => {
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
     expect(gameSceneProps.at(-1)?.world).toBeFalsy();
+  });
+
+  it('画面を選ぶと直接開ける URL に移動する', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+
+    expect(window.location.pathname).toBe('/battle');
+  });
+
+  it('ブラウザの戻る操作で画面もタイトルへ戻る', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+    window.history.replaceState({}, '', '/');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(useScreenStore.getState().screen).toBe('TITLE');
+    expect(screen.getByRole('heading', { name: '寝ルダの伝説' })).toBeInTheDocument();
   });
 
   it('ワールドでは Phase 1 の戦闘一式を起動しない (#58)', () => {
