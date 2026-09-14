@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "pnpm build && wrangler deploy",
+    "deploy:preview": "pnpm build && wrangler versions upload",
     "deps:check": "pnpm outdated",
     "doctor": "npx react-doctor@latest"
   },

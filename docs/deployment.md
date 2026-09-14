@@ -100,6 +100,7 @@ CIと同じ基準で落ちる仕様として扱う。
 pnpm build                          # 型チェック + 本番ビルド（dist/ を生成）
 pnpm exec wrangler deploy --dry-run # デプロイ内容の検証（実際にはアップロードしない）
 pnpm deploy                         # ローカルから本番へデプロイ（pnpm build && wrangler deploy）
+pnpm deploy:preview                 # ローカルからプレビュー版をアップロード（wrangler versions upload）
 ```
 
 Cloudflareのビルドを待たずに、静的アセットとしての配信内容だけを確認したい場合は

@@ -53,20 +53,21 @@ pnpm dev
 
 ## コマンド
 
-| コマンド            | 内容                                              |
-| ------------------- | ------------------------------------------------- |
-| `pnpm dev`          | 開発サーバーを起動する                            |
-| `pnpm build`        | 型チェックと本番ビルドを実行する                  |
-| `pnpm preview`      | ビルド結果をローカルで確認する                    |
-| `pnpm lint`         | oxlint で静的解析する（型情報を使うルールを含む） |
-| `pnpm lint:fix`     | 自動修正できる指摘を修正する                      |
-| `pnpm format`       | oxfmt で整形する                                  |
-| `pnpm format:check` | 整形済みかを確認する                              |
-| `pnpm typecheck`    | TypeScript の型チェックのみ実行する               |
-| `pnpm test`         | Vitest を1回実行する                              |
-| `pnpm test:watch`   | Vitest を watch モードで実行する                  |
-| `pnpm deploy`       | ビルドしてCloudflare Workersへデプロイする        |
-| `pnpm deps:check`   | 依存の更新有無を確認する                          |
+| コマンド              | 内容                                              |
+| --------------------- | ------------------------------------------------- |
+| `pnpm dev`            | 開発サーバーを起動する                            |
+| `pnpm build`          | 型チェックと本番ビルドを実行する                  |
+| `pnpm preview`        | ビルド結果をローカルで確認する                    |
+| `pnpm lint`           | oxlint で静的解析する（型情報を使うルールを含む） |
+| `pnpm lint:fix`       | 自動修正できる指摘を修正する                      |
+| `pnpm format`         | oxfmt で整形する                                  |
+| `pnpm format:check`   | 整形済みかを確認する                              |
+| `pnpm typecheck`      | TypeScript の型チェックのみ実行する               |
+| `pnpm test`           | Vitest を1回実行する                              |
+| `pnpm test:watch`     | Vitest を watch モードで実行する                  |
+| `pnpm deploy`         | ビルドしてCloudflare Workersへデプロイする        |
+| `pnpm deploy:preview` | ビルドしてプレビュー版をアップロードする          |
+| `pnpm deps:check`     | 依存の更新有無を確認する                          |
 
 ---
 
