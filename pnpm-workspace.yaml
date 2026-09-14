@@ -11,8 +11,13 @@ minimumReleaseAgeExclude:
 trustPolicy: no-downgrade
 
 # allowBuilds は依存の install 時 build script 実行可否を明示する。
-# lefthook の build script はバイナリ取得用だが、npm パッケージ側が
-# プラットフォーム別 optionalDependencies でもバイナリを配布しており、
-# 実行しなくても node_modules/.bin/lefthook は動作するため false とする。
+# pnpm 11 では未指定の build script を黙って無視せず、明示が無いと
+# install が失敗する。以下はいずれもプラットフォーム別 optionalDependencies
+# でバイナリを配布しており、build script を実行しなくても動作するため false とする。
+# lefthook: node_modules/.bin/lefthook が optionalDependencies のバイナリで動作する。
+# esbuild / workerd: wrangler が依存する。どちらも @esbuild/* @cloudflare/workerd-* を
+#   optionalDependencies として同梱しており、postinstall 無しで deploy / versions upload が動く。
 allowBuilds:
+  esbuild: false
   lefthook: false
+  workerd: false
