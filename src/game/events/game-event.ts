@@ -1,3 +1,5 @@
+import type { BossPhase } from '../boss/boss-phase';
+import type { HoriAttackId } from '../config/phase2-boss-balance';
 import type { SequencePhase } from '../sequence/attack-sequence';
 import type { CombatState, JudgeResult } from '../types/combat-state';
 import type { PlayerAction } from '../types/player-action';
@@ -75,7 +77,26 @@ export type GameEvent =
    */
   | { type: 'BOSS_DOWN_FOLLOW_UP_HIT' }
   | { type: 'BOSS_HP_CHANGED'; hp: number }
-  | { type: 'SLEEPINESS_CHANGED'; value: number };
+  | { type: 'SLEEPINESS_CHANGED'; value: number }
+  /**
+   * ここから下は Phase 2 のボス (堀大輔) が発行する
+   * (docs/phase2-gameplay-spec.md §8〜§12)。Phase 1 のイベントとは
+   * 併用しない。Phase 1 は1対1・1度に1攻撃サイクルの前提で、
+   * 3人が同時に動く Phase 2 の戦闘には attackId だけでは足りない
+   * (誰に当たったかを持つ必要がある)。
+   *
+   * 同じ Bus へ相乗りさせているのは、購読側 (UI / Audio / VFX) を
+   * 2系統に割りたくないため。既存の購読者はすべて default 節を持つので、
+   * Phase 2 のイベントは無視される。
+   */
+  | { type: 'BOSS_PHASE_CHANGED'; from: BossPhase; to: BossPhase }
+  | { type: 'BOSS_ATTACK_STARTED'; attackId: HoriAttackId; telegraphMs: number }
+  | { type: 'BOSS_ATTACK_HIT'; attackId: HoriAttackId; targetId: string; damage: number }
+  | { type: 'BOSS_ATTACK_ENDED'; attackId: HoriAttackId }
+  /** 結界中 / NO SLEEP MODE で攻撃が通らなかった。0 DAMAGE 表示の起点。 */
+  | { type: 'BOSS_DAMAGE_NULLIFIED'; phase: BossPhase }
+  | { type: 'BOSS_DOWN_STARTED'; durationMs: number }
+  | { type: 'BOSS_DOWN_ENDED' };
 
 export type GameEventListener = (event: GameEvent) => void;
 
