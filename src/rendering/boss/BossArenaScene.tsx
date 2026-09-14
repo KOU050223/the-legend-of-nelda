@@ -20,6 +20,7 @@ import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter'
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterModel } from '../character/CharacterModel';
+import { CHARACTER_DISPLAY_HEIGHT } from '../character/character-models';
 import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
@@ -352,6 +353,18 @@ const BAR_WIDTH = 1.4;
 const BAR_HEIGHT = 0.16;
 
 /**
+ * 立っているときのバーの高さ。頭のすぐ上へ置く。
+ *
+ * キャラの表示高さ (CHARACTER_DISPLAY_HEIGHT) から決める。ここを固定値に
+ * すると、モデルを差し替えて背の高さが変わったときにバーだけ頭上から離れ、
+ * 別のキャラの上に浮いているように見える。
+ */
+const BAR_OVERHEAD_HEIGHT = CHARACTER_DISPLAY_HEIGHT + 0.25;
+
+/** 倒れているときのバーの高さ。寝ている体の上に置く。 */
+const BAR_DOWNED_HEIGHT = 0.6;
+
+/**
  * 頭上のHPバー。倒れている間は蘇生ゲージに切り替わる。
  *
  * HUD は別Issueだが、これが無いと倒れた仲間が「連打1回目」なのか
@@ -369,9 +382,10 @@ function StatusBar({
   const ratio = reviving ? reviveRatio(player) : player.hp / player.hpMax;
   const color = reviving ? '#ffd60a' : local ? '#4cd964' : '#f2f2f7';
 
-  // 親の group が位置を持つので、バーは相対位置で置く。
+  // 親の group が位置を持つので、バーは相対位置で置く。高さはキャラの表示高さ
+  // から決める。固定値にすると、モデルの高さを変えたときに頭上から離れる。
   return (
-    <Billboard position={[0, reviving ? 1 : 2.1, 0]}>
+    <Billboard position={[0, reviving ? BAR_DOWNED_HEIGHT : BAR_OVERHEAD_HEIGHT, 0]}>
       <mesh>
         <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
         <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
