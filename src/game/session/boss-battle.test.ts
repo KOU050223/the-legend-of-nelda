@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { createHoriBoss, type HoriBossOptions } from '../boss/hori-boss';
 import { createFakeClock } from '../clock';
 import { DEFAULT_HORI_ATTACKS, type HoriAttackId } from '../config/phase2-boss-balance';
-import { CHARACTER_STATS, DEFAULT_REVIVAL } from '../config/phase2-player-balance';
+import {
+  CHARACTER_STATS,
+  DEFAULT_REVIVAL,
+  REVIVE_INPUT_INTERVAL_MS,
+} from '../config/phase2-player-balance';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
 import { comboStepAt } from '../player/attack-combo';
 import { createBossBattle, type BossBattle } from './boss-battle';
@@ -147,7 +151,7 @@ describe('倒れた仲間の扱い', () => {
   });
 
   it('駆け寄った仲間の連打で起き上がる', () => {
-    const { battle } = setup();
+    const { battle, clock } = setup();
     const fallen = playerById(battle, 'pay');
     fallen.takeDamage(999);
 
@@ -155,19 +159,26 @@ describe('倒れた仲間の扱い', () => {
     const rescuer = playerById(battle, 'odoruno');
     rescuer.restore({ ...rescuer.snapshot(), position: { x: 10, z: 0 } });
 
-    for (let i = 0; i < 20; i += 1) battle.submit('odoruno', { type: 'REVIVE' });
+    // 連打には間隔がある。速く叩いても設定した時間より早くは起きない。
+    for (let i = 0; i < 20; i += 1) {
+      battle.submit('odoruno', { type: 'REVIVE' });
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
 
     expect(fallen.snapshot().status).toBe('ACTIVE');
     expect(fallen.snapshot().hp).toBeGreaterThan(0);
   });
 
   it('離れた場所から連打しても起こせない', () => {
-    const { battle } = setup();
+    const { battle, clock } = setup();
     const fallen = playerById(battle, 'ora');
     fallen.takeDamage(999);
 
     // odoruno は x=2、ora は x=-10 で蘇生範囲の外。
-    for (let i = 0; i < 20; i += 1) battle.submit('odoruno', { type: 'REVIVE' });
+    for (let i = 0; i < 20; i += 1) {
+      battle.submit('odoruno', { type: 'REVIVE' });
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
 
     expect(fallen.snapshot().status).toBe('FALLING_ASLEEP');
   });
@@ -233,9 +244,9 @@ describe('戦闘全体のスナップショット', () => {
     battle.update(0.016);
 
     const snapshot = battle.snapshot();
-    const asJson: unknown = JSON.parse(JSON.stringify(snapshot));
-
-    expect(asJson).toEqual(snapshot);
+    // JSON を通せること (= 関数もクラスインスタンスも入っていないこと) を
+    // 検査する。複製そのものは structuredClone で行う。
+    expect(JSON.parse(JSON.stringify(snapshot)) as unknown).toEqual(snapshot);
     expect(snapshot.players).toHaveLength(3);
   });
 });

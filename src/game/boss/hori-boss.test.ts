@@ -4,12 +4,14 @@ import { createFakeClock } from '../clock';
 
 type FakeClock = ReturnType<typeof createFakeClock>;
 import {
+  BLUE_LIGHT_TRACKING_SPEED,
   BOSS_DOWN_DURATION_MS,
   DEFAULT_HORI_ATTACKS,
   HORI_INITIAL_HP,
   OVERDRIVE_MODIFIERS,
 } from '../config/phase2-boss-balance';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
+import { NO_SLEEP_MODE_HP_RATIO } from './boss-phase';
 import { bossMoveSpeed, createHoriBoss, type BossSnapshot, type HoriBoss } from './hori-boss';
 import type { BossTarget, DamageHit } from './boss-target';
 
@@ -80,10 +82,13 @@ describe('堀大輔のHPとフェーズ', () => {
     });
   });
 
-  it('HPは0未満にも初期値超にもならない', () => {
+  it('通常攻撃では NO SLEEP MODE の手前で止まる', () => {
     const { boss } = setup();
     boss.damage(HORI_INITIAL_HP * 2);
-    expect(boss.snapshot().hp).toBe(0);
+
+    // 10% を通り越して 0 まで落ちると、最終局面 (§12) ごと飛ばして
+    // 勝ててしまう。通常攻撃のダメージはここで止める。
+    expect(boss.snapshot().hp).toBe(HORI_INITIAL_HP * NO_SLEEP_MODE_HP_RATIO);
 
     boss.restore({ ...boss.snapshot(), hp: HORI_INITIAL_HP, phase: 'INTRO' });
     boss.damage(-500);
@@ -100,6 +105,24 @@ describe('堀大輔のHPとフェーズ', () => {
       from: 'INTRO',
       to: 'BARRIER_1',
     });
+  });
+
+  it('結界へ入ると進行中の技が打ち切られる', () => {
+    const { boss, clock, hits } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+    const targets = [{ id: 'pay', position: { x: 10, z: 0 } }];
+
+    boss.update(targets);
+    // 予兆中に70%を割って結界へ入る。
+    boss.damage(HORI_INITIAL_HP * 0.3);
+    expect(boss.snapshot().phase).toBe('BARRIER_1');
+
+    clock.advance(spec.telegraphMs + 1);
+    boss.update(targets);
+
+    // BOSS INVINCIBLE を宣言した後も殴ってくると、協力ギミックが成立しない。
+    expect(hits).toEqual([]);
+    expect(boss.snapshot().activeAttack).toBeNull();
   });
 
   it('結界中は攻撃が通らず、0 DAMAGE として通知される', () => {
@@ -173,6 +196,25 @@ describe('BOSS DOWN から通常戦闘へ戻る', () => {
     clock.advance(BOSS_DOWN_DURATION_MS);
     boss.update([]);
     expect(boss.snapshot().phase).toBe('BARRIER_2');
+  });
+
+  it('総攻撃で削り切っても NO SLEEP MODE を飛ばせない', () => {
+    const { boss, clock } = setup();
+
+    boss.damage(HORI_INITIAL_HP * 0.3);
+    boss.breakBarrier();
+    clock.advance(BOSS_DOWN_DURATION_MS);
+    boss.update([]);
+
+    boss.damage(HORI_INITIAL_HP * 0.3);
+    boss.breakBarrier();
+
+    // 総攻撃中にありったけ叩き込む。ここで 0 まで落ちると、通常攻撃では
+    // 倒せないはずの最終局面 (§12) ごと飛ばして勝ててしまう。
+    boss.damage(HORI_INITIAL_HP);
+
+    expect(boss.snapshot().hp).toBe(HORI_INITIAL_HP * NO_SLEEP_MODE_HP_RATIO);
+    expect(boss.snapshot().phase).toBe('NO_SLEEP_MODE');
   });
 
   it('BOSS DOWN が明けると通常戦闘へ戻り、また技を出す', () => {
@@ -278,6 +320,26 @@ describe('通常攻撃の予兆と被弾', () => {
     expect(boss.dangerZones(targets)).toEqual([]);
   });
 
+  it('危険範囲が消えた後から入ってきた相手には当たらない', () => {
+    const { boss, clock, hits } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+    const away = [{ id: 'pay', position: { x: 40, z: 0 } }];
+
+    boss.update(away);
+    // 判定中は範囲の外に居る。
+    clock.advance(spec.telegraphMs + 1);
+    boss.update(away);
+    expect(hits).toEqual([]);
+
+    // 硬直へ入り、表示が消えてから範囲へ歩いてくる。
+    clock.advance(spec.activeMs);
+    expect(boss.dangerZones(away)).toEqual([]);
+    boss.update([{ id: 'pay', position: { x: 10, z: 0 } }]);
+
+    // 見えていない範囲で殴られてはいけない。
+    expect(hits).toEqual([]);
+  });
+
   it('技が終わると通知され、次の技へ進む', () => {
     const { boss, clock, emitted } = setup({ pickAttack: () => 'MORNING_DASH' });
     const spec = DEFAULT_HORI_ATTACKS.MORNING_DASH;
@@ -315,7 +377,10 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
     expect(aimedId).toBeDefined();
 
     const start = boss.dangerZones(three)[0]?.origin;
+    // 着弾点はボスが1フレームずつ進める。時計だけ進めても動かない
+    // (経過時間から引き直すと、横移動で追尾速度を超えてしまうため)。
     clock.advance(500);
+    boss.update(three);
     const later = boss.dangerZones(three)[0]?.origin;
 
     const aimed = three.find((target) => target.id === aimedId);
@@ -328,6 +393,29 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
       (later?.z ?? 0) - (aimed?.position.z ?? 0),
     );
     expect(distanceAfter).toBeLessThan(distanceBefore);
+  });
+
+  it('横へ走ってもビームは追尾速度を超えて追ってこない', () => {
+    const { boss, clock } = setup({ pickAttack: () => 'BLUE_LIGHT' });
+    const near = [{ id: 'pay', position: { x: 0, z: -20 } }];
+    boss.update(near);
+
+    clock.advance(500);
+    boss.update(near);
+    const before = boss.dangerZones(near)[0]?.origin;
+
+    // 真横へ大きく飛ぶ。経過時間から引き直す実装だと、着弾点が
+    // 追尾速度を無視して横滑りし、走って振り切れなくなる。
+    const away = [{ id: 'pay', position: { x: 20, z: 0 } }];
+    clock.advance(100);
+    boss.update(away);
+    const after = boss.dangerZones(away)[0]?.origin;
+
+    const moved = Math.hypot(
+      (after?.x ?? 0) - (before?.x ?? 0),
+      (after?.z ?? 0) - (before?.z ?? 0),
+    );
+    expect(moved).toBeLessThanOrEqual((BLUE_LIGHT_TRACKING_SPEED * 100) / 1000 + 0.001);
   });
 
   it('睡眠時間圧縮フィールドは複数箇所を危険にし、安全地帯が残る', () => {
@@ -356,8 +444,10 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
     clock.advance(spec.telegraphMs + 200);
     boss.update(three);
 
+    // 軌道の長さと判定の尺から逆算した速さで進む。通常の移動速度のままだと
+    // 30 ユニットの帯を2ユニットしか進まず、突進に見えない。
     const moved = boss.snapshot().position;
-    expect(Math.hypot(moved.x, moved.z)).toBeGreaterThan(0);
+    expect(Math.hypot(moved.x, moved.z)).toBeGreaterThan(5);
     // 予兆で見せた軌道が動くと「横へ回避する」が成立しない。
     expect(boss.dangerZones(three)[0]?.origin).toEqual(zoneBefore?.origin);
   });
@@ -428,9 +518,9 @@ describe('ボス状態のスナップショット', () => {
     // JSON を通せること (= 関数もクラスインスタンスも入っていないこと) を
     // そのまま検査する。同期を後付けするとき、この型をそのまま送れることが
     // 前提になっている。
-    const asJson: unknown = JSON.parse(JSON.stringify(snapshot));
-
-    expect(asJson).toEqual(snapshot);
+    // JSON を通せること (= 関数もクラスインスタンスも入っていないこと) を
+    // 検査する。複製そのものは structuredClone で行う。
+    expect(JSON.parse(JSON.stringify(snapshot)) as unknown).toEqual(snapshot);
     expect(reserialize(snapshot)).toEqual(snapshot);
   });
 
@@ -450,6 +540,30 @@ describe('ボス状態のスナップショット', () => {
     replica.boss.restore(wire);
 
     // 復元した側でも、残りの予兆が明けるまでは当たらない。
+    replica.clock.advance(spec.telegraphMs / 2 - 1);
+    replica.boss.update(targets);
+    expect(replica.hits).toHaveLength(0);
+
+    replica.clock.advance(2);
+    replica.boss.update(targets);
+    expect(replica.hits).toEqual([{ targetId: 'pay', amount: spec.damage }]);
+  });
+
+  it('時計の原点が違う相手へ渡しても、予兆の残りが変わらない', () => {
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+    const targets: BossTarget[] = [{ id: 'pay', position: { x: 10, z: 0 } }];
+
+    const origin = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    origin.boss.update(targets);
+    origin.clock.advance(spec.telegraphMs / 2);
+
+    // 受け取る側は10分前から開いている。performance.now() の原点は
+    // ページごとに違うので、絶対時刻をそのまま使うと予兆が何分も明けない。
+    const replica = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    replica.clock.advance(600_000);
+    replica.boss.restore(reserialize(origin.boss.snapshot()));
+
+    // 残りの予兆が明けるまでは当たらない。
     replica.clock.advance(spec.telegraphMs / 2 - 1);
     replica.boss.update(targets);
     expect(replica.hits).toHaveLength(0);

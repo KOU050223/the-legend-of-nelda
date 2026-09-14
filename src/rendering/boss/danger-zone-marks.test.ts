@@ -3,7 +3,7 @@ import { Euler, Vector3 } from 'three';
 
 import { isInsideDangerZone, type DangerZone } from '@/game/boss/attacks/danger-zone';
 
-import { lineMarkRotation } from './DangerZoneMarks';
+import { lineMarkRotation } from './danger-zone-geometry';
 
 /**
  * 危険範囲の**描画**と**当たり判定**が同じ方向を向いていることを確かめる。

@@ -22,7 +22,15 @@ interface ScreenStore {
  * 戦闘へ直接入るのではなくタイトルを経由するのが Issue #63 以降の入口。
  */
 function initialScreen(): Screen {
-  return requestedScene() === 'world' ? 'WORLD' : 'TITLE';
+  switch (requestedScene()) {
+    case 'world':
+      return 'WORLD';
+    case 'combat':
+      return 'BATTLE';
+    default:
+      // 指定なし / 知らない名前。タイトルから始める。
+      return 'TITLE';
+  }
 }
 
 export const useScreenStore = create<ScreenStore>((set) => ({

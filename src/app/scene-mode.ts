@@ -13,7 +13,7 @@
  * `?scene=world` の暫定入口をどうするかの決定は #54（ボスアリーナ）の
  * 完了条件に入っている。Phase 2 が本番になった時点で、既定を `boss` 側へ
  * 移して `combat` を畳む形になる見込み。ここを1箇所へ集約してあるので、
- * そのときは `DEFAULT_SCENE` と `DEV_ONLY_SCENES` を変えるだけで済む。
+ * そのときは `DEV_ONLY_SCENES` と `screen.ts` の初期画面を変えるだけで済む。
  */
 
 export const SCENES = [
@@ -30,9 +30,6 @@ export const SCENES = [
 
 export type SceneName = (typeof SCENES)[number];
 
-/** `?scene=` の指定が無いときに起動するシーン。 */
-export const DEFAULT_SCENE: SceneName = 'combat';
-
 /** 開発ビルドでしか選べないシーン。 */
 const DEV_ONLY_SCENES: ReadonlySet<SceneName> = new Set<SceneName>(['world']);
 
@@ -41,18 +38,21 @@ function isSceneName(value: string | null): value is SceneName {
 }
 
 /**
- * 起動するシーンを決める。
+ * URL で指定されたシーン。指定が無ければ null。
  *
- * 未知の名前・本番ビルドでの開発専用シーンの指定は、エラーにせず既定へ
- * 落とす。URL を手で書き換えた結果で画面が真っ白になるより、既定の画面が
+ * 未知の名前・本番ビルドでの開発専用シーンの指定は、エラーにせず null に
+ * する。URL を手で書き換えた結果で画面が真っ白になるより、既定の画面が
  * 出た方が状況が分かる。
  */
-export function requestedScene(search?: string): SceneName {
+export function requestedScene(search?: string): SceneName | null {
   const query = search ?? (typeof window === 'undefined' ? '' : window.location.search);
   const requested = new URLSearchParams(query).get('scene');
 
-  if (!isSceneName(requested)) return DEFAULT_SCENE;
-  if (DEV_ONLY_SCENES.has(requested) && !import.meta.env.DEV) return DEFAULT_SCENE;
+  // 指定が無い / 知らない名前は null。「既定へ落ちた」と「combat を明示した」
+  // を呼び出し側が区別できるようにする。前者はタイトルから始めたいが、
+  // 後者は戦闘を直接開きたいという指定なので、同じ扱いにできない。
+  if (!isSceneName(requested)) return null;
+  if (DEV_ONLY_SCENES.has(requested) && !import.meta.env.DEV) return null;
 
   return requested;
 }

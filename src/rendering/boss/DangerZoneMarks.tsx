@@ -2,6 +2,8 @@ import { DoubleSide } from 'three';
 
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 
+import { dangerZoneKey, lineMarkRotation } from './danger-zone-geometry';
+
 /**
  * ボスの危険範囲を地面へ描く。
  *
@@ -20,21 +22,6 @@ import type { DangerZone } from '@/game/boss/attacks/danger-zone';
  * 埋もれて危険範囲が読めない。Z-fighting を避けるだけの値では足りない。
  */
 const GROUND_OFFSET_Y = 0.45;
-
-/**
- * 突進の矩形を地面へ寝かせ、進行方向へ向ける Euler 角。
- *
- * planeGeometry は XY 平面にあるので、まず X を -90度 回して地面へ寝かせ、
- * そのあと Z で進行方向へ向ける。**Z の符号を反転させてはいけない。**
- * 反転しても 0 / 90 / 180度 では偶然一致するが、45度 のような斜めで
- * 描画と当たり判定がずれ、避けたつもりの場所で被弾する。
- *
- * 判定側 (`danger-zone.ts`) が前方を `(-sinθ, -cosθ)` としているので、
- * ここもそれと同じ向きになる角度を返す。一致はテストで固定してある。
- */
-export function lineMarkRotation(rotationY: number): [number, number, number] {
-  return [-Math.PI / 2, 0, rotationY];
-}
 
 export interface DangerZoneMarksProps {
   zones: readonly DangerZone[];
@@ -60,14 +47,8 @@ export function DangerZoneMarks({
 
   return (
     <>
-      {zones.map((zone, index) => (
-        <DangerZoneMark
-          // eslint-disable-next-line react/no-array-index-key -- 危険範囲は同じ技のあいだ順序が変わらない
-          key={index}
-          zone={zone}
-          color={color}
-          opacity={opacity}
-        />
+      {zones.map((zone) => (
+        <DangerZoneMark key={dangerZoneKey(zone)} zone={zone} color={color} opacity={opacity} />
       ))}
     </>
   );

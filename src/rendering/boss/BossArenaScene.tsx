@@ -71,6 +71,42 @@ function createBattle(): BossBattle {
   });
 }
 
+/**
+ * 再レンダーが要るほどの違いがあるか。
+ *
+ * 位置と向きは Object3D へ直接入れているので比較に含めない。含めると
+ * 毎フレーム「変わった」ことになり、state へ逃がした意味が無くなる。
+ */
+function isSameView(a: BattleSnapshot, b: BattleSnapshot): boolean {
+  if (a.boss.hp !== b.boss.hp || a.boss.phase !== b.boss.phase) return false;
+  if (a.players.length !== b.players.length) return false;
+
+  return a.players.every((player, index) => {
+    const other = b.players[index];
+    return (
+      other !== undefined &&
+      player.hp === other.hp &&
+      player.status === other.status &&
+      player.reviveInputs === other.reviveInputs
+    );
+  });
+}
+
+/** 危険範囲の形が前フレームと同じか。 */
+function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((zone, index) => {
+    const other = b[index];
+    return (
+      other !== undefined &&
+      zone.origin.x === other.origin.x &&
+      zone.origin.z === other.origin.z &&
+      zone.rotationY === other.rotationY &&
+      zone.shape.kind === other.shape.kind
+    );
+  });
+}
+
 export function BossArenaScene(): React.JSX.Element {
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   const [battle] = useState<BossBattle>(createBattle);
@@ -78,6 +114,17 @@ export function BossArenaScene(): React.JSX.Element {
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
   const localRoot = useRef<Group>(null);
 
+  // 入力は useFrame から毎フレーム引く。requestAnimationFrame を別に
+  // 回すと、r3f の描画ループと二重になって1フレームに2回進む。
+  const inputRef = useRef<ReturnType<typeof attachKeyboardGameActions> | null>(null);
+
+  // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
+  // 動かす。state にすると1フレームごとに React の再レンダーが走る。
+  const bossRoot = useRef<Group>(null);
+  const mateRoots = useRef(new Map<string, Group>());
+
+  // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
+  // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
   const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
@@ -85,37 +132,52 @@ export function BossArenaScene(): React.JSX.Element {
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
     // 二重マウントで購読が二重に残らないようにするため。
-    const input = attachKeyboardGameActions((action) => {
+    // 自分自身を参照するので、先に入れ物を作ってから繋ぐ。
+    let adapter: ReturnType<typeof attachKeyboardGameActions> | null = null;
+
+    adapter = attachKeyboardGameActions((action) => {
+      // 離散アクションの前に、その瞬間の移動方向を送る。
+      //
+      // 「A を押した直後に Shift」のように、ポーリングの合間に方向と回避が
+      // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
+      // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
+      // 別方向へ転がる。
+      if (adapter !== null) battle.submit(LOCAL_PLAYER_ID, adapter.pollMove());
       battle.submit(LOCAL_PLAYER_ID, action);
     });
+    const input = adapter;
 
-    let frame = 0;
-    const pump = (): void => {
-      // 移動は押しっぱなしの状態なので毎フレーム取り出す。
-      battle.submit(LOCAL_PLAYER_ID, input.pollMove());
-      frame = requestAnimationFrame(pump);
-    };
-    frame = requestAnimationFrame(pump);
+    inputRef.current = input;
 
     return () => {
-      cancelAnimationFrame(frame);
+      inputRef.current = null;
       input.detach();
     };
   }, [battle]);
 
   useFrame((_, delta) => {
+    // 移動は押しっぱなしの状態なので毎フレーム取り出す。
+    const input = inputRef.current;
+    if (input !== null) battle.submit(LOCAL_PLAYER_ID, input.pollMove());
+
     battle.update(delta);
 
     const snapshot = battle.snapshot();
-    setView(snapshot);
 
-    // 操作キャラの Root を追従カメラのために動かす。位置の真実源は
-    // ロジック側 (boss-battle) で、ここは反映するだけ。
-    const local = snapshot.players.find((player) => player.id === LOCAL_PLAYER_ID);
-    if (local !== undefined && localRoot.current !== null) {
-      localRoot.current.position.set(local.position.x, 0, local.position.z);
-      localRoot.current.rotation.set(0, local.rotationY, 0);
+    // 位置と向きは Object3D へ直接反映する。真実源はロジック側
+    // (boss-battle) で、ここは映すだけ。
+    bossRoot.current?.position.set(snapshot.boss.position.x, 0, snapshot.boss.position.z);
+
+    for (const player of snapshot.players) {
+      const root =
+        player.id === LOCAL_PLAYER_ID ? localRoot.current : mateRoots.current.get(player.id);
+      if (root == null) continue;
+      root.position.set(player.position.x, 0, player.position.z);
+      root.rotation.set(0, player.rotationY, 0);
     }
+
+    // HP や状態が変わったときだけ再レンダーする。
+    setView((previous) => (isSameView(previous, snapshot) ? previous : snapshot));
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
@@ -124,7 +186,8 @@ export function BossArenaScene(): React.JSX.Element {
       .filter((player) => player.status === 'ACTIVE')
       .map((player) => ({ id: player.id, position: player.position }));
 
-    setZones(battle.boss.dangerZones(targets));
+    const nextZones = battle.boss.dangerZones(targets);
+    setZones((previous) => (isSameZones(previous, nextZones) ? previous : nextZones));
     setImminent(
       active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
     );
@@ -138,7 +201,7 @@ export function BossArenaScene(): React.JSX.Element {
       <DangerZoneMarks zones={zones} imminent={imminent} />
 
       {/* 仮ボス。Graybox First (docs/development-workflow.md §9)。 */}
-      <group position={[view.boss.position.x, 0, view.boss.position.z]}>
+      <group ref={bossRoot}>
         <mesh position={[0, 1.6, 0]} castShadow>
           <boxGeometry args={[2, 3.2, 2]} />
           <meshStandardMaterial color="#6b4fa0" />
@@ -155,8 +218,10 @@ export function BossArenaScene(): React.JSX.Element {
         ) : (
           <group
             key={player.id}
-            position={[player.position.x, 0, player.position.z]}
-            rotation={[0, player.rotationY, 0]}
+            ref={(node) => {
+              if (node === null) mateRoots.current.delete(player.id);
+              else mateRoots.current.set(player.id, node);
+            }}
           >
             <CharacterModel />
             <StatusBar player={player} />
@@ -195,13 +260,9 @@ function StatusBar({
   const ratio = reviving ? reviveRatio(player) : player.hp / player.hpMax;
   const color = reviving ? '#ffd60a' : local ? '#4cd964' : '#f2f2f7';
 
-  // 操作キャラの group は position を持つので、バーは相対位置で置く。
-  const position: [number, number, number] = local
-    ? [0, reviving ? 1 : 2.1, 0]
-    : [player.position.x, reviving ? 1 : 2.1, player.position.z];
-
+  // 親の group が位置を持つので、バーは相対位置で置く。
   return (
-    <Billboard position={position}>
+    <Billboard position={[0, reviving ? 1 : 2.1, 0]}>
       <mesh>
         <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
         <meshBasicMaterial color="#1c1c1e" depthWrite={false} />

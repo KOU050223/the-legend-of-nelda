@@ -43,9 +43,22 @@ const PHASE_THRESHOLDS: readonly { phase: BossPhase; enterAtRatio: number }[] = 
   { phase: 'INTRO', enterAtRatio: 1 },
 ];
 
+/**
+ * NO SLEEP MODE へ入るHP割合。
+ *
+ * 通常攻撃ではHPを削れなくなる最終局面の入口 (§12) なので、通常攻撃の
+ * ダメージはここで止める。越えさせると最終局面ごと飛ばして勝ててしまう。
+ */
+export const NO_SLEEP_MODE_HP_RATIO = 0.1;
+
 /** そのフェーズが順番として何番目か。進行が逆戻りしないことの判定に使う。 */
 function phaseOrder(phase: BossPhase): number {
   return BOSS_PHASES.indexOf(phase);
+}
+
+/** フェーズの進行順。外から2つのフェーズの前後を比べるために公開する。 */
+export function phaseOrderOf(phase: BossPhase): number {
+  return phaseOrder(phase);
 }
 
 /**

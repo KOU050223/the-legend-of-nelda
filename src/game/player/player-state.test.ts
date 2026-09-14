@@ -7,6 +7,7 @@ import {
   COMBO_WINDOW_MS,
   DEFAULT_REVIVAL,
   PROVISIONAL_ARENA_RADIUS,
+  REVIVE_INPUT_INTERVAL_MS,
   type CharacterId,
 } from '../config/phase2-player-balance';
 import { comboStepAt } from './attack-combo';
@@ -302,9 +303,26 @@ describe('HP・睡眠・蘇生', () => {
 
     fallen.takeDamage(999);
 
-    for (let i = 0; i < requiredReviveInputs(); i += 1) rescuer.reviveNeighbor(fallen);
+    for (let i = 0; i < requiredReviveInputs(); i += 1) {
+      rescuer.reviveNeighbor(fallen);
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
 
     expect(fallen.snapshot().status).toBe('ACTIVE');
+  });
+
+  it('速く連打しても設定した時間より早くは起きない', () => {
+    const clock = createFakeClock(0);
+    const fallen = setup({ clock }).player;
+    const rescuer = createPlayer({ id: 'p2', characterId: 'ODORUNO', clock });
+    fallen.takeDamage(999);
+
+    // 時間を進めずに叩き続ける。回数だけ数えていると一瞬で起きてしまい、
+    // §5.3 の「1人で起こす：3〜4秒程度」が意味を失う。
+    for (let i = 0; i < 200; i += 1) rescuer.reviveNeighbor(fallen);
+
+    expect(fallen.snapshot().status).toBe('FALLING_ASLEEP');
+    expect(fallen.snapshot().reviveInputs).toBe(1);
   });
 
   it('復帰HPは最大HPの一部で、短い無敵が付く', () => {
@@ -313,7 +331,10 @@ describe('HP・睡眠・蘇生', () => {
     const rescuer = createPlayer({ id: 'p2', characterId: 'ODORUNO', clock });
 
     fallen.takeDamage(999);
-    for (let i = 0; i < requiredReviveInputs(); i += 1) rescuer.reviveNeighbor(fallen);
+    for (let i = 0; i < requiredReviveInputs(); i += 1) {
+      rescuer.reviveNeighbor(fallen);
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
 
     const revived = fallen.snapshot();
     expect(revived.hp).toBe(Math.round(revived.hpMax * DEFAULT_REVIVAL.revivedHpRatio));
@@ -329,10 +350,12 @@ describe('HP・睡眠・蘇生', () => {
     fallen.takeDamage(999);
 
     // 同じ回数だけ「時間が進む」状況で、2人なら倍のゲージが溜まる。
+    // 同じ時間のあいだに、2人なら倍のゲージが溜まる。
     const rounds = 4;
     for (let i = 0; i < rounds; i += 1) {
       first.reviveNeighbor(fallen);
       second.reviveNeighbor(fallen);
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
     }
     const withTwo = fallen.snapshot().reviveInputs;
 
@@ -340,7 +363,10 @@ describe('HP・睡眠・蘇生', () => {
     const soloFallen = setup({ clock: soloClock }).player;
     const solo = createPlayer({ id: 'p4', characterId: 'ODORUNO', clock: soloClock });
     soloFallen.takeDamage(999);
-    for (let i = 0; i < rounds; i += 1) solo.reviveNeighbor(soloFallen);
+    for (let i = 0; i < rounds; i += 1) {
+      solo.reviveNeighbor(soloFallen);
+      soloClock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
 
     expect(withTwo).toBe(soloFallen.snapshot().reviveInputs * 2);
   });
@@ -400,10 +426,28 @@ describe('プレイヤー状態のスナップショット', () => {
     player.update(0.016);
 
     const snapshot = player.snapshot();
-    const asJson: unknown = JSON.parse(JSON.stringify(snapshot));
-
-    expect(asJson).toEqual(snapshot);
+    // JSON を通せること (= 関数もクラスインスタンスも入っていないこと) を
+    // 検査する。複製そのものは structuredClone で行う。
+    expect(JSON.parse(JSON.stringify(snapshot)) as unknown).toEqual(snapshot);
     expect(structuredClone(snapshot)).toEqual(snapshot);
+  });
+
+  it('押している移動入力も往復する', () => {
+    const origin = setup();
+    origin.player.submit({ type: 'MOVE', input: { forward: 1, right: -1 } });
+
+    const replica = setup();
+    replica.player.restore(structuredClone(origin.player.snapshot()));
+    replica.player.update(1);
+
+    // 復元した側が止まってしまうと、スナップショットからその後の動きを
+    // 再現できない (同期を後付けする前提が崩れる)。
+    expect(replica.player.snapshot().position).toEqual(
+      (() => {
+        origin.player.update(1);
+        return origin.player.snapshot().position;
+      })(),
+    );
   });
 
   it('攻撃の途中で復元しても、同じ時刻に判定が出る', () => {

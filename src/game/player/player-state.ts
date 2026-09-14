@@ -62,6 +62,35 @@ export interface PlayerSnapshot {
    * 起き上がらない (soloReviveMs 3500 / 間隔 250 の 14回でちょうど踏む)。
    */
   readonly reviveInputs: number;
+  /**
+   * 直近に蘇生入力を出した時刻。**救助する側**が持つ。
+   *
+   * 連打の間隔を `REVIVE_INPUT_INTERVAL_MS` で頭打ちにするために持つ。
+   * 回数だけ数えると、キーを高速連打したりプログラムから叩いたりすれば
+   * 3.5秒のはずの蘇生が一瞬で終わる (§5.3 の時間設定が意味を失う)。
+   *
+   * 倒れている側ではなく救助する側に置くのは、2人で起こすときに
+   * 片方の入力がもう片方を弾かないようにするため。人数ぶん速くなるという
+   * §5.3 の設計はここで担保される。
+   */
+  readonly lastReviveAt: number | null;
+  /**
+   * 押しっぱなしの移動入力。
+   *
+   * これが無いと、復元した側が「止まっているはずの相手を動かし続ける」か
+   * 「動いているはずの相手を止める」かのどちらかになり、スナップショットから
+   * その後の動きを再現できない。同期を後付けする前提が崩れる。
+   */
+  readonly moveInput: MovementInput;
+  /**
+   * このスナップショットを取った時刻。
+   *
+   * 各時刻 (`swing.startedAt` / `invulnerableUntil` / `dodgeReadyAt` /
+   * `sleepAt` / `lastReviveAt`) は取った側の時計での絶対値で、
+   * `performance.now()` の原点はページごとに違う。`restore()` がこの値を
+   * 基準に差分を取り直す。
+   */
+  readonly takenAt: number;
 }
 
 /** 攻撃が当たったことを外へ知らせる。ボスへのダメージはここから入る。 */
@@ -129,6 +158,7 @@ export function createPlayer(options: PlayerOptions): Player {
   let dodgeReadyAt = 0;
   let sleepAt: number | null = null;
   let reviveInputs = 0;
+  let lastReviveAt: number | null = null;
   let moveInput: MovementInput = { forward: 0, right: 0 };
 
   function isInvulnerable(): boolean {
@@ -251,6 +281,7 @@ export function createPlayer(options: PlayerOptions): Player {
         status = 'FALLING_ASLEEP';
         sleepAt = clock.now() + DEFAULT_REVIVAL.sleepCountdownMs;
         reviveInputs = 0;
+        lastReviveAt = null;
         swing = null;
       }
       return hp;
@@ -269,9 +300,14 @@ export function createPlayer(options: PlayerOptions): Player {
       // 駆け寄る必要がある。遠くからは起こせない (§5.3)。
       if (distance > DEFAULT_REVIVAL.reviveRange) return;
 
-      // 連打1回ぶん進める。2人が連打すれば単純に倍の速さで進む。
-      // 人数での分岐は書かない。
-      target.receiveRevive(clock.now());
+      // 連打の間隔に下限を設ける。速く叩いても設定した時間より早くは
+      // 起き上がらない。救助する側が自分の間隔を持つので、2人で起こせば
+      // そのぶん素直に速くなる。
+      const now = clock.now();
+      if (lastReviveAt !== null && now - lastReviveAt < REVIVE_INPUT_INTERVAL_MS) return;
+      lastReviveAt = now;
+
+      target.receiveRevive(now);
     },
 
     receiveRevive(revivedAt) {
@@ -284,6 +320,7 @@ export function createPlayer(options: PlayerOptions): Player {
       hp = Math.round(hpMax * DEFAULT_REVIVAL.revivedHpRatio);
       sleepAt = null;
       reviveInputs = 0;
+      lastReviveAt = null;
       // 起こされた直後に即座に倒れ直さないよう、短い無敵を付ける (§5.3)。
       invulnerableUntil = revivedAt + DEFAULT_REVIVAL.revivedInvulnerableMs;
     },
@@ -302,6 +339,9 @@ export function createPlayer(options: PlayerOptions): Player {
         dodgeReadyAt,
         sleepAt,
         reviveInputs,
+        lastReviveAt,
+        moveInput,
+        takenAt: clock.now(),
       };
     },
 
@@ -310,11 +350,19 @@ export function createPlayer(options: PlayerOptions): Player {
       hp = next.hp;
       position = next.position;
       rotationY = next.rotationY;
-      swing = next.swing;
-      invulnerableUntil = next.invulnerableUntil;
-      dodgeReadyAt = next.dodgeReadyAt;
-      sleepAt = next.sleepAt;
       reviveInputs = next.reviveInputs;
+      moveInput = next.moveInput;
+
+      // 送り主の時計と自分の時計の原点をそろえる (BossSnapshot と同じ理由)。
+      const shift = clock.now() - next.takenAt;
+      const rebase = (at: number): number => at + shift;
+
+      swing =
+        next.swing === null ? null : { ...next.swing, startedAt: rebase(next.swing.startedAt) };
+      invulnerableUntil = next.invulnerableUntil === null ? null : rebase(next.invulnerableUntil);
+      dodgeReadyAt = rebase(next.dodgeReadyAt);
+      sleepAt = next.sleepAt === null ? null : rebase(next.sleepAt);
+      lastReviveAt = next.lastReviveAt === null ? null : rebase(next.lastReviveAt);
     },
   };
 }

@@ -154,6 +154,39 @@ export interface ZoneContext {
   /** 技が始まってからの経過ミリ秒。予兆の開始を 0 とする。 */
   readonly elapsedMs: number;
   readonly targets: readonly BossTarget[];
+  /**
+   * 追尾ビームの現在の着弾点。BLUE_LIGHT でボスが持っている値を渡す。
+   *
+   * 省略すると開始点から経過時間ぶんを引き直すが、それだと相手が横へ
+   * 走ったときに着弾点が追尾速度を超えて横滑りする。
+   */
+  readonly beamOrigin?: PlanarPosition;
+}
+
+/**
+ * 追尾ビームの着弾点を、前の位置から1フレームぶん進める。
+ *
+ * 速度に上限があるので、走って距離を稼げば振り切れる (§9.2「走って逃げる」)。
+ * 経過時間から毎回引き直すのではなく前の位置から積むのは、そうしないと
+ * 相手が横へ動いた分だけ上限を超えて近づいてしまうため。
+ */
+export function advanceBeam(
+  from: PlanarPosition,
+  target: PlanarPosition,
+  deltaMs: number,
+): PlanarPosition {
+  const toTarget = { forward: from.z - target.z, right: target.x - from.x };
+  const distance = Math.hypot(toTarget.forward, toTarget.right);
+  const travelled = (BLUE_LIGHT_TRACKING_SPEED * deltaMs) / 1000;
+
+  if (travelled >= distance) return target;
+
+  return moveCharacter({
+    position: from,
+    input: toTarget,
+    speed: BLUE_LIGHT_TRACKING_SPEED,
+    delta: deltaMs / 1000,
+  });
 }
 
 /**
@@ -182,31 +215,19 @@ export function dangerZonesOf(attackId: HoriAttackId, context: ZoneContext): Dan
     }
 
     default: {
-      // BLUE_LIGHT。
-      const start = aim.points[0];
+      // BLUE_LIGHT。着弾点はボスが状態として持っている (beamOrigin)。
+      // 渡されない場合だけ、開始点から経過時間ぶんを引く。
+      const start = context.beamOrigin ?? aim.points[0];
       if (start === undefined) return [];
+
       const target = targets.find((candidate) => candidate.id === aim.targetId);
-      if (target === undefined) {
+      if (target === undefined || context.beamOrigin !== undefined) {
         return [{ origin: start, shape: spec.shape, rotationY: 0 }];
       }
-      // 開始点から対象へ向かって、追尾速度の上限まで詰める。
-      // 走って距離を稼いだ分だけ着弾点は置き去りになる。
-      const toTarget = {
-        forward: start.z - target.position.z,
-        right: target.position.x - start.x,
-      };
-      const distance = Math.hypot(toTarget.forward, toTarget.right);
-      const travelled = (BLUE_LIGHT_TRACKING_SPEED * elapsedMs) / 1000;
-      const origin =
-        travelled >= distance
-          ? target.position
-          : moveCharacter({
-              position: start,
-              input: toTarget,
-              speed: BLUE_LIGHT_TRACKING_SPEED,
-              delta: elapsedMs / 1000,
-            });
-      return [{ origin, shape: spec.shape, rotationY: 0 }];
+
+      return [
+        { origin: advanceBeam(start, target.position, elapsedMs), shape: spec.shape, rotationY: 0 },
+      ];
     }
   }
 }
