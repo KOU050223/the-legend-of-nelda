@@ -8,6 +8,7 @@ import { TitleScreen } from './TitleScreen';
 describe('タイトル画面', () => {
   beforeEach(() => {
     useScreenStore.setState({ screen: 'TITLE' });
+    window.history.replaceState({}, '', '/');
   });
   afterEach(cleanup);
 

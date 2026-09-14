@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -12,6 +12,7 @@ import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 
 import { useScreenStore } from './screen';
+import { currentRoute, subscribeToRoute } from './route';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -28,10 +29,18 @@ const MicrophoneDebug = import.meta.env.DEV
 
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
+  const route = useSyncExternalStore(subscribeToRoute, currentRoute, () => 'TITLE');
 
-  // `?debug=ora` はタイトルより先に見る。URLで直接開く動作確認用の入口なので、
-  // タイトルを経由させると既存の手順が変わってしまう (`?scene=world` と同じ扱い)。
-  if (new URLSearchParams(window.location.search).get('debug') === 'ora') {
+  useEffect(() => {
+    if (route === 'BATTLE' || route === 'WORLD') {
+      useScreenStore.setState({ screen: route });
+    } else if (route === 'TITLE') {
+      useScreenStore.setState({ screen: 'TITLE' });
+    }
+  }, [route]);
+
+  // デバッグ画面はタイトルを経由しない、URL直開き用の入口。
+  if (route === 'ORA_DEBUG') {
     return <OraDebugPage />;
   }
 
