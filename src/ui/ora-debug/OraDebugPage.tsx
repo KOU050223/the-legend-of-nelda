@@ -106,12 +106,22 @@ export function OraDebugPage(): React.JSX.Element {
 
       const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) throw new Error('カメラフレームを描画できません。');
+      setActive(true);
+
+      // 映像の取得とモデル読込は別の失敗経路にする。MediaPipeのCDN読込が遅延・失敗しても
+      // カメラを止めず、ARによるMOVE/ORAの確認を続けられる。
       const detector = await createArucoMarkerDetector();
-      const handDetector = await createMediaPipeHandDetector();
-      handDetectorRef.current = handDetector;
+      let handDetector: HandDetector | undefined;
+      try {
+        handDetector = await createMediaPipeHandDetector();
+        handDetectorRef.current = handDetector;
+      } catch (cause) {
+        setError(
+          `手追跡モデルを読み込めませんでした。ATTACKは無効です。${cause instanceof Error ? ` ${cause.message}` : ''}`,
+        );
+      }
       const recognizer = createOraGestureRecognizer();
       const adapter = createOraInputAdapter(setLastAction);
-      setActive(true);
 
       const detectFrame = (): void => {
         if (!streamRef.current || !videoRef.current || !canvasRef.current) return;
@@ -121,7 +131,7 @@ export function OraDebugPage(): React.JSX.Element {
           context.getImageData(0, 0, canvas.width, canvas.height),
           capturedAt,
         );
-        const nextHand = handDetector.detect(videoRef.current, capturedAt);
+        const nextHand = handDetector?.detect(videoRef.current, capturedAt) ?? { capturedAt };
         const nextRecognition = recognizer.recognize(nextObservation, nextHand);
         adapter.consume(nextRecognition);
         drawMarkerOverlay(context, nextObservation);
