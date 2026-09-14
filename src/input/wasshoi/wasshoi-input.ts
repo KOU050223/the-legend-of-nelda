@@ -72,6 +72,7 @@ export async function attachWasshoiInput(
   let timerId: number | null = null;
   let stopped = false;
   let lastEvent: WasshoiEvent | null = null;
+  let nextWasshoiVariant = 0;
 
   try {
     context = new AudioContext();
@@ -138,7 +139,12 @@ export async function attachWasshoiInput(
   options.onStatusChange?.('active');
 
   return {
-    playWasshoi: (event) => Promise.resolve(stopped ? false : playSystemWasshoi(event)),
+    playWasshoi: (event) => {
+      if (stopped) return Promise.resolve(false);
+      const played = playSystemWasshoi(event, nextWasshoiVariant);
+      nextWasshoiVariant += 1;
+      return Promise.resolve(played);
+    },
     stop: () => stop(),
   };
 }
