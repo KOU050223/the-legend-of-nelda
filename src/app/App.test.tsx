@@ -5,7 +5,7 @@ import { createSilentAudioOutput } from '@/audio/audio-output';
 import type * as AudioOutputModule from '@/audio/audio-output';
 import { useVfxStore } from '@/rendering/vfx/vfx-store';
 import { useGameStore } from '@/store/game-store';
-import { App } from './App';
+import { BattleScreen } from './App';
 import * as sessions from './combat-session';
 import type { PlayerAction } from '@/game/types';
 
@@ -15,7 +15,7 @@ vi.mock('@/audio/audio-output', async (importOriginal) => {
   return { ...actual, createHtmlAudioOutput: actual.createSilentAudioOutput };
 });
 
-describe('App', () => {
+describe('戦闘画面', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useGameStore.getState().reset();
@@ -41,7 +41,7 @@ describe('App', () => {
     });
     render(
       <StrictMode>
-        <App />
+        <BattleScreen />
       </StrictMode>,
     );
     const session = created.at(-1)!;
@@ -104,7 +104,7 @@ describe('App', () => {
   it('StrictModeで3回敗北・再戦しても速度と入力回数が増えず、初期状態から始まる (RESULT-003/005/007/008)', () => {
     render(
       <StrictMode>
-        <App />
+        <BattleScreen />
       </StrictMode>,
     );
     const eventCounts: number[] = [];
