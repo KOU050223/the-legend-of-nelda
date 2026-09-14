@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -14,6 +14,17 @@ import { useScreenStore } from './screen';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
+/**
+ * 音声入力の閾値調整用パネル。(Issue #43)
+ *
+ * lazy() の呼び出しごと DEV ガードの内側へ置く。トップレベルに置くと
+ * import.meta.env.DEV が false でも動的 import の記述自体が残り、
+ * 本番バンドルへチャンク（CSS・pitchy 込み）が出力されてしまう。
+ */
+const MicrophoneDebug = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug }))
+  : null;
+
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
 
@@ -26,6 +37,7 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene />
+        <MicrophoneDebugPanel />
       </div>
     );
   }
@@ -36,7 +48,30 @@ export function App(): React.JSX.Element {
 export function BattleScreen(): React.JSX.Element {
   const [battle, setBattle] = useState(0);
 
-  return <Battle key={battle} onRestart={() => setBattle((value) => value + 1)} />;
+  return (
+    <>
+      <Battle key={battle} onRestart={() => setBattle((value) => value + 1)} />
+      {/*
+        Battle の外へ置くのは、再戦のたびに key で再マウントされると
+        調整中のマイクが毎回止まってしまうため。(Issue #43)
+      */}
+      <MicrophoneDebugPanel />
+    </>
+  );
+}
+
+/**
+ * 音声入力の閾値調整用パネル。本番ビルドへは出さず、ゲームUIとも密結合させない。
+ * ワールド探索モードでも閾値を合わせられるよう、両方の画面へ出す。(Issue #43)
+ */
+function MicrophoneDebugPanel(): React.JSX.Element | null {
+  if (MicrophoneDebug === null) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <MicrophoneDebug />
+    </Suspense>
+  );
 }
 
 function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {

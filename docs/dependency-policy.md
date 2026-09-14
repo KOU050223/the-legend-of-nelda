@@ -15,6 +15,9 @@
 - peer dependency の警告を残したままにしない。
 - lockfile は `pnpm-lock.yaml` のみをコミットする。
 
+`pitchy`（Pitch 検出 / McLeod Pitch Method）は 4.1.0 が latest のため、
+原則どおり latest を採用しており §3 の対象外。採用理由は Issue #43 を参照。
+
 ---
 
 # 2. 確認コマンド
@@ -38,7 +41,7 @@ nix develop -c pnpm --version
 
 # 3. 意図的に latest を採用していないもの
 
-最終確認日: 2026-09-13
+最終確認日: 2026-09-14
 
 | パッケージ | 採用 | latest | 理由 |
 | --- | --- | --- | --- |
@@ -50,6 +53,7 @@ nix develop -c pnpm --version
 
 `react` は `^19.2.8` と書くと semver 上 19.3.0 を許容してしまうため、
 `package.json` では**完全固定**で記述している。
+
 
 ---
 
