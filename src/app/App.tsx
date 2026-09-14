@@ -9,6 +9,7 @@ import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 
+import { isWorldSceneRequested } from './scene-mode';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -25,20 +26,42 @@ const MicrophoneDebug = import.meta.env.DEV
 
 export function App(): React.JSX.Element {
   const [battle, setBattle] = useState(0);
+
+  // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
+  // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
+  // 時計・入力ロックが進んでしまい、Character基盤の確認にならない。
+  if (isWorldSceneRequested()) {
+    return (
+      <div className={styles.root}>
+        <GameScene />
+        <MicrophoneDebugPanel />
+      </div>
+    );
+  }
+
   return (
     <>
       <Battle key={battle} onRestart={() => setBattle((value) => value + 1)} />
       {/*
-        音声入力の閾値調整用。本番ビルドへは出さず、ゲームUIとも密結合させない。
         Battle の外へ置くのは、再戦のたびに key で再マウントされると
         調整中のマイクが毎回止まってしまうため。(Issue #43)
       */}
-      {MicrophoneDebug !== null && (
-        <Suspense fallback={null}>
-          <MicrophoneDebug />
-        </Suspense>
-      )}
+      <MicrophoneDebugPanel />
     </>
+  );
+}
+
+/**
+ * 音声入力の閾値調整用パネル。本番ビルドへは出さず、ゲームUIとも密結合させない。
+ * ワールド探索モードでも閾値を合わせられるよう、両方の画面へ出す。(Issue #43)
+ */
+function MicrophoneDebugPanel(): React.JSX.Element | null {
+  if (MicrophoneDebug === null) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <MicrophoneDebug />
+    </Suspense>
   );
 }
 
