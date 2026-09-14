@@ -78,10 +78,6 @@ function toMediaStream(stream: AudioInputStream): MediaStream {
   throw new TypeError('Web Audio には本物の MediaStream が必要');
 }
 
-/**
- * この Adapter が AudioContext へ求める範囲。全体を要求するとテストから
- * 差し替えるのに巨大な偽物か型アサーションが必要になる。
- */
 /** 解析ノード。Adapter が触るのは窓長・波形取得・切断だけ。 */
 export interface AnalysisNode {
   fftSize: number;
@@ -284,13 +280,33 @@ export async function attachMicrophoneNoteInput(
     throw error;
   }
 
-  const samples = new Float32Array(
-    new ArrayBuffer(session.frameSize * Float32Array.BYTES_PER_ELEMENT),
-  );
-  const stabilizer = createNoteStabilizer(config);
+  /** セッション確立後の失敗でも、掴んだマイクと AudioContext を残さない。 */
+  const releaseAndRethrow = (error: unknown): never => {
+    try {
+      session.dispose();
+    } catch {
+      // 解放できないノードは諦める。マイクの停止を優先する。
+    }
+    try {
+      stopStream();
+    } catch {
+      // 止められないトラックも諦める。
+    }
+    onStatusChange?.('error');
+    throw error;
+  };
 
-  // Constraint が無視される環境があるため、要求値ではなく実値を Debug UI へ出す。
-  const trackSettings = stream.getAudioTracks()[0]?.getSettings() ?? null;
+  let samples: Float32Array<ArrayBuffer>;
+  let trackSettings: MediaTrackSettings | null;
+  try {
+    samples = new Float32Array(new ArrayBuffer(session.frameSize * Float32Array.BYTES_PER_ELEMENT));
+    // Constraint が無視される環境があるため、要求値ではなく実値を Debug UI へ出す。
+    trackSettings = stream.getAudioTracks()[0]?.getSettings() ?? null;
+  } catch (error) {
+    return releaseAndRethrow(error);
+  }
+
+  const stabilizer = createNoteStabilizer(config);
 
   /** 解析が連続で失敗したら諦める閾値。 */
   const MAX_CONSECUTIVE_FAILURES = 10;
@@ -381,8 +397,14 @@ export async function attachMicrophoneNoteInput(
     teardown('error');
   };
 
-  timerId = startTimer(analyze, ANALYSIS_INTERVAL_MS);
-  onStatusChange?.('active');
+  try {
+    timerId = startTimer(analyze, ANALYSIS_INTERVAL_MS);
+    onStatusChange?.('active');
+  } catch (error) {
+    // タイマー開始や通知で投げると stop 関数を返せない。掴んだものを手放す。
+    teardown('error');
+    throw error;
+  }
 
   // 二重呼び出しでも Track を止め直したり close を二度呼んだりしない。
   return () => {

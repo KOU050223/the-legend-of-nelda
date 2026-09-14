@@ -463,8 +463,9 @@ describe('attachMicrophoneNoteInput', () => {
     expect(statuses.at(-1)).toBe('device-not-found');
   });
 
-  it('解析を組めなければマイクを掴んだままにしない', async () => {
+  it('解析を組めなければマイクを掴んだままにせずエラーとして扱う', async () => {
     const track = createFakeTrack();
+    const statuses: MicrophoneInputStatus[] = [];
 
     await expect(
       attachMicrophoneNoteInput(() => undefined, {
@@ -472,10 +473,34 @@ describe('attachMicrophoneNoteInput', () => {
         createSession: () => {
           throw new Error('no audio context');
         },
+        onStatusChange: (status) => statuses.push(status),
       }),
     ).rejects.toThrow('no audio context');
 
     expect(track.stopped).toBe(true);
+    expect(statuses.at(-1)).toBe('error');
+  });
+
+  // 解析を始められなければ stop 関数を返せない。掴んだものを残さないこと。
+  it('解析を始められなければマイクを解放する', async () => {
+    const track = createFakeTrack();
+    const session = createFakeSession();
+
+    await expect(
+      attachMicrophoneNoteInput(() => undefined, {
+        clock: createFakeClock(),
+        detector: createScriptedDetector([]),
+        getUserMedia: () => Promise.resolve(createFakeStream(track)),
+        createSession: session.create,
+        setInterval: () => {
+          throw new Error('timer failed');
+        },
+        clearInterval: () => undefined,
+      }),
+    ).rejects.toThrow('timer failed');
+
+    expect(track.stopped).toBe(true);
+    expect(session.disposed).toBe(true);
   });
 
   // getUserMedia の失敗理由を、UI が扱える状態へ寄せられること。

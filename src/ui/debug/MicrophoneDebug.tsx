@@ -114,6 +114,7 @@ export function MicrophoneDebug(): React.JSX.Element {
 
       // 許可が下りる前に停止・アンマウントされていたら、掴んだ直後に手放す。
       if (disposedRef.current || cancelledRef.current) {
+        startingRef.current = false;
         detach();
         return;
       }
