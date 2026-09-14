@@ -18,17 +18,23 @@ export function WasshoiDebug(): React.JSX.Element {
   const [status, setStatus] = useState<WasshoiInputStatus>('idle');
   const [snapshot, setSnapshot] = useState<WasshoiDebugSnapshot | null>(null);
   const [sampleReady, setSampleReady] = useState(false);
+  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<WasshoiInputController | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [threshold, setThreshold] = useState(DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
 
   const play = useCallback(
     async (event: WasshoiEvent): Promise<void> => {
-      const played = await controllerRef.current?.playRecordedSample(event);
+      const controller = controllerRef.current;
+      // 停止操作で確定した最終イベントは再生しない。停止済みのContextへ
+      // 再生を要求して「鳴らない」という誤表示を出すのを防ぐ。
+      if (controller === null) return;
+      const played = await controller.playRecordedSample(event);
       if (!played && sampleReady) {
-        setError('わっしょーいを再生できませんでした。もう一度「試聴する」を押してください。');
+        setError('自動再生が止められました。下のプレーヤーで一度試聴してください。');
       }
     },
     [sampleReady],
@@ -97,7 +103,12 @@ export function WasshoiDebug(): React.JSX.Element {
         setRecording(true);
         return;
       }
-      await controller.stopRecording();
+      const sample = await controller.stopRecording();
+      const nextUrl = URL.createObjectURL(sample);
+      setSampleUrl((previous) => {
+        if (previous !== null) URL.revokeObjectURL(previous);
+        return nextUrl;
+      });
       setSampleReady(true);
       setRecording(false);
     } catch (reason) {
@@ -107,7 +118,10 @@ export function WasshoiDebug(): React.JSX.Element {
   }, [recording]);
 
   const preview = (): void => {
-    void play({ type: 'WASSHOI', intensity: 0.6, durationMs: 700 });
+    const audio = audioRef.current;
+    if (audio === null) return;
+    audio.currentTime = 0;
+    void audio.play().catch(() => setError('ブラウザのプレーヤーから再生できませんでした。'));
   };
 
   return (
@@ -136,6 +150,15 @@ export function WasshoiDebug(): React.JSX.Element {
         </output>
 
         {error !== null && <p className={styles.error}>{error}</p>}
+
+        {sampleUrl !== null && (
+          <div className={styles.samplePlayer}>
+            <p>録音Sample（まずここで音が鳴るか確認）</p>
+            {/* ユーザー自身が録音した短い効果音であり、字幕トラックを持たない。 */}
+            {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio ref={audioRef} className={styles.audio} controls src={sampleUrl} />
+          </div>
+        )}
 
         {!running && (
           <label className={styles.threshold}>
@@ -166,7 +189,7 @@ export function WasshoiDebug(): React.JSX.Element {
               disabled={!sampleReady}
               onClick={preview}
             >
-              わっしょーいを試聴する
+              わっしょーいを試聴する（プレーヤー）
             </button>
             <button type="button" className={styles.secondaryButton} onClick={stop}>
               マイク入力を停止する

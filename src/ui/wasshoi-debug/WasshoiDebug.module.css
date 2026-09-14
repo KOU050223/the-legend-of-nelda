@@ -89,6 +89,23 @@ h1 {
   color: #d7c9e3;
   font-size: 0.8rem;
 }
+
+.samplePlayer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 8%);
+}
+.samplePlayer p {
+  margin: 0;
+  color: #d7c9e3;
+  font-size: 0.78rem;
+}
+.audio {
+  width: 100%;
+}
 .error {
   color: #ffafb8;
 }
