@@ -1,0 +1,81 @@
+/* ゲーム表示の上へ重ねる。本番バンドルへ混ざらないようこの CSS 側に置く。(Issue #43) */
+.layer {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  min-width: 16rem;
+  border: 1px solid rgb(242 238 251 / 25%);
+  border-radius: 0.6rem;
+  background: rgb(10 8 20 / 78%);
+  color: #f2eefb;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  margin: 0.4rem 0 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  opacity: 0.55;
+  text-transform: uppercase;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.label {
+  opacity: 0.6;
+}
+
+.value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  margin: 0;
+  color: #ff9e9e;
+  font-size: 0.75rem;
+}
+
+.button {
+  margin-top: 0.3rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgb(242 238 251 / 35%);
+  border-radius: 0.4rem;
+  background: rgb(242 238 251 / 10%);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: rgb(242 238 251 / 18%);
+}

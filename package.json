@@ -21,8 +21,11 @@
     "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
+    "@ar-js-org/aruco-rs": "0.1.0",
+    "@mediapipe/tasks-vision": "1.0.1",
     "@react-three/drei": "10.7.8",
     "@react-three/fiber": "9.7.0",
+    "pitchy": "4.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "0.186.0",

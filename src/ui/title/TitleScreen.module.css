@@ -1,0 +1,119 @@
+/*
+ * 元ネタのタイトル画面と同じ構図 (左下に勇者 / 右にロゴとメニュー)。
+ * 背景は CSS のグラデーションではなく 320x180 のドット絵を拡大して敷く。
+ * 勇者がドット絵なので、背景も同じ粒でないと画の統一感が出ないため。
+ * 生成は scripts/generate-title-bg.py。
+ */
+.title {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #6fbce4;
+  font-family: 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+}
+
+.background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /*
+   * 縦横比は保つ (fill だと縦長の画面で雲が縦に伸びて絵が崩れる)。
+   * はみ出す分は切り、勇者の立つ左下の崖が必ず残るよう左下を基準にする。
+   */
+  object-fit: cover;
+  object-position: left bottom;
+  image-rendering: pixelated;
+}
+
+/* 左下の勇者。背景の崖の上に立たせる。 */
+.hero {
+  position: absolute;
+  left: 4%;
+  /* 足元が背景の崖の天面に着く位置。 */
+  bottom: 17%;
+  width: auto;
+  height: min(40vh, 36vw);
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 3px 0 #2c3a3155);
+}
+
+.menu {
+  position: absolute;
+  top: 12%;
+  right: 5%;
+  width: min(52%, 620px);
+  text-align: right;
+}
+
+/* ロゴの金色は、塗りのグラデーションと縁取りを重ねただけの安い作り。 */
+.logo {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 78px);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  background: linear-gradient(#fff6cf 14%, #ffd964 44%, #c98a22 78%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /*
+   * 縁取りは text-stroke だと塗りを潰すので、影を四方へ重ねて作る。
+   * drop-shadow は前段の結果をさらに縁取るので、指定値がそのまま太さには
+   * ならない。1px でも四方に重なれば縁として十分に出る。
+   */
+  filter: drop-shadow(1px 0 0 #8c3c1a) drop-shadow(-1px 0 0 #8c3c1a) drop-shadow(0 1px 0 #8c3c1a)
+    drop-shadow(0 -1px 0 #8c3c1a) drop-shadow(0 4px 0 #6e2a1277);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: clamp(13px, 1.7vw, 22px);
+  color: #23424b;
+  text-shadow: 0 1px 0 #ffffffaa;
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 2vh, 22px);
+  margin-top: clamp(18px, 5vh, 52px);
+}
+
+.link,
+.primary {
+  border: none;
+  background: none;
+  padding: 6px 18px;
+  font: inherit;
+  font-size: clamp(15px, 2.1vw, 27px);
+  color: #1d3b44;
+  text-shadow: 0 1px 0 #ffffffaa;
+  cursor: pointer;
+}
+
+/* 選択中の行だけ、元ネタと同じ緑の角丸で塗る。 */
+.primary {
+  border-radius: 999px;
+  background: linear-gradient(#a9e6a0, #6fc46a);
+  color: #123322;
+  box-shadow: 0 2px 0 #3f8a45;
+}
+
+.link:hover,
+.primary:hover {
+  transform: translateX(-4px);
+}
+
+.link:focus-visible,
+.primary:focus-visible {
+  outline: 3px solid #ffdf8a;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .link,
+  .primary {
+    transition: transform 0.12s steps(2);
+  }
+}
