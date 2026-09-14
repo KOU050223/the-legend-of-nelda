@@ -16,6 +16,21 @@ import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 /** 地面へ貼るための高さ。Z-fighting を避けるだけのわずかな浮き。 */
 const GROUND_OFFSET_Y = 0.02;
 
+/**
+ * 突進の矩形を地面へ寝かせ、進行方向へ向ける Euler 角。
+ *
+ * planeGeometry は XY 平面にあるので、まず X を -90度 回して地面へ寝かせ、
+ * そのあと Z で進行方向へ向ける。**Z の符号を反転させてはいけない。**
+ * 反転しても 0 / 90 / 180度 では偶然一致するが、45度 のような斜めで
+ * 描画と当たり判定がずれ、避けたつもりの場所で被弾する。
+ *
+ * 判定側 (`danger-zone.ts`) が前方を `(-sinθ, -cosθ)` としているので、
+ * ここもそれと同じ向きになる角度を返す。一致はテストで固定してある。
+ */
+export function lineMarkRotation(rotationY: number): [number, number, number] {
+  return [-Math.PI / 2, 0, rotationY];
+}
+
 export interface DangerZoneMarksProps {
   zones: readonly DangerZone[];
   /**
@@ -96,10 +111,7 @@ function DangerZoneMark({ zone, color, opacity }: DangerZoneMarkProps): React.JS
       const centerZ = origin.z + (forwardZ * shape.length) / 2;
 
       return (
-        <mesh
-          position={[centerX, GROUND_OFFSET_Y, centerZ]}
-          rotation={[-Math.PI / 2, 0, -rotationY]}
-        >
+        <mesh position={[centerX, GROUND_OFFSET_Y, centerZ]} rotation={lineMarkRotation(rotationY)}>
           <planeGeometry args={[shape.halfWidth * 2, shape.length]} />
           <meshBasicMaterial
             color={color}

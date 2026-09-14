@@ -165,6 +165,12 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
 
   function currentZones(targets: readonly BossTarget[]): DangerZone[] {
     if (activeAttack === null) return [];
+
+    // 硬直 (RECOVER) 以降は危険範囲を出さない。判定はもう終わっているのに
+    // 赤い帯が残ると、安全な場所が危険に見えて「危険範囲が読める」が崩れる。
+    const elapsed = clock.now() - activeAttack.startedAt;
+    if (phaseAt(elapsed, activeAttack.timing) === 'RECOVER') return [];
+
     return dangerZonesOf(activeAttack.attackId, {
       aim: activeAttack.aim,
       elapsedMs: clock.now() - activeAttack.startedAt,
@@ -259,6 +265,8 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
         if (now < bossDownUntil) return;
         bossDownUntil = null;
         events.emit({ type: 'BOSS_DOWN_ENDED' });
+        // ダウン中に持ち越したHP変化をここで反映する。
+        syncPhase();
         nextAttackAt = now + attackIntervalMs(modifiers());
         return;
       }
@@ -268,10 +276,18 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
 
       if (activeAttack !== null) {
         const current = attackPhase();
-        if (current === 'ACTIVE') {
+
+        // 判定が出ている尺をフレームがまたいでも取りこぼさない。処理落ちや
+        // バックグラウンドのタブでは TELEGRAPH から RECOVER へ一気に飛ぶ。
+        // そこで捨てると、当たっていたはずの攻撃が黙って無かったことになる。
+        // プレイヤー側 (player-state.ts) と同じ扱いにしてある。
+        const reachedActive = now - activeAttack.startedAt >= activeAttack.timing.telegraphMs;
+
+        if (reachedActive) {
           advanceDash();
           resolveHits(targets);
         }
+
         if (current === 'DONE') {
           events.emit({ type: 'BOSS_ATTACK_ENDED', attackId: activeAttack.attackId });
           activeAttack = null;
@@ -291,7 +307,15 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
       }
       hp = Math.min(hpMax, Math.max(0, hp - amount));
       events.emit({ type: 'HORI_HP_CHANGED', hp, hpMax });
-      syncPhase();
+
+      // BOSS DOWN 中はフェーズを進めない。
+      //
+      // 総攻撃 (§11.2) の最中に境界を割ると、その場で結界フェーズへ入って
+      // 無敵になり、残りのダウン時間の追撃が丸ごと無効になる。ご褒美である
+      // はずの総攻撃が途中から黙って無意味になるので、ダウンが明けてから
+      // まとめて反映する。
+      if (bossDownUntil === null) syncPhase();
+
       return hp;
     },
 

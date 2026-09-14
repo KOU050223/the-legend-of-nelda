@@ -105,6 +105,15 @@ describe('移動入力', () => {
     expect(input.pollMove().input.forward).toBe(0);
   });
 
+  it('矢印キーでページがスクロールしない', () => {
+    setup();
+    const event = new KeyboardEvent('keydown', { code: 'ArrowUp', cancelable: true });
+    window.dispatchEvent(event);
+
+    // 止めないと移動のたびに画面全体が動いて操作できない。
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('フォーカスが外れると移動し続けない', () => {
     const { adapter: input } = setup();
 

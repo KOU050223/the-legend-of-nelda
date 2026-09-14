@@ -47,6 +47,14 @@ export interface KeyboardGameActionAdapter extends InputAdapter {
   pollMove(): Extract<GameAction, { type: 'MOVE' }>;
 }
 
+/** 移動へ割り当たっているキー。既定動作を止める対象。 */
+const MOVEMENT_KEYS: ReadonlySet<string> = new Set([
+  ...FORWARD_KEYS,
+  ...BACKWARD_KEYS,
+  ...LEFT_KEYS,
+  ...RIGHT_KEYS,
+]);
+
 /** pressed のうち、keys のいずれかが含まれているか。 */
 function isAnyPressed(pressed: ReadonlySet<string>, keys: ReadonlySet<string>): boolean {
   for (const code of pressed) {
@@ -68,6 +76,10 @@ export function attachKeyboardGameActions(
 
     // 移動キーは押しっぱなしを追跡する。repeat も含めて記録してよい。
     pressed.add(event.code);
+
+    // 矢印キーはブラウザの既定動作 (ページスクロール) を止める。
+    // 止めないと、移動のたびに画面全体が動いて操作できない。
+    if (MOVEMENT_KEYS.has(event.code)) event.preventDefault();
 
     // 離散アクションはキーリピートで連射させない。
     if (event.repeat) return;

@@ -156,6 +156,25 @@ describe('BOSS DOWN から通常戦闘へ戻る', () => {
     expect(emitted.some((event) => event.type === 'BOSS_ATTACK_STARTED')).toBe(false);
   });
 
+  it('総攻撃で境界を割っても、ダウン中は追撃し続けられる', () => {
+    const { boss, clock } = setup();
+    boss.damage(HORI_INITIAL_HP * 0.3);
+    boss.breakBarrier();
+
+    // 総攻撃の途中で40%を割る。ここで結界へ入ってしまうと、残りの
+    // ダウン時間の追撃が全部無効になり、ご褒美が黙って消える。
+    boss.damage(HORI_INITIAL_HP * 0.35);
+    const midway = boss.snapshot().hp;
+
+    boss.damage(50);
+    expect(boss.snapshot().hp).toBe(midway - 50);
+
+    // 持ち越した分はダウンが明けた時点で反映される。
+    clock.advance(BOSS_DOWN_DURATION_MS);
+    boss.update([]);
+    expect(boss.snapshot().phase).toBe('BARRIER_2');
+  });
+
   it('BOSS DOWN が明けると通常戦闘へ戻り、また技を出す', () => {
     const { boss, clock, emitted } = setup();
     boss.damage(HORI_INITIAL_HP * 0.3);
@@ -216,6 +235,19 @@ describe('通常攻撃の予兆と被弾', () => {
     expect(hits).toHaveLength(0);
   });
 
+  it('処理落ちで判定の尺をまたいでも被弾が消えない', () => {
+    const { boss, clock, hits } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+
+    boss.update(targets);
+    // 1フレームで予兆・判定・硬直をまたぐ (バックグラウンドのタブなど)。
+    // ここで判定を捨てると、当たっていたはずの攻撃が黙って無かったことになる。
+    clock.advance(spec.telegraphMs + spec.activeMs + spec.recoverMs);
+    boss.update(targets);
+
+    expect(hits).toEqual([{ targetId: 'oddoruno', amount: spec.damage }]);
+  });
+
   it('1つの技で同じ相手に二重に当たらない', () => {
     const { boss, clock, hits } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
     const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
@@ -227,6 +259,23 @@ describe('通常攻撃の予兆と被弾', () => {
     boss.update(targets);
 
     expect(hits).toHaveLength(1);
+  });
+
+  it('判定が終わったら危険範囲が消える', () => {
+    const { boss, clock } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+
+    boss.update(targets);
+    // 予兆中と判定中は見えている。
+    expect(boss.dangerZones(targets)).toHaveLength(1);
+    clock.advance(spec.telegraphMs + 1);
+    boss.update(targets);
+    expect(boss.dangerZones(targets)).toHaveLength(1);
+
+    // 硬直へ入ったら消える。残ると安全な場所が危険に見える。
+    clock.advance(spec.activeMs);
+    boss.update(targets);
+    expect(boss.dangerZones(targets)).toEqual([]);
   });
 
   it('技が終わると通知され、次の技へ進む', () => {
