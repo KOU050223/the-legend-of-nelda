@@ -69,7 +69,7 @@ export async function createArucoMarkerDetector(
   options: ArucoMarkerDetectorOptions = {},
 ): Promise<MarkerDetector> {
   await initializeAruco();
-  const detector = new ARucoDetector('ARUCO_MIP_36h12');
+  const detector = new ARucoDetector('ARUCO');
   const markerIds = {
     left: options.leftMarkerId ?? DEFAULT_LEFT_MARKER_ID,
     right: options.rightMarkerId ?? DEFAULT_RIGHT_MARKER_ID,

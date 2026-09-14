@@ -51,6 +51,16 @@ describe('createOraGestureRecognizer', () => {
     expect(continued.actions).toEqual([]);
   });
 
+  it('認識を保てる小さな横移動でも ATTACK を出す', () => {
+    const recognizer = createOraGestureRecognizer();
+    const frame = observation(1000);
+    frame.right = { ...frame.right!, velocityX: 0.35, velocityY: 0 };
+
+    const result = recognizer.recognize(frame);
+
+    expect(result.actions).toEqual(['ATTACK']);
+  });
+
   it('両マーカーを上で広げて1秒保つと ORA_ACTION を出す', () => {
     const recognizer = createOraGestureRecognizer();
     recognizer.recognize(oraPose(0));

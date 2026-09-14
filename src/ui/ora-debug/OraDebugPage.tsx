@@ -21,6 +21,11 @@ function formatPosition(position: MarkerObservation['left']): string {
   return `x ${position.x.toFixed(2)} / y ${position.y.toFixed(2)} / size ${position.size.toFixed(2)} / vx ${position.velocityX.toFixed(2)} / vy ${position.velocityY.toFixed(2)}`;
 }
 
+function formatAttackStatus(observation: MarkerObservation, recognition: OraRecognition): string {
+  if (!observation.left || !observation.right) return 'マーカー未検出';
+  return recognition.attackReady ? 'READY' : 'クールダウン / 振り直し待ち';
+}
+
 function drawMarkerOverlay(
   context: CanvasRenderingContext2D,
   observation: MarkerObservation,
@@ -117,7 +122,7 @@ export function OraDebugPage(): React.JSX.Element {
       <section className={styles.panel} aria-labelledby="ora-debug-title">
         <p className={styles.eyebrow}>Issue #49 / PoC</p>
         <h1 id="ora-debug-title">ORA マーカー入力 Debug</h1>
-        <p>ARUCO_MIP_36h12 の ID 0 を LEFT、ID 1 を RIGHT としてカメラへ向けます。</p>
+        <p>標準 ARUCO の ID 0 を LEFT、ID 1 を RIGHT としてカメラへ向けます。</p>
         <div className={styles.controls}>
           <button type="button" onClick={() => void start()} disabled={active}>
             カメラを開始
@@ -155,7 +160,7 @@ export function OraDebugPage(): React.JSX.Element {
           </div>
           <div>
             <dt>ATTACK</dt>
-            <dd>{recognition.attackReady ? 'READY' : '待機中'}</dd>
+            <dd>{formatAttackStatus(observation, recognition)}</dd>
           </div>
           <div>
             <dt>ORA pose</dt>

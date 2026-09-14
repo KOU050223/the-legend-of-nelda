@@ -18,7 +18,9 @@ const defaults: Required<OraGestureRecognizerOptions> = {
   moveLeftRelease: 0.48,
   moveRightEnter: 0.58,
   moveRightRelease: 0.52,
-  attackMinSpeed: 1.2,
+  // 640px幅・30fpsで約3px/frameの移動。認識を失うほど振らなくても
+  // ATTACKを試せる閾値にし、モーションブラーとのトレードオフを避ける。
+  attackMinSpeed: 0.35,
   attackCooldownMs: 500,
   oraMaxY: 0.35,
   oraMinSpread: 0.25,

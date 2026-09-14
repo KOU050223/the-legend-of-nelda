@@ -14,7 +14,7 @@ AR.js は Three.js / A-Frame のカメラ・レンダラー統合を含むため
 ## 動かし方
 
 1. `pnpm dev` を起動して `http://localhost:5173/?debug=ora` を開く。
-2. カメラを開始し、ARUCO_MIP_36h12 の ID 0 を LEFT、ID 1 を RIGHT として映す。
+2. カメラを開始し、標準 ARUCO の ID 0 を LEFT、ID 1 を RIGHT として映す。
 3. 画面上で両マーカーを左右に移動、RIGHTを素早く振る、両方を上げて左右に広げる。
 
 画面を離れるか「カメラを停止」を押すと、取得した `MediaStream` の全トラックを停止する。
