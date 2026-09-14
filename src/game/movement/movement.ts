@@ -16,6 +16,39 @@ export function clampToBounds(position: PlanarPosition, bounds: CircularBounds):
 }
 
 /**
+ * `from` から `rotationY` の向きへ進んだとき、境界へ届くまでの距離。
+ *
+ * 向きの規約は `facingRotationY` と共通で、rotationY = 0 が -Z を向く。
+ * 呼び出し側が向きベクトルへ直す式を書き写さずに済むよう、変換もここへ閉じる。
+ *
+ * 円と半直線の交点を解く。`p = from・進行方向`、`g = 半径² - |from|²` として
+ * `√(p² + g) - p`。境界上 (g = 0) もこの式で正しく、外向きなら 0、内向きなら
+ * 直径ぶんを返す。壁際に居るときだけ動けなくなる、という扱いにはしない。
+ *
+ * 0 を返すのは **本当に境界の外にある** `from` だけ。復元した古い状態に
+ * 範囲外の座標が入っていても、そこから更に外へ進ませないための防御。
+ */
+export function distanceToBounds(
+  from: PlanarPosition,
+  rotationY: number,
+  bounds: CircularBounds,
+): number {
+  const forwardX = -Math.sin(rotationY);
+  const forwardZ = -Math.cos(rotationY);
+  const projection = from.x * forwardX + from.z * forwardZ;
+
+  const distance = Math.hypot(from.x, from.z);
+  if (distance > bounds.radius) return 0;
+
+  // 半径² - 距離² を積の形で求める。差のまま引くと桁落ちで境界上が微小な負に
+  // なり、内向きでも 0 を返してしまう。積なら距離が半径と一致したとき厳密に 0
+  // になり、上の判定とも必ず揃う。
+  const gap = (bounds.radius - distance) * (bounds.radius + distance);
+
+  return Math.sqrt(projection * projection + gap) - projection;
+}
+
+/**
  * 入力から次フレームの位置を計算する Pure Function。
  *
  * R3F側はこの結果を Object3D へ反映するだけにする

@@ -18,7 +18,13 @@ import {
   type AttackPhase,
   type ScaledTiming,
 } from './attack-scheduler';
-import { advanceBeam, aimAttack, dangerZonesOf, type AttackAim } from './attacks/hori-attacks';
+import {
+  advanceBeam,
+  aimAttack,
+  dangerZonesOf,
+  dashLengthOf,
+  type AttackAim,
+} from './attacks/hori-attacks';
 import { isInsideDangerZone, type DangerZone } from './attacks/danger-zone';
 import {
   advancePhase,
@@ -341,10 +347,15 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
     // 突進の速さは、軌道の長さと判定の尺から逆算する。通常の移動速度
     // (4/秒) で 500ms だと 2 ユニットしか進まず、30 ユニットの帯を
     // 「高速突進」として見せているのに、ボスはほぼ止まったままになる。
+    //
+    // 速さは軌道の長さ (30) から求めたままにして、進める距離だけを境界で
+    // 切る。壁に届かない突進の見え方と回避のタイミングを変えないため。
+    // 壁まで届く突進は、途中で止まって残りの判定時間をその場で過ごす。
     const dashSpeed = spec.shape.length / (activeAttack.timing.activeMs / 1000);
     const elapsedInActive = clock.now() - activeAttack.startedAt - activeAttack.timing.telegraphMs;
+    // 上限は予兆で見せた帯と同じ長さ。dangerZonesOf も同じ関数を使う。
     const travelled = Math.min(
-      spec.shape.length,
+      dashLengthOf(activeAttack.aim, spec.shape.length),
       (dashSpeed * Math.max(0, elapsedInActive)) / 1000,
     );
     const { origin, rotationY: aimRotation } = activeAttack.aim;

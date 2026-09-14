@@ -6,10 +6,12 @@ import {
   DEFAULT_HORI_ATTACKS,
   type HoriAttackId,
 } from '../../config/phase2-boss-balance';
-import { moveCharacter, facingRotationY } from '../../movement/movement';
+import { distanceToBounds, moveCharacter, facingRotationY } from '../../movement/movement';
 import type { PlanarPosition } from '../../movement/types';
+import { ARENA_BOUNDS } from '../../arena/arena';
 import { pseudoRandom, ringLayout } from '../../arena/ring-layout';
 import type { BossTarget } from '../boss-target';
+import type { DangerShape } from '../../config/phase2-boss-balance';
 import type { DangerZone } from './danger-zone';
 
 /**
@@ -122,6 +124,20 @@ function nearestTarget(
   return best;
 }
 
+/**
+ * 突進が実際に進む距離。軌道の長さ (`maxLength`) をアリーナの境界で切る。
+ *
+ * ボスだけが境界を無視して進むと、プレイヤーが立てない場所へ抜けてしまい、
+ * 硬直中に殴り返せなくなる (プレイヤーは `ARENA_BOUNDS` で止まる)。
+ *
+ * **予兆で見せる帯・当たり判定・ボスの移動が、この1つの値を使う。**
+ * `aim` は予兆の開始時に固定されているので、いつ・何回呼んでも同じ値になり、
+ * スナップショットから復元しても変わらない。
+ */
+export function dashLengthOf(aim: AttackAim, maxLength: number): number {
+  return Math.min(maxLength, distanceToBounds(aim.origin, aim.rotationY, ARENA_BOUNDS));
+}
+
 export interface ZoneContext {
   readonly aim: AttackAim;
   /** 技が始まってからの経過ミリ秒。予兆の開始を 0 とする。 */
@@ -174,11 +190,20 @@ export function dangerZonesOf(attackId: HoriAttackId, context: ZoneContext): Dan
   const { aim, elapsedMs, targets } = context;
 
   switch (attackId) {
-    case 'WAKE_UP_ALARM':
-    case 'MORNING_DASH': {
+    case 'WAKE_UP_ALARM': {
       return [
         { id: `${attackId}:0`, origin: aim.origin, shape: spec.shape, rotationY: aim.rotationY },
       ];
+    }
+
+    case 'MORNING_DASH': {
+      // 帯はボスが実際に止まる位置までで切る。壁を突き抜けた帯を見せると、
+      // そこへ逃げれば安全なのか判断できない。
+      const shape: DangerShape =
+        spec.shape.kind === 'LINE'
+          ? { ...spec.shape, length: dashLengthOf(aim, spec.shape.length) }
+          : spec.shape;
+      return [{ id: `${attackId}:0`, origin: aim.origin, shape, rotationY: aim.rotationY }];
     }
 
     case 'COMPRESSION_FIELD': {

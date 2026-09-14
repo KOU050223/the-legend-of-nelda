@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ARENA_BOUNDS } from '../arena/arena';
 import { createFakeClock } from '../clock';
 
 type FakeClock = ReturnType<typeof createFakeClock>;
@@ -10,7 +11,11 @@ import {
   HORI_INITIAL_HP,
   OVERDRIVE_MODIFIERS,
 } from '../config/phase2-boss-balance';
+import { ATTACK_REACH } from '../config/phase2-player-balance';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
+import { clampToBounds } from '../movement/movement';
+import type { PlanarPosition } from '../movement/types';
+import type { DangerZone } from './attacks/danger-zone';
 import { NO_SLEEP_MODE_HP_RATIO } from './boss-phase';
 import { bossMoveSpeed, createHoriBoss, type BossSnapshot, type HoriBoss } from './hori-boss';
 import type { BossTarget, DamageHit } from './boss-target';
@@ -25,7 +30,12 @@ function reserialize(snapshot: BossSnapshot): BossSnapshot {
   return structuredClone(snapshot);
 }
 
-function setup(options: { pickAttack?: Parameters<typeof createHoriBoss>[0]['pickAttack'] } = {}) {
+function setup(
+  options: {
+    pickAttack?: Parameters<typeof createHoriBoss>[0]['pickAttack'];
+    initialPosition?: Parameters<typeof createHoriBoss>[0]['initialPosition'];
+  } = {},
+) {
   const clock = createFakeClock(0);
   const events = createGameEventBus();
   const emitted: GameEvent[] = [];
@@ -37,6 +47,7 @@ function setup(options: { pickAttack?: Parameters<typeof createHoriBoss>[0]['pic
     events,
     damageSink: { applyDamage: (hit) => hits.push(hit) },
     ...(options.pickAttack === undefined ? {} : { pickAttack: options.pickAttack }),
+    ...(options.initialPosition === undefined ? {} : { initialPosition: options.initialPosition }),
   });
 
   return { boss, clock, emitted, hits };
@@ -65,6 +76,15 @@ function driveToPhase(boss: HoriBoss, targetPhase: string, clock: FakeClock): vo
     boss.damage(HORI_INITIAL_HP * 0.05);
   }
   throw new Error(`${targetPhase} へ到達しなかった`);
+}
+
+/** 突進の帯の終点。原点から rotationY の向きへ length ぶん。 */
+function lineEnd(zone: DangerZone): PlanarPosition {
+  if (zone.shape.kind !== 'LINE') throw new Error('LINE ではない');
+  return {
+    x: zone.origin.x + -Math.sin(zone.rotationY) * zone.shape.length,
+    z: zone.origin.z + -Math.cos(zone.rotationY) * zone.shape.length,
+  };
 }
 
 describe('堀大輔のHPとフェーズ', () => {
@@ -485,6 +505,62 @@ describe('4技がそれぞれ異なる対処を要求する', () => {
     expect(Math.hypot(moved.x, moved.z)).toBeGreaterThan(5);
     // 予兆で見せた軌道が動くと「横へ回避する」が成立しない。
     expect(boss.dangerZones(three)[0]?.origin).toEqual(zoneBefore?.origin);
+  });
+
+  /** 突進を1回、判定の終わりまで進める。予兆で見せた帯と、止まった位置を返す。 */
+  function runDash(options: { target: PlanarPosition; bossAt?: PlanarPosition }) {
+    const targets: BossTarget[] = [{ id: 'pay', position: options.target }];
+    const { boss, clock } = setup({
+      pickAttack: () => 'MORNING_DASH',
+      ...(options.bossAt === undefined ? {} : { initialPosition: options.bossAt }),
+    });
+
+    boss.update(targets);
+    const spec = DEFAULT_HORI_ATTACKS.MORNING_DASH;
+    // 予兆の時点でプレイヤーへ見せている帯。ここを基準に検証する。
+    const zone = boss.dangerZones(targets)[0];
+    if (zone === undefined) throw new Error('突進の危険範囲が出ていない');
+
+    clock.advance(spec.telegraphMs + spec.activeMs);
+    boss.update(targets);
+
+    return { zone, stopped: boss.snapshot().position };
+  }
+
+  it('中央から外向きに突進しても、予兆の帯もボスもアリーナの外へ出ない', () => {
+    // プレイヤーは ARENA_BOUNDS で止まるのに、ボスだけ軌道の長さ (30) ぶん
+    // 進めてしまうと、壁の外に立ったボスへ誰も手が届かなくなる。
+    const { zone, stopped } = runDash({ target: { x: 0, z: 14 } });
+    const shown = lineEnd(zone);
+
+    // 予兆で見せた帯がアリーナを突き抜けない。
+    expect(Math.hypot(shown.x, shown.z)).toBeLessThanOrEqual(ARENA_BOUNDS.radius + 1e-9);
+    // ボス自身もアリーナの外へ出ない。
+    expect(Math.hypot(stopped.x, stopped.z)).toBeLessThanOrEqual(ARENA_BOUNDS.radius + 1e-9);
+    // 見せた帯の長さと、実際に進んだ距離が同じ。
+    // 予兆・当たり判定・ボスの移動が同じ終点を使っていることの確認。
+    expect(Math.hypot(stopped.x - zone.origin.x, stopped.z - zone.origin.z)).toBeCloseTo(
+      zone.shape.kind === 'LINE' ? zone.shape.length : Number.NaN,
+    );
+  });
+
+  it('突進で止まったボスへ、プレイヤーが近接攻撃を届かせられる', () => {
+    const { stopped } = runDash({ target: { x: 0, z: 14 } });
+    // プレイヤーが立てるのはアリーナの内側まで。一番近づける点との距離を見る。
+    const closest = clampToBounds(stopped, ARENA_BOUNDS);
+
+    expect(Math.hypot(stopped.x - closest.x, stopped.z - closest.z)).toBeLessThanOrEqual(
+      ATTACK_REACH,
+    );
+  });
+
+  it('アリーナの内側で終わる突進は、これまでどおり軌道の長さぶん進む', () => {
+    // 境界に届かない突進まで短くしていないことの確認。
+    const { zone, stopped } = runDash({ bossAt: { x: 20, z: 0 }, target: { x: -10, z: 0 } });
+
+    expect(zone.shape).toEqual(DEFAULT_HORI_ATTACKS.MORNING_DASH.shape);
+    expect(stopped.x).toBeCloseTo(-10);
+    expect(stopped.z).toBeCloseTo(0);
   });
 
   it('早朝ルーティン突進は直線で、予兆の後に狙いが変わらない', () => {

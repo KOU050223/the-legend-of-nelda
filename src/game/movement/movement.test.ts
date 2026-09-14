@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { clampToBounds, facingRotationY, moveCharacter } from './movement';
+import { clampToBounds, distanceToBounds, facingRotationY, moveCharacter } from './movement';
 
 describe('moveCharacter', () => {
   it('forward = 1 のとき -Z方向へ移動する (カメラは+Z側から原点を見ているため)', () => {
@@ -232,5 +232,48 @@ describe('facingRotationY', () => {
     // right軸の符号を反転させ間違えると片側でしか気づけないため、
     // 正負両方を確認する。
     expect(facingRotationY({ forward: 0, right: -1 })).toBeCloseTo(Math.PI / 2);
+  });
+});
+
+/** rotationY の向きへ travelled ぶん進んだ点。facingRotationY と同じ規約。 */
+function advance(from: { x: number; z: number }, rotationY: number, travelled: number) {
+  return {
+    x: from.x + -Math.sin(rotationY) * travelled,
+    z: from.z + -Math.cos(rotationY) * travelled,
+  };
+}
+
+describe('distanceToBounds', () => {
+  const bounds = { radius: 10 };
+
+  it('中心からはどの向きでも半径ぶん進める', () => {
+    for (const rotationY of [0, Math.PI / 2, Math.PI, -Math.PI / 3]) {
+      expect(distanceToBounds({ x: 0, z: 0 }, rotationY, bounds)).toBeCloseTo(bounds.radius);
+    }
+  });
+
+  it('境界上から外を向いていれば進めない', () => {
+    // rotationY = 0 は -Z 向き。(0, -radius) からは境界の外へ出るだけ。
+    expect(distanceToBounds({ x: 0, z: -bounds.radius }, 0, bounds)).toBeCloseTo(0);
+  });
+
+  it('境界上から中心を向いていれば直径ぶん進める', () => {
+    // 壁際に居るときだけ突進できない、という不具合を防ぐ。境界上は
+    // 「もう進めない」ではなく、向き次第で反対の壁まで進める。
+    expect(distanceToBounds({ x: 0, z: bounds.radius }, 0, bounds)).toBeCloseTo(bounds.radius * 2);
+  });
+
+  it('返した距離ぶん進むと、ちょうど境界の上に乗る', () => {
+    const from = { x: 3, z: -4 };
+    const rotationY = 0.9;
+
+    const end = advance(from, rotationY, distanceToBounds(from, rotationY, bounds));
+
+    expect(Math.hypot(end.x, end.z)).toBeCloseTo(bounds.radius);
+  });
+
+  it('境界の外にある位置からは進ませない', () => {
+    // 古いスナップショットを復元した場合に、外側から更に外へ行かせない。
+    expect(distanceToBounds({ x: 40, z: 0 }, Math.PI / 2, bounds)).toBe(0);
   });
 });
