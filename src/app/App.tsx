@@ -9,8 +9,10 @@ import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
+import { TitleScreen } from '@/ui/title/TitleScreen';
+import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 
-import { requestedScene } from './scene-mode';
+import { useScreenStore } from './screen';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -26,30 +28,44 @@ const MicrophoneDebug = import.meta.env.DEV
   : null;
 
 export function App(): React.JSX.Element {
-  const [battle, setBattle] = useState(0);
+  const screen = useScreenStore((state) => state.screen);
+
+  // `?debug=ora` はタイトルより先に見る。URLで直接開く動作確認用の入口なので、
+  // タイトルを経由させると既存の手順が変わってしまう (`?scene=world` と同じ扱い)。
+  if (new URLSearchParams(window.location.search).get('debug') === 'ora') {
+    return <OraDebugPage />;
+  }
+
+  if (screen === 'TITLE') return <TitleScreen />;
 
   // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
   // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
   // 時計・入力ロックが進んでしまい、Character基盤の確認にならない。
-  const scene = requestedScene();
-
-  if (scene === 'world') {
+  if (screen === 'WORLD') {
     return (
       <div className={styles.root}>
-        <GameScene />
+        <GameScene world />
         <MicrophoneDebugPanel />
       </div>
     );
   }
 
   // Phase 2 のボス戦 (#55 / #56 / #58)。Phase 1 の戦闘一式は起動しない。
-  if (scene === 'boss') {
+  // あちらは PlayerAction 前提で、Phase 2 の GameAction とはキー割り当ても
+  // 噛み合わない (docs/technical-design.md §5.2)。
+  if (screen === 'BOSS') {
     return (
       <div className={styles.root}>
         <BossScene />
       </div>
     );
   }
+
+  return <BattleScreen />;
+}
+
+export function BattleScreen(): React.JSX.Element {
+  const [battle, setBattle] = useState(0);
 
   return (
     <>

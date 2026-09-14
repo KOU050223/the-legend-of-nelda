@@ -308,7 +308,7 @@ WasshoiEvent
 }
 
         ↓
-WebSocket / WebRTC DataChannel
+Realtime Game Session
         ↓
 Other Clients
         ↓
@@ -317,6 +317,8 @@ Wasshoi再生
 
 元音声ではなく、  
 **発話特徴量だけをイベントとして送信し、受信側で「わっしょーい」を再構成する**。
+
+Payの生音声はWebRTC音声トラックにもサーバーログにも載せない。通常会話用のゲーム内WebRTC音声チャネルはオドルノDaisuke / オラ大輔だけに使い、Payは `WasshoiEvent` をRealtime Game Session経由で他2人へ届ける。Role別Cueの配信判定も同セッションのサーバー側で行う。詳細は [`20260914_phase2_voice-channel-and-role-routing.md`](./20260914_phase2_voice-channel-and-role-routing.md) を参照する。
 
 ---
 
