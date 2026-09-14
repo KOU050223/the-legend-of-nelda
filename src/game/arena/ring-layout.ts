@@ -64,7 +64,8 @@ export function ringLayout({
   const points: RingPoint[] = [];
 
   for (let i = 0; i < count; i += 1) {
-    const angle = angleOffset + (i / count) * Math.PI * 2 + pseudoRandom(seed + i * 2) * angleJitter;
+    const angle =
+      angleOffset + (i / count) * Math.PI * 2 + pseudoRandom(seed + i * 2) * angleJitter;
     const radius = innerRadius + pseudoRandom(seed + i * 2 + 1) * (outerRadius - innerRadius);
 
     points.push({ x: Math.cos(angle) * radius, z: Math.sin(angle) * radius, angle });
