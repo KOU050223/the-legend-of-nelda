@@ -56,3 +56,34 @@
 .replay:hover {
   background: #ddd6fe;
 }
+
+.motions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.motion {
+  padding: 8px 12px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  color: #e2e8f0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.motion:hover {
+  border-color: #c4b5fd;
+}
+
+.motion[aria-pressed='true'] {
+  border-color: #c4b5fd;
+  color: #14121f;
+  background: #c4b5fd;
+  font-weight: 700;
+}
