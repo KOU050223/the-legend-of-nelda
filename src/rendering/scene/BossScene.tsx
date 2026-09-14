@@ -1,6 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber';
 
-import { BossArenaPreview } from '../boss/BossArenaPreview';
+import { BossArenaScene } from '../boss/BossArenaScene';
 
 /**
  * 危険範囲が読めるよう、アリーナ全体が収まる俯瞰から見る。
@@ -9,9 +9,11 @@ import { BossArenaPreview } from '../boss/BossArenaPreview';
 const PREVIEW_CAMERA = { position: [0, 42, 30] as const, fov: 50, lookAt: [0, 0, 0] as const };
 
 /**
- * 堀大輔の危険範囲を目視確認するための開発用シーン (`?scene=boss`)。
- * Issue #58 の「危険範囲が視覚的に読める」を目で確かめるための画面で、
- * ボスアリーナ本体は #54 のスコープ。
+ * 堀大輔とのボス戦シーン (`?scene=boss`)。
+ *
+ * 1人ローカルで移動・攻撃・回避ができ、被弾でHPが減る (#55 / #56 / #58)。
+ * アリーナの地形そのもの (境界・スポーン地点・装置アンカー) は #54 の
+ * スコープで、ここは仮の平面。
  */
 /**
  * 俯瞰カメラを原点へ向ける。
@@ -31,7 +33,7 @@ export function BossScene(): React.JSX.Element {
     <Canvas camera={{ position: [...PREVIEW_CAMERA.position], fov: PREVIEW_CAMERA.fov }}>
       <color attach="background" args={['#14121f']} />
       <PreviewCamera />
-      <BossArenaPreview />
+      <BossArenaScene />
     </Canvas>
   );
 }

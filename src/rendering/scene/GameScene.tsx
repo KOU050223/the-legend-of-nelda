@@ -4,7 +4,7 @@ import { ResultCamera } from '../result/ResultCamera';
 
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { attachMovementInput, type MovementInputAdapter } from '@/input/keyboard/movement-input';
-import { isWorldSceneRequested } from '@/app/scene-mode';
+import { requestedScene } from '@/app/scene-mode';
 
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
@@ -27,7 +27,7 @@ const WORLD_BACKGROUND = '#8fc7e8';
  * (docs/technical-design.md §3.1)
  */
 export function GameScene(): React.JSX.Element {
-  const showWorldScene = isWorldSceneRequested();
+  const showWorldScene = requestedScene() === 'world';
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>

@@ -10,7 +10,7 @@ import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 
-import { isBossSceneRequested, isWorldSceneRequested } from './scene-mode';
+import { requestedScene } from './scene-mode';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -31,7 +31,9 @@ export function App(): React.JSX.Element {
   // ワールド探索モード (Issue #41 の動作確認用) は戦闘一式を起動しない。
   // 起動すると WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の
   // 時計・入力ロックが進んでしまい、Character基盤の確認にならない。
-  if (isWorldSceneRequested()) {
+  const scene = requestedScene();
+
+  if (scene === 'world') {
     return (
       <div className={styles.root}>
         <GameScene />
@@ -40,8 +42,8 @@ export function App(): React.JSX.Element {
     );
   }
 
-  // 堀大輔の危険範囲の目視確認 (Issue #58)。戦闘一式は起動しない。
-  if (isBossSceneRequested()) {
+  // Phase 2 のボス戦 (#55 / #56 / #58)。Phase 1 の戦闘一式は起動しない。
+  if (scene === 'boss') {
     return (
       <div className={styles.root}>
         <BossScene />
