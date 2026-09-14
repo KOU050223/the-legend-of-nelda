@@ -3,17 +3,16 @@
  *
  * ## 現状の位置づけ
  *
- * Phase 1 の戦闘 (`combat`) が既定で、`world` / `boss` は開発用の暫定入口。
+ * Phase 1 の戦闘 (`combat`) が既定で、`world` は開発用の暫定入口。
  * 本番ビルドでは無効にして、既定のシーンだけを出す (`import.meta.env.DEV`
- * は `pnpm build` では false になる)。自由移動できるプレースホルダー画面を
+ * は `pnpm build` では false になる)。まだ調整中の Phase 2 を、
  * デプロイ先で誰でも踏める状態にしないため。
  *
- * ## #54 での扱い
+ * ## 本番の既定へ昇格させるとき
  *
- * `?scene=world` の暫定入口をどうするかの決定は #54（ボスアリーナ）の
- * 完了条件に入っている。Phase 2 が本番になった時点で、既定を `boss` 側へ
- * 移して `combat` を畳む形になる見込み。ここを1箇所へ集約してあるので、
- * そのときは `DEV_ONLY_SCENES` と `screen.ts` の初期画面を変えるだけで済む。
+ * 昇格の条件と、そのとき触るファイルは docs/phase2-boss-arena-spec.md §5
+ * に決定として残してある。ここへ1箇所に集約してあるので、実際に変えるのは
+ * `DEV_ONLY_SCENES` と `screen.ts` の初期画面だけで済む。
  */
 
 export const SCENES = [

@@ -105,8 +105,22 @@ export const DEFAULT_HORI_ATTACKS: Readonly<Record<HoriAttackId, HoriAttackSpec>
 /** 睡眠時間圧縮フィールドが同時に展開する危険区画の数。 */
 export const COMPRESSION_FIELD_ZONE_COUNT = 5;
 
-/** 危険区画を並べるリングの内径・外径。アリーナ半径 (#54) より内側に収める。 */
+/**
+ * 危険区画を並べるリングの内径・外径。
+ *
+ * 外径は ARENA_RADIUS (24, src/game/arena/arena.ts) より内側に収める。
+ * 外周に危険区画がかかると、逃げ場が壁際に消えて「安全地帯へ退避する」
+ * (docs/phase2-gameplay-spec.md §9.3) が成立しなくなる。
+ */
 export const COMPRESSION_FIELD_RING = { innerRadius: 6, outerRadius: 22 } as const;
+
+/**
+ * 危険区画を並べる角度の揺らぎ (rad)。
+ *
+ * 等間隔 (jitter 0) で置くと毎回同じ隙間が安全になり、位置を覚えるだけの
+ * 技になる。装置や安全地帯のアンカー (#54) が等間隔なのとは逆の理由。
+ */
+export const COMPRESSION_FIELD_ANGLE_JITTER = 0.5;
 
 /** ブルーライト照射のビームが追尾する速さ (1秒あたりの距離)。 */
 export const BLUE_LIGHT_TRACKING_SPEED = 6;

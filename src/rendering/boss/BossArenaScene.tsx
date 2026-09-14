@@ -1,20 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
-import { Billboard } from '@react-three/drei';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { Vector3, type Group } from 'three';
 
+import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
-import { PROVISIONAL_ARENA_RADIUS } from '@/game/config/phase2-player-balance';
 import { createGameEventBus } from '@/game/events/game-event';
 import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
-import { createBossBattle, type BattleSnapshot, type BossBattle } from '@/game/session/boss-battle';
+import {
+  createBossBattle,
+  type BattleOutcome,
+  type BattleSnapshot,
+  type BossBattle,
+} from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterModel } from '../character/CharacterModel';
+import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 
@@ -35,8 +41,13 @@ import { DangerZoneMarks } from './DangerZoneMarks';
 /** 操作するプレイヤー。 */
 const LOCAL_PLAYER_ID = 'odoruno';
 
-/** 草原の広さ。アリーナの仮半径 (#54 が決めるまでの値) を覆う大きさにする。 */
-const WORLD_GROUND_SIZE = PROVISIONAL_ARENA_RADIUS * 2 + 20;
+/**
+ * 3人ぶんの見た目の色。スポーン地点の並び順に当てる
+ * (#54 の WorldScene と同じ割り当て)。
+ */
+const CHARACTER_COLORS = ['#e07a3f', '#3f8f5f', '#5f7fd0'] as const;
+
+const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
 /**
  * ボス戦の追従カメラ。探索用より高く・遠くする。
@@ -61,10 +72,12 @@ function createBattle(): BossBattle {
   return createBossBattle({
     clock: createRealClock(),
     events: createGameEventBus(),
+    // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
+    // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
-      { id: LOCAL_PLAYER_ID, characterId: 'ODORUNO', position: { x: 0, z: 14 } },
-      { id: 'pay', characterId: 'PAY', position: { x: 8, z: 12 } },
-      { id: 'ora', characterId: 'ORA', position: { x: -8, z: 12 } },
+      { id: LOCAL_PLAYER_ID, characterId: 'ODORUNO', position: PLAYER_SPAWN },
+      { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
+      { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
@@ -107,9 +120,37 @@ function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolea
   });
 }
 
+/**
+ * 画面としての決着。戦闘の勝敗に「操作キャラが倒れた」を足したもの。
+ */
+type SceneOutcome = BattleOutcome | 'LOCAL_DOWN';
+
+function sceneOutcome(battle: BossBattle): SceneOutcome {
+  const settled = battle.outcome();
+  if (settled !== 'ONGOING') return settled;
+
+  const local = battle.players.find((player) => player.snapshot().id === LOCAL_PLAYER_ID);
+  // 倒れて寝落ちのカウントが始まっている間も、操作は戻らない。
+  return local !== undefined && local.snapshot().status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
+}
+
 export function BossArenaScene(): React.JSX.Element {
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
-  const [battle] = useState<BossBattle>(createBattle);
+  // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
+  // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
+  const [battle, setBattle] = useState<BossBattle>(createBattle);
+
+  // 画面に出す決着。
+  //
+  // `battle.outcome()` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
+  // (§5.5)。ただし今は操作できるのがオドルノ1人しか居ない。倒れても
+  // 仲間2人は ACTIVE のままなので `outcome()` は ONGOING から動かず、
+  // 操作だけが効かない状態で止まる (蘇生は ACTIVE な仲間からしか出せない)。
+  //
+  // そこで画面側では「操作キャラが倒れた」もやり直せる終わりとして扱う。
+  // ロジックの勝敗条件は変えない。3人分の同時操作が入れば
+  // (#52 P6) 仲間が起こしに来るので、この分岐は消える。
+  const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
   const localRoot = useRef<Group>(null);
@@ -155,7 +196,32 @@ export function BossArenaScene(): React.JSX.Element {
     };
   }, [battle]);
 
+  // 決着したら R でやり直す。決着後は戦闘を進めないので、ここだけは
+  // キーボードを直接見る (GameAction にやり直しは無い。やり直しは
+  // 戦闘の操作ではなく画面の操作なので、入力契約へ足さない)。
+  useEffect(() => {
+    if (outcome === 'ONGOING') return undefined;
+
+    function onRestart(event: KeyboardEvent): void {
+      if (event.code !== 'KeyR') return;
+      mateRoots.current.clear();
+      setBattle(createBattle());
+      setOutcome('ONGOING');
+      setZones([]);
+      setImminent(false);
+    }
+
+    window.addEventListener('keydown', onRestart);
+    return () => window.removeEventListener('keydown', onRestart);
+  }, [outcome]);
+
   useFrame((_, delta) => {
+    // 決着後は時間を進めない。倒れたまま技を撃たれ続けると、
+    // 何が起きて負けたのかが画面に残らない。
+    if (outcome !== 'ONGOING') {
+      return;
+    }
+
     // 移動は押しっぱなしの状態なので毎フレーム取り出す。
     const input = inputRef.current;
     if (input !== null) battle.submit(LOCAL_PLAYER_ID, input.pollMove());
@@ -191,28 +257,37 @@ export function BossArenaScene(): React.JSX.Element {
     setImminent(
       active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
     );
+
+    const nextOutcome = sceneOutcome(battle);
+    setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
 
   return (
     <>
-      <World groundSize={WORLD_GROUND_SIZE} />
+      <World />
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
 
-      {/* 仮ボス。Graybox First (docs/development-workflow.md §9)。 */}
-      <group ref={bossRoot}>
-        <mesh position={[0, 1.6, 0]} castShadow>
-          <boxGeometry args={[2, 3.2, 2]} />
-          <meshStandardMaterial color="#6b4fa0" />
-        </mesh>
+      {/*
+        堀大輔 (#67 のGLBモデル)。位置は毎フレーム bossRoot へ直接入れるので、
+        初期値だけ #54 のアンカーから与える。
+      */}
+      <group ref={bossRoot} position={[BOSS_ANCHOR.x, 0, BOSS_ANCHOR.z]}>
+        {/*
+          GLB の読み込みは suspend する。ここで受け止めないと、読み込みの間
+          Canvas の中身が丸ごと消えて草原ごと真っ暗になる。
+        */}
+        <Suspense fallback={null}>
+          <HoriDaisukeModel />
+        </Suspense>
         <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
       </group>
 
       {view.players.map((player) =>
         player.id === LOCAL_PLAYER_ID ? (
           <group key={player.id} ref={localRoot}>
-            <CharacterModel />
+            <CharacterModel color={CHARACTER_COLORS[1]} />
             <StatusBar player={player} local />
           </group>
         ) : (
@@ -223,10 +298,22 @@ export function BossArenaScene(): React.JSX.Element {
               else mateRoots.current.set(player.id, node);
             }}
           >
-            <CharacterModel />
+            <CharacterModel
+              color={player.id === 'pay' ? CHARACTER_COLORS[0] : CHARACTER_COLORS[2]}
+            />
             <StatusBar player={player} />
           </group>
         ),
+      )}
+
+      {/*
+        drei の Text はフォント読み込み中に suspend する。境界を挟まないと
+        決着の瞬間に Canvas ごと空になる。ボス (GLB) と同じ理由。
+      */}
+      {outcome !== 'ONGOING' && (
+        <Suspense fallback={null}>
+          <OutcomeBanner outcome={outcome} />
+        </Suspense>
       )}
 
       <FollowCamera
@@ -235,6 +322,26 @@ export function BossArenaScene(): React.JSX.Element {
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
     </>
+  );
+}
+
+/**
+ * 決着の表示。
+ *
+ * カメラの前へ出さず、ボスの頭上に置く。操作キャラが倒れているときも
+ * ボスは必ず画面に入っているため。
+ */
+function OutcomeBanner({ outcome }: { outcome: SceneOutcome }): React.JSX.Element {
+  const won = outcome === 'VICTORY';
+  return (
+    <Billboard position={[BOSS_ANCHOR.x, 7, BOSS_ANCHOR.z]}>
+      <Text fontSize={1.1} color={won ? '#4cd964' : '#ff453a'} anchorY="bottom">
+        {won ? 'WAKE UP!' : 'ZZZ...'}
+      </Text>
+      <Text fontSize={0.45} color="#f2f2f7" anchorY="top" position={[0, -0.2, 0]}>
+        R でやり直す
+      </Text>
+    </Billboard>
   );
 }
 

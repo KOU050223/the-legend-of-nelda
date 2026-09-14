@@ -146,12 +146,3 @@ export const DEFAULT_REVIVAL: RevivalBalance = {
  * 「2人で起こす：1.5〜2秒程度」に収まる。人数で分岐を書かずに済む。
  */
 export const REVIVE_INPUT_INTERVAL_MS = 250;
-
-/**
- * アリーナの半径。この外へは出られない。
- *
- * **#54（ボスアリーナ）が広さを決めるまでの仮値。** 移動の境界クランプは
- * #54 のスコープだが、無いとプレイヤーが地面の外まで走り続けるので、
- * 暫定でここに置く。#54 が決まったらそちらの値を参照する。
- */
-export const PROVISIONAL_ARENA_RADIUS = 38;

@@ -1,8 +1,9 @@
+import { ARENA_BOUNDS } from '@/game/arena/arena';
+
 import {
   ATTACK_REACH,
   CHARACTER_STATS,
   DEFAULT_REVIVAL,
-  PROVISIONAL_ARENA_RADIUS,
   REVIVE_INPUT_INTERVAL_MS,
   type CharacterId,
 } from '../config/phase2-player-balance';
@@ -136,14 +137,6 @@ export interface Player {
   restore(snapshot: PlayerSnapshot): void;
 }
 
-/** アリーナの外へ出さない。#54 が広さを決めるまでの仮のクランプ。 */
-function clampToArena(next: PlanarPosition): PlanarPosition {
-  const distance = Math.hypot(next.x, next.z);
-  if (distance <= PROVISIONAL_ARENA_RADIUS) return next;
-  const scale = PROVISIONAL_ARENA_RADIUS / distance;
-  return { x: next.x * scale, z: next.z * scale };
-}
-
 export function createPlayer(options: PlayerOptions): Player {
   const { id, characterId, clock, onAttackHit } = options;
   const stats = CHARACTER_STATS[characterId];
@@ -188,9 +181,13 @@ export function createPlayer(options: PlayerOptions): Player {
         ? { forward: Math.cos(rotationY), right: -Math.sin(rotationY) }
         : moveInput;
 
-    position = clampToArena(
-      moveCharacter({ position, input: direction, speed: stats.dodgeDistance, delta: 1 }),
-    );
+    position = moveCharacter({
+      position,
+      input: direction,
+      speed: stats.dodgeDistance,
+      delta: 1,
+      bounds: ARENA_BOUNDS,
+    });
     // 回避中は判定を素通りする (§4.2「短時間の無敵時間」)。
     invulnerableUntil = now + stats.dodgeInvulnerableMs;
     dodgeReadyAt = now + stats.dodgeCooldownMs;
@@ -259,14 +256,13 @@ export function createPlayer(options: PlayerOptions): Player {
       if (isBusy()) return;
 
       if (moveInput.forward !== 0 || moveInput.right !== 0) {
-        position = clampToArena(
-          moveCharacter({
-            position,
-            input: moveInput,
-            speed: stats.moveSpeed,
-            delta: deltaSeconds,
-          }),
-        );
+        position = moveCharacter({
+          position,
+          input: moveInput,
+          speed: stats.moveSpeed,
+          delta: deltaSeconds,
+          bounds: ARENA_BOUNDS,
+        });
         rotationY = facingRotationY(moveInput) ?? rotationY;
       }
     },

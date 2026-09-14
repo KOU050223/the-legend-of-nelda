@@ -1,5 +1,6 @@
 import {
   BLUE_LIGHT_TRACKING_SPEED,
+  COMPRESSION_FIELD_ANGLE_JITTER,
   COMPRESSION_FIELD_RING,
   COMPRESSION_FIELD_ZONE_COUNT,
   DEFAULT_HORI_ATTACKS,
@@ -7,6 +8,7 @@ import {
 } from '../../config/phase2-boss-balance';
 import { moveCharacter, facingRotationY } from '../../movement/movement';
 import type { PlanarPosition } from '../../movement/types';
+import { pseudoRandom, ringLayout } from '../../arena/ring-layout';
 import type { BossTarget } from '../boss-target';
 import type { DangerZone } from './danger-zone';
 
@@ -33,39 +35,6 @@ export interface AttackAim {
   readonly rotationY: number;
   /** 追尾の開始点 / 危険区画の中心。技ごとに意味が変わる。 */
   readonly points: readonly PlanarPosition[];
-}
-
-/**
- * 0〜1 の決定論的な擬似乱数。`Math.random()` は使わない。
- *
- * 同じ seed には常に同じ配置を返す。危険区画の配置がスナップショットから
- * 復元できる (Issue #58「シリアライズ可能なスナップショット」) ためには、
- * 乱数が seed だけで決まっている必要がある。
- *
- * `src/rendering/world/stage-layout.ts` の同名関数と同じ式。あちらは
- * Rendering 層にあり、Game Logic からは import できない
- * (.oxlintrc.json の no-restricted-imports)。式を共有するために
- * Rendering 側の都合をゲームロジックへ引き込む方が高くつくので、
- * 配置の意味が違う (props の飾り / 当たり判定を持つ危険区画) ことも含め
- * ここでは重複を受け入れる。
- */
-function pseudoRandom(seed: number): number {
-  const x = Math.sin(seed * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-/**
- * 原点を中心としたリング状の帯へ、決定論的に点を並べる。
- * 睡眠時間圧縮フィールドの危険区画の配置に使う。
- */
-function ringPoints(count: number, innerRadius: number, outerRadius: number, seed: number) {
-  const points: PlanarPosition[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const angle = (i / count) * Math.PI * 2 + pseudoRandom(seed + i * 2) * 0.5;
-    const radius = innerRadius + pseudoRandom(seed + i * 2 + 1) * (outerRadius - innerRadius);
-    points.push({ x: Math.cos(angle) * radius, z: Math.sin(angle) * radius });
-  }
-  return points;
 }
 
 export interface AimContext {
@@ -107,12 +76,16 @@ export function aimAttack(attackId: HoriAttackId, context: AimContext): AttackAi
       return {
         origin: bossPosition,
         rotationY: 0,
-        points: ringPoints(
-          COMPRESSION_FIELD_ZONE_COUNT,
-          COMPRESSION_FIELD_RING.innerRadius,
-          COMPRESSION_FIELD_RING.outerRadius,
+        // 角度の揺らぎは #54 の装置配置 (等間隔) と違い、毎回同じ場所が
+        // 安全にならないよう残す。seed が同じなら配置も同じで、
+        // スナップショットから復元できる (Issue #58)。
+        points: ringLayout({
+          count: COMPRESSION_FIELD_ZONE_COUNT,
+          innerRadius: COMPRESSION_FIELD_RING.innerRadius,
+          outerRadius: COMPRESSION_FIELD_RING.outerRadius,
           seed,
-        ),
+          angleJitter: COMPRESSION_FIELD_ANGLE_JITTER,
+        }).map(({ x, z }) => ({ x, z })),
       };
     }
 

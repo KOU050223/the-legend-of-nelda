@@ -1,9 +1,10 @@
+import { useLayoutEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
 import type { RefObject } from 'react';
 
 import { facingRotationY, moveCharacter } from '@/game/movement/movement';
-import type { MovementInput } from '@/game/movement/types';
+import type { CircularBounds, MovementInput, PlanarPosition } from '@/game/movement/types';
 
 import { CharacterModel } from './CharacterModel';
 
@@ -15,6 +16,12 @@ export interface PlayerCharacterProps {
   root: RefObject<Group | null>;
   /** 現在の押下状態から MovementInput を取得する。 */
   getInput: () => MovementInput;
+  /** スポーン地点。初期化時に一度だけ適用する。 */
+  spawn: PlanarPosition;
+  /** 移動できる範囲。アリーナの外へ出られないようにする。 */
+  bounds: CircularBounds;
+  /** 見た目の色。 */
+  color: string;
   speed?: number;
 }
 
@@ -31,8 +38,24 @@ export interface PlayerCharacterProps {
 export function PlayerCharacter({
   root,
   getInput,
+  spawn,
+  bounds,
+  color,
   speed = DEFAULT_SPEED,
 }: PlayerCharacterProps): React.JSX.Element {
+  const spawned = useRef(false);
+
+  // スポーン地点は初期化時に一度だけ当てる。position は毎フレーム useFrame が
+  // 直接書き換えるため、再レンダーのたびに当て直すと移動した位置がスポーン地点へ
+  // 巻き戻る。<group position={...}> で宣言的に渡さないのも同じ理由。
+  useLayoutEffect(() => {
+    const group = root.current;
+    if (!group || spawned.current) return;
+
+    spawned.current = true;
+    group.position.set(spawn.x, 0, spawn.z);
+  }, [root, spawn]);
+
   useFrame((_, delta) => {
     const group = root.current;
     if (!group) return;
@@ -44,6 +67,7 @@ export function PlayerCharacter({
       input,
       speed,
       delta,
+      bounds,
     });
     group.position.setX(next.x);
     group.position.setZ(next.z);
@@ -56,7 +80,7 @@ export function PlayerCharacter({
 
   return (
     <group ref={root}>
-      <CharacterModel />
+      <CharacterModel color={color} />
     </group>
   );
 }

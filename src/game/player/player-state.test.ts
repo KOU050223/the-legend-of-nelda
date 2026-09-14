@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { ARENA_RADIUS } from '@/game/arena/arena';
+
 import { createFakeClock } from '../clock';
 import {
   CHARACTER_STATS,
   COMBO_STEPS,
   COMBO_WINDOW_MS,
   DEFAULT_REVIVAL,
-  PROVISIONAL_ARENA_RADIUS,
   REVIVE_INPUT_INTERVAL_MS,
   type CharacterId,
 } from '../config/phase2-player-balance';
@@ -81,7 +82,7 @@ describe('移動', () => {
     for (let i = 0; i < 100; i += 1) player.update(1);
 
     const { x, z } = player.snapshot().position;
-    expect(Math.hypot(x, z)).toBeLessThanOrEqual(PROVISIONAL_ARENA_RADIUS + 0.001);
+    expect(Math.hypot(x, z)).toBeLessThanOrEqual(ARENA_RADIUS + 0.001);
   });
 });
 

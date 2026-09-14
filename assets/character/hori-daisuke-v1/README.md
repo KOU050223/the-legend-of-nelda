@@ -1,10 +1,27 @@
 # Hori Daisuke v1 — Blender modeling reference
 
-最新: [v3 顔修形・全身ブロックアウト](blender/hori-daisuke-blockout-v3.blend)。脚・パンツ・靴・手指まで追加。[確認画像と残る修形点](blender/BLOCKOUT-V3.md)。完成モデル・リグ済みモデルではない。
+最新: [v3 顔修形・全身ブロックアウト](blender/hori-daisuke-blockout-v3.blend)。脚・パンツ・靴・手指まで追加。[確認画像と残る修形点](blender/BLOCKOUT-V3.md)。v3単体は完成モデル・リグ済みモデルではない。
 
 ## FBX成果物
 
 受け渡し用FBXは [`export/hori-daisuke-v1.fbx`](export/hori-daisuke-v1.fbx) に置いている。元のFBXファイル名は `hori-daisuke-session-before-v4.fbx` で、`blender/hori-daisuke-session-before-v4.blend` から書き出したもの。編集工程の`.blend`やスクリプトは `blender/` に残している。
+
+## リグ済みFBX（Mixamo / v4）
+
+ゲームで動かす用のリグ付きFBXは
+[`export/hori-daisuke-rigged-zombie-stand-up.fbx`](export/hori-daisuke-rigged-zombie-stand-up.fbx)。
+v4モデルにMixamoの33ボーンリグ（`mixamorig:*`）を付け、
+Zombie Stand Up（1〜94フレーム）を1本持たせたもの。テクスチャ画像は無く、
+マテリアルは単色。Blender書き出し用のライト・カメラも同梱される。
+
+Web表示用のGLBはこのFBXから
+[`scripts/convert-hori-zombie-to-glb.py`](../../../scripts/convert-hori-zombie-to-glb.py)
+で生成し、`public/models/hori-daisuke.glb` に置く。ライト・カメラは変換時に落とし、
+リグ・メッシュ・アニメーションだけを残す。
+
+```sh
+blender --background --python scripts/convert-hori-zombie-to-glb.py
+```
 
 ## 一次ブロックアウト（2026-09-14）
 
