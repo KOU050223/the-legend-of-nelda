@@ -40,8 +40,15 @@ export function MicrophoneDebug(): React.JSX.Element {
   const startingRef = useRef(false);
   /** アンマウント済みか。許可がアンマウント後に下りた場合の後始末に使う。 */
   const disposedRef = useRef(false);
+  /**
+   * ユーザー操作で起動を取り消したか。
+   * Adapter は失敗を reject する前に error を通知するため、起動中フラグだけでは
+   * 「自分で止めた」と「起動に失敗した」を区別できず、失敗理由が消えてしまう。
+   */
+  const cancelledRef = useRef(false);
 
   const stop = useCallback(() => {
+    cancelledRef.current = true;
     const detach = stopRef.current;
     // 先に参照を捨てる。detach が投げてもここへ戻らず、
     // アンマウント中の例外で後始末が中断するのを防ぐ。
@@ -93,6 +100,7 @@ export function MicrophoneDebug(): React.JSX.Element {
   const start = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
+    cancelledRef.current = false;
     setErrorMessage(null);
 
     try {
@@ -105,7 +113,7 @@ export function MicrophoneDebug(): React.JSX.Element {
       });
 
       // 許可が下りる前に停止・アンマウントされていたら、掴んだ直後に手放す。
-      if (disposedRef.current || !startingRef.current) {
+      if (disposedRef.current || cancelledRef.current) {
         detach();
         return;
       }
@@ -114,8 +122,8 @@ export function MicrophoneDebug(): React.JSX.Element {
       startingRef.current = false;
       setRunning(true);
     } catch (error) {
-      // 画面を離れた / 先に停止された場合、遅れて届いた失敗は表示しない。
-      const abandoned = disposedRef.current || !startingRef.current;
+      // 画面を離れた / ユーザーが取り消した場合だけ、遅れて届いた失敗を捨てる。
+      const abandoned = disposedRef.current || cancelledRef.current;
       startingRef.current = false;
       if (abandoned) return;
       setErrorMessage(error instanceof Error ? error.message : String(error));

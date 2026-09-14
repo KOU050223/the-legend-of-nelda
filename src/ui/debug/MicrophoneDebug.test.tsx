@@ -210,6 +210,20 @@ describe('MicrophoneDebug', () => {
     expect(valueOf('Microphone')).toBe('ERROR');
   });
 
+  // Adapter は reject の前に error status を通知する。その順序でも理由が消えないこと。
+  it('起動に失敗したら状態通知の後でも理由を表示する', async () => {
+    attachMock.mockImplementation((_onNote, options) => {
+      options?.onStatusChange?.('error');
+      return Promise.reject(new Error('マイクを使用中'));
+    });
+
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+
+    expect(await screen.findByText('マイクを使用中')).toBeInTheDocument();
+    expect(valueOf('Microphone')).toBe('ERROR');
+  });
+
   it('画面を離れたらマイクを解放する', async () => {
     const { unmount } = render(<MicrophoneDebug />);
     await clickButton('マイク入力を有効にする');

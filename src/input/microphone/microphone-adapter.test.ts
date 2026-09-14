@@ -385,6 +385,35 @@ describe('attachMicrophoneNoteInput', () => {
     expect(statuses.at(-1)).toBe('error');
   });
 
+  it('マイクを止められなくても鳴り終わりは通知する', async () => {
+    const timer = createManualTimer();
+    const session = createFakeSession();
+    const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
+    const events: NoteEvent[] = [];
+    const statuses: MicrophoneInputStatus[] = [];
+
+    const stubborn = createFakeTrack();
+    stubborn.stop = () => {
+      throw new Error('stop failed');
+    };
+
+    const stop = await attachMicrophoneNoteInput((event) => events.push(event), {
+      clock: createFakeClock(),
+      detector: createScriptedDetector(frames),
+      getUserMedia: () => Promise.resolve(createFakeStream(stubborn)),
+      createSession: session.create,
+      onStatusChange: (status) => statuses.push(status),
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    timer.tick(3);
+    stop();
+
+    expect(events.map((event) => event.type)).toEqual(['note-on', 'note-off']);
+    expect(statuses.at(-1)).toBe('idle');
+  });
+
   it('停止後はフレームを解析しない', async () => {
     const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
     const { stop, timer, events } = await attachHarness({ frames });

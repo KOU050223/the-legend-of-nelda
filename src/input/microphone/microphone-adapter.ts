@@ -222,7 +222,7 @@ function toStatus(error: unknown): MicrophoneInputStatus {
     case 'OverconstrainedError':
       return 'device-not-found';
     case 'NotReadableError':
-      // 他のアプリがマイクを掴んでいる場合など。デバイスはあるので区別する。
+      // 他のアプリがマイクを使用中など。デバイスはあるので device-not-found にはしない。
       return 'error';
     default:
       return 'error';
@@ -365,7 +365,12 @@ export async function attachMicrophoneNoteInput(
       // 解放できないノードは諦める。マイクの停止を優先する。
     }
 
-    stopStream();
+    try {
+      stopStream();
+    } catch {
+      // 止められないトラックも諦める。note-off と idle 通知は必ず出す。
+    }
+
     stabilizer.reset();
     onStatusChange?.(finalStatus);
 
