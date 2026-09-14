@@ -26,30 +26,55 @@ export function MicrophoneDebug(): React.JSX.Element {
   const [running, setRunning] = useState(false);
 
   const stopRef = useRef<(() => void) | null>(null);
+  /**
+   * 起動処理に入ったことを同期的に記録する。running(state) や stopRef だけでは、
+   * 権限プロンプト待ちの await をまたいで二度押しされたときに二重起動し、
+   * 先に掴んだマイクを取りこぼす。
+   */
+  const startingRef = useRef(false);
+  /** アンマウント済みか。許可がアンマウント後に下りた場合の後始末に使う。 */
+  const disposedRef = useRef(false);
 
   const stop = useCallback(() => {
     stopRef.current?.();
     stopRef.current = null;
+    startingRef.current = false;
     setRunning(false);
     setStableNote(null);
     setSnapshot(null);
   }, []);
 
   // 画面を離れるときにマイクを掴んだままにしない。
-  useEffect(() => stop, [stop]);
+  useEffect(() => {
+    disposedRef.current = false;
+    return () => {
+      disposedRef.current = true;
+      stop();
+    };
+  }, [stop]);
 
   const start = useCallback(async () => {
-    if (stopRef.current !== null) return;
+    if (startingRef.current) return;
+    startingRef.current = true;
     setErrorMessage(null);
 
     try {
       // マイク許可はページロード時ではなく、このボタン操作から要求する。
-      stopRef.current = await attachMicrophoneNoteInput(handleNote, {
+      const detach = await attachMicrophoneNoteInput(handleNote, {
         onStatusChange: setStatus,
         onDebug: setSnapshot,
       });
+
+      // 許可が下りる前に停止・アンマウントされていたら、掴んだ直後に手放す。
+      if (disposedRef.current || !startingRef.current) {
+        detach();
+        return;
+      }
+
+      stopRef.current = detach;
       setRunning(true);
     } catch (error) {
+      startingRef.current = false;
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
 
@@ -63,7 +88,7 @@ export function MicrophoneDebug(): React.JSX.Element {
   const command = stableNote === null ? 'IGNORE' : toOcarinaCommand(stableNote.name);
 
   return (
-    <section className={styles.panel} aria-label="マイク入力デバッグ">
+    <section className={`${styles.layer} ${styles.panel}`} aria-label="マイク入力デバッグ">
       <h2 className={styles.title}>Microphone</h2>
 
       <dl className={styles.rows}>

@@ -150,6 +150,24 @@ describe('createNoteStabilizer', () => {
     expect(events[0]?.type).toBe('note-on');
   });
 
+  // 基盤はオクターブを保持し、どのオクターブを同じ音として扱うかはゲーム側が決める。
+  // ここで C5 と C6 を同一視すると、その選択肢を潰してしまう。(Issue #43)
+  it('オクターブ違いは別の音として持ち替えを通知する', () => {
+    const stabilizer = createNoteStabilizer(CONFIG);
+    feed(stabilizer, [frameOf(C5, 0), frameOf(C5, 33), frameOf(C5, 66)]);
+
+    const C6 = C5 + 12;
+    const events = feed(stabilizer, [frameOf(C6, 99), frameOf(C6, 132), frameOf(C6, 165)], 99);
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    expect(event?.type).toBe('note-change');
+    if (event?.type !== 'note-change') return;
+    expect(event.previous.octave).toBe(5);
+    expect(event.note.octave).toBe(6);
+    expect(event.note.name).toBe('C');
+  });
+
   it('リセット後は前の音を引きずらない', () => {
     const stabilizer = createNoteStabilizer(CONFIG);
     feed(stabilizer, [frameOf(C5, 0), frameOf(C5, 33), frameOf(C5, 66)]);

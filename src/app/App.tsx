@@ -1,14 +1,21 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
-import { MicrophoneDebug } from '@/ui/debug/MicrophoneDebug';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
+
+/**
+ * 動的 import にするのは、静的 import だと import.meta.env.DEV の死枝除去で
+ * JS は消えても CSS Modules の副作用 import が本番バンドルへ残るため。(Issue #43)
+ */
+const MicrophoneDebug = lazy(async () => ({
+  default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug,
+}));
 
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
@@ -58,9 +65,9 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
       <ResultOverlay onRestart={onRestart} />
       {/* 音声入力の閾値調整用。本番ビルドへは出さず、ゲームUIとも密結合させない。(Issue #43) */}
       {import.meta.env.DEV && (
-        <div className={styles.debugLayer}>
+        <Suspense fallback={null}>
           <MicrophoneDebug />
-        </div>
+        </Suspense>
       )}
     </div>
   );

@@ -23,6 +23,15 @@ describe('toOcarinaCommand', () => {
   );
 });
 
+describe('オクターブの扱い', () => {
+  // 基盤はオクターブを保持したまま返すが、コマンドとしては
+  // C4 / C5 / C6 をどれも DO として扱う。(Issue #43)
+  it('オクターブが違っても同じコマンドになる', () => {
+    expect(toOcarinaCommand('C')).toBe('DO');
+    expect(toOcarinaCommand('G')).toBe('SO');
+  });
+});
+
 describe('isOcarinaCommand', () => {
   it('コマンドとして使う音を見分けられる', () => {
     expect(isOcarinaCommand(toOcarinaCommand('C'))).toBe(true);

@@ -264,6 +264,48 @@ describe('attachMicrophoneNoteInput', () => {
     expect(track.stopped).toBe(true);
   });
 
+  // getUserMedia の失敗理由を、UI が扱える状態へ寄せられること。
+  it.each([
+    { name: 'SecurityError', status: 'permission-denied' },
+    { name: 'OverconstrainedError', status: 'device-not-found' },
+    { name: 'AbortError', status: 'error' },
+  ])('$name は $status として扱う', async ({ name, status }) => {
+    const failure = new Error('failed');
+    failure.name = name;
+
+    const statuses: MicrophoneInputStatus[] = [];
+    await expect(
+      attachMicrophoneNoteInput(() => undefined, {
+        getUserMedia: () => Promise.reject(failure),
+        onStatusChange: (value) => statuses.push(value),
+      }),
+    ).rejects.toThrow('failed');
+
+    expect(statuses.at(-1)).toBe(status);
+  });
+
+  it('Error でない失敗もエラーとして扱う', async () => {
+    const statuses: MicrophoneInputStatus[] = [];
+    await expect(
+      attachMicrophoneNoteInput(() => undefined, {
+        getUserMedia: () => Promise.reject(new Error('boom')),
+        onStatusChange: (value) => statuses.push(value),
+      }),
+    ).rejects.toThrow('boom');
+
+    expect(statuses.at(-1)).toBe('error');
+  });
+
+  it('動作中は毎フレーム波形を読む', async () => {
+    const frames = [voicedFrame(C5), voicedFrame(C5), voicedFrame(C5)];
+    const { stop, timer, session } = await attachHarness({ frames });
+
+    timer.tick(3);
+
+    expect(session.framesRead).toBe(3);
+    stop();
+  });
+
   it('実際に適用されたマイク設定をデバッグへ渡す', async () => {
     const snapshots: unknown[] = [];
     const timer = createManualTimer();

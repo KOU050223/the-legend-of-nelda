@@ -75,6 +75,13 @@ function createWebAudioSession(stream: AudioInputStream): AudioAnalysisSession {
   }
 
   const context = new AudioContext();
+
+  // ユーザー操作のスタックから外れて生成すると suspended のまま始まることがあり、
+  // その場合 getFloatTimeDomainData が常に無音を返して「動かない」状態になる。
+  if (context.state === 'suspended') {
+    context.resume().catch(() => undefined);
+  }
+
   const source = context.createMediaStreamSource(stream);
   const analyser = context.createAnalyser();
   analyser.fftSize = FFT_SIZE;
@@ -89,7 +96,8 @@ function createWebAudioSession(stream: AudioInputStream): AudioAnalysisSession {
     dispose() {
       source.disconnect();
       analyser.disconnect();
-      void context.close();
+      // 二重 close などで reject しても、停止処理としては done 扱いでよい。
+      context.close().catch(() => undefined);
     },
   };
 }
