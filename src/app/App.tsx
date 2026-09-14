@@ -5,6 +5,7 @@ import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
+import { MicrophoneDebug } from '@/ui/debug/MicrophoneDebug';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
 import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
@@ -55,6 +56,12 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
         </>
       )}
       <ResultOverlay onRestart={onRestart} />
+      {/* 音声入力の閾値調整用。本番ビルドへは出さず、ゲームUIとも密結合させない。(Issue #43) */}
+      {import.meta.env.DEV && (
+        <div className={styles.debugLayer}>
+          <MicrophoneDebug />
+        </div>
+      )}
     </div>
   );
 }

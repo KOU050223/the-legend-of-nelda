@@ -4,3 +4,12 @@
   height: 100vh;
   overflow: hidden;
 }
+
+/* デバッグパネル。ゲーム表示の上に重ねるが、操作は奪わない。(Issue #43) */
+.debugLayer {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 4;
+  pointer-events: auto;
+}
