@@ -36,9 +36,17 @@ export function MicrophoneDebug(): React.JSX.Element {
   const disposedRef = useRef(false);
 
   const stop = useCallback(() => {
-    stopRef.current?.();
+    const detach = stopRef.current;
+    // 先に参照を捨てる。detach が投げてもここへ戻らず、
+    // アンマウント中の例外で後始末が中断するのを防ぐ。
     stopRef.current = null;
     startingRef.current = false;
+
+    try {
+      detach?.();
+    } catch {
+      // 後始末の失敗で画面を壊さない。マイクは Adapter 側で解放済み。
+    }
 
     // アンマウント経由の停止では表示を更新する相手がいない。
     if (disposedRef.current) return;

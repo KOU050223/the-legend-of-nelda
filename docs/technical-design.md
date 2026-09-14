@@ -703,6 +703,11 @@ type PlayerAction =
 - Account / Login
 - DB
 
+「マイク音声ルーティング」は、音声を他Clientへ中継する処理を指す。
+Issue #43 で追加したマイク入力基盤（`src/input/microphone/`）は、
+ローカルで Pitch を音名イベントへ変換するだけで音声の中継を行わないため、
+このスコープ外項目には当たらない。
+
 必要になる前に導入しない。
 
 ---

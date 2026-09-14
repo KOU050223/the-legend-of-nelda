@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { hzToNote } from '@/input/microphone/note-classifier';
 import type { NoteName } from '@/input/microphone/types';
 
 import { isOcarinaCommand, toOcarinaCommand } from './note-command-map';
@@ -24,11 +25,22 @@ describe('toOcarinaCommand', () => {
 });
 
 describe('オクターブの扱い', () => {
-  // 基盤はオクターブを保持したまま返すが、コマンドとしては
-  // C4 / C5 / C6 をどれも DO として扱う。(Issue #43)
-  it('オクターブが違っても同じコマンドになる', () => {
-    expect(toOcarinaCommand('C')).toBe('DO');
-    expect(toOcarinaCommand('G')).toBe('SO');
+  // 基盤は音名とオクターブを分けて返す。コマンドは音名だけで決まるため、
+  // C4 / C5 / C6 はどれも DO になる。(Issue #43)
+  it('検出結果のオクターブが違っても同じコマンドになる', () => {
+    const commands = [261.63, 523.25, 1046.5].map((hz) => {
+      const note = hzToNote(hz);
+      expect(note).not.toBeNull();
+      return note === null ? null : toOcarinaCommand(note.name);
+    });
+
+    expect(commands).toEqual(['DO', 'DO', 'DO']);
+  });
+
+  it('オクターブ違いでも対象外の音はコマンドにならない', () => {
+    const note = hzToNote(587.33); // D5
+    expect(note?.name).toBe('D');
+    expect(note === null ? null : toOcarinaCommand(note.name)).toBe('IGNORE');
   });
 });
 

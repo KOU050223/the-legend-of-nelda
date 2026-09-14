@@ -21,7 +21,7 @@ describe('createPitchyDetector', () => {
     { hz: 659.25, name: 'E', octave: 5 },
     { hz: 783.99, name: 'G', octave: 5 },
     { hz: 440.0, name: 'A', octave: 4 },
-  ])('$hz Hz の正弦波から $name$octave を復元できる', ({ hz, name, octave }) => {
+  ])('$hz Hz の正弦波から $name-$octave を復元できる', ({ hz, name, octave }) => {
     const detector = createPitchyDetector();
 
     const frame = detector.detect(sineWave(hz), SAMPLE_RATE, 0);

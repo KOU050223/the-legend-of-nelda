@@ -12,7 +12,7 @@ describe('hzToNote', () => {
     { hz: 783.99, name: 'G', octave: 5, midi: 79 },
     { hz: 261.63, name: 'C', octave: 4, midi: 60 },
     { hz: 1046.5, name: 'C', octave: 6, midi: 84 },
-  ])('$hz Hz は $name$octave になる', ({ hz, name, octave, midi }) => {
+  ])('$hz Hz は $name-$octave になる', ({ hz, name, octave, midi }) => {
     const note = hzToNote(hz);
 
     expect(note).not.toBeNull();

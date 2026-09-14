@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { hzToNote } from '@/input/microphone/note-classifier';
+import type { NoteEventListener } from '@/input/microphone/types';
+
 import { MicrophoneDebug } from './MicrophoneDebug';
 
 /**
@@ -16,6 +19,28 @@ vi.mock('@/input/microphone/microphone-adapter', () => ({
 
 const { attachMicrophoneNoteInput } = await import('@/input/microphone/microphone-adapter');
 const attachMock = vi.mocked(attachMicrophoneNoteInput);
+
+/** Adapter が通知するはずの NoteEvent を、テストから流し込めるようにする。 */
+function captureListener(): () => NoteEventListener {
+  let listener: NoteEventListener | undefined;
+  attachMock.mockImplementation((onNote: NoteEventListener) => {
+    listener = onNote;
+    return Promise.resolve(detach);
+  });
+
+  return () => {
+    if (listener === undefined) throw new Error('まだ購読が始まっていない');
+    return listener;
+  };
+}
+
+/** 画面上で label に対応する値を読む。 */
+function valueOf(label: string): string {
+  const term = screen.getByText(label);
+  const value = term.nextElementSibling?.textContent;
+  if (value === undefined || value === null) throw new Error(`${label} の値が無い`);
+  return value;
+}
 
 /** ボタンを押して、その結果の再描画まで待つ。 */
 async function clickButton(name: string): Promise<void> {
@@ -92,6 +117,77 @@ describe('MicrophoneDebug', () => {
     });
 
     expect(attachMock).toHaveBeenCalledTimes(1);
+  });
+
+  // パネルの目的は確定音とコマンドを実機で読めること。(Issue #43)
+  it('確定した音をドレミとコマンドに換えて表示する', async () => {
+    const getListener = captureListener();
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+
+    const note = hzToNote(523.25, 0.97);
+    if (note === null) throw new Error('C5 を作れない');
+    await act(async () => {
+      getListener()({ type: 'note-on', note });
+    });
+
+    expect(valueOf('Note')).toBe('C5');
+    expect(valueOf('Solfège')).toBe('ド');
+    expect(valueOf('Stable')).toBe('C');
+    expect(valueOf('Command')).toBe('DO');
+  });
+
+  it('対象外の音はコマンドとして扱わない', async () => {
+    const getListener = captureListener();
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+
+    const note = hzToNote(587.33, 0.97); // D5
+    if (note === null) throw new Error('D5 を作れない');
+    await act(async () => {
+      getListener()({ type: 'note-on', note });
+    });
+
+    expect(valueOf('Note')).toBe('D5');
+    expect(valueOf('Command')).toBe('IGNORE');
+  });
+
+  it('鳴り終わったら確定音の表示を消す', async () => {
+    const getListener = captureListener();
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+
+    const note = hzToNote(523.25, 0.97);
+    if (note === null) throw new Error('C5 を作れない');
+    await act(async () => {
+      getListener()({ type: 'note-on', note });
+    });
+    await act(async () => {
+      getListener()({ type: 'note-off', note });
+    });
+
+    expect(valueOf('Note')).toBe('—');
+    expect(valueOf('Command')).toBe('IGNORE');
+  });
+
+  it('持ち替えたら新しい音を表示する', async () => {
+    const getListener = captureListener();
+    render(<MicrophoneDebug />);
+    await clickButton('マイク入力を有効にする');
+
+    const previous = hzToNote(523.25, 0.97);
+    const next = hzToNote(659.25, 0.97);
+    if (previous === null || next === null) throw new Error('音を作れない');
+    await act(async () => {
+      getListener()({ type: 'note-on', note: previous });
+    });
+    await act(async () => {
+      getListener()({ type: 'note-change', previous, note: next });
+    });
+
+    expect(valueOf('Note')).toBe('E5');
+    expect(valueOf('Solfège')).toBe('ミ');
+    expect(valueOf('Command')).toBe('MI');
   });
 
   it('画面を離れたらマイクを解放する', async () => {

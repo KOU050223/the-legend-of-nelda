@@ -30,6 +30,8 @@ export interface NoteStabilizer {
 export function isAcceptableFrame(frame: PitchFrame, config: PitchInputConfig): boolean {
   // NaN は比較がすべて false になり、閾値チェックを素通りしてしまう。
   if (!Number.isFinite(frame.frequencyHz)) return false;
+  if (!Number.isFinite(frame.rms)) return false;
+  if (!Number.isFinite(frame.clarity)) return false;
   if (frame.rms < config.minRms) return false;
   if (frame.clarity < config.minClarity) return false;
   if (frame.frequencyHz < config.minFrequencyHz) return false;
@@ -57,7 +59,11 @@ export function createNoteStabilizer(config: PitchInputConfig): NoteStabilizer {
 
   return {
     update(frame, nowMs) {
-      if (frame === null) {
+      // 音名へ変換できないフレームは無音と同じ扱いにする。ここで早期 return すると
+      // note-off の猶予が進まず、鳴り止んでも note-off が出なくなる。
+      const incoming = frame === null ? null : frameToNote(frame);
+
+      if (incoming === null) {
         // 無音側。ピッチが一瞬欠けただけで note-off しないよう猶予を置く。
         resetCandidate();
 
@@ -71,9 +77,7 @@ export function createNoteStabilizer(config: PitchInputConfig): NoteStabilizer {
         return { type: 'note-off', note };
       }
 
-      const note = frameToNote(frame);
-      if (note === null) return null;
-
+      const note = incoming;
       lastVoicedMs = nowMs;
 
       // 同じ音が鳴り続けているだけなら何も起きない。

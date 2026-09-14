@@ -23,7 +23,21 @@ import styles from './App.module.css';
 
 export function App(): React.JSX.Element {
   const [battle, setBattle] = useState(0);
-  return <Battle key={battle} onRestart={() => setBattle((value) => value + 1)} />;
+  return (
+    <>
+      <Battle key={battle} onRestart={() => setBattle((value) => value + 1)} />
+      {/*
+        音声入力の閾値調整用。本番ビルドへは出さず、ゲームUIとも密結合させない。
+        Battle の外へ置くのは、再戦のたびに key で再マウントされると
+        調整中のマイクが毎回止まってしまうため。(Issue #43)
+      */}
+      {import.meta.env.DEV && (
+        <Suspense fallback={null}>
+          <MicrophoneDebug />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
@@ -64,12 +78,6 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
         </>
       )}
       <ResultOverlay onRestart={onRestart} />
-      {/* 音声入力の閾値調整用。本番ビルドへは出さず、ゲームUIとも密結合させない。(Issue #43) */}
-      {import.meta.env.DEV && (
-        <Suspense fallback={null}>
-          <MicrophoneDebug />
-        </Suspense>
-      )}
     </div>
   );
 }
