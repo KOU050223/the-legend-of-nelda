@@ -1,0 +1,77 @@
+{
+  "character": "hori-daisuke",
+  "version": "v1",
+  "purpose": "Blender editable character modeling underlay",
+  "coordinate_system": {
+    "up": "Z",
+    "front": "-Y",
+    "character_left": "+X",
+    "unit": "normalized height = 1.0"
+  },
+  "sources": [
+    {
+      "file": "source/source-front.png",
+      "role": "primary photographic reference",
+      "known": ["face", "hair", "front expression", "black shirt"]
+    },
+    {
+      "file": "source/source-gym.png",
+      "role": "secondary photographic reference",
+      "known": ["shoulder and arm mass", "torso", "rear hair and back"]
+    }
+  ],
+  "generated_views": [
+    { "angle": 0, "name": "front", "file": "turntable/front-0.png", "status": "checked" },
+    {
+      "angle": 45,
+      "name": "left-front",
+      "file": "turntable/left-front-45.png",
+      "status": "checked"
+    },
+    { "angle": 90, "name": "left-side", "file": "turntable/left-side-90.png", "status": "checked" },
+    {
+      "angle": 135,
+      "name": "left-back",
+      "file": "turntable/left-back-135.png",
+      "status": "generated; hidden anatomy completion"
+    },
+    {
+      "angle": 180,
+      "name": "back",
+      "file": "turntable/back-180.png",
+      "status": "checked; hidden anatomy completion"
+    },
+    {
+      "angle": 225,
+      "name": "right-back",
+      "file": "turntable/right-back-225.png",
+      "status": "generated; hidden anatomy completion"
+    },
+    {
+      "angle": 270,
+      "name": "right-side",
+      "file": "turntable/right-side-270.png",
+      "status": "checked; hidden anatomy completion"
+    },
+    {
+      "angle": 315,
+      "name": "right-front",
+      "file": "turntable/right-front-315.png",
+      "status": "checked"
+    },
+    {
+      "angle": "top",
+      "name": "top",
+      "file": "turntable/top-90.png",
+      "status": "checked; true top-down regenerated"
+    }
+  ],
+  "generation": {
+    "tool": "built-in image_gen",
+    "input_images": ["Image #1", "Image #2"],
+    "white_background": true,
+    "square": true,
+    "orthographic_intent": true
+  },
+  "caveat": "Generated views are design references, not a calibrated scan or ground-truth orthographic projection."
+}
