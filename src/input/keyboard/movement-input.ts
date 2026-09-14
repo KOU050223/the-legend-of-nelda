@@ -16,6 +16,14 @@ const MOVEMENT_KEYS: ReadonlySet<string> = new Set([
   ...RIGHT_KEYS,
 ]);
 
+/** pressed のうち、keys のいずれかが含まれているか。 */
+function isAnyPressed(pressed: ReadonlySet<string>, keys: ReadonlySet<string>): boolean {
+  for (const code of pressed) {
+    if (keys.has(code)) return true;
+  }
+  return false;
+}
+
 export interface MovementInputAdapterOptions {
   target?: KeyboardEventTarget;
 }
@@ -65,15 +73,16 @@ export function attachMovementInput(
 
   return {
     getInput() {
-      let forward = 0;
-      let right = 0;
-
-      for (const code of pressed) {
-        if (FORWARD_KEYS.has(code)) forward += 1;
-        if (BACKWARD_KEYS.has(code)) forward -= 1;
-        if (RIGHT_KEYS.has(code)) right += 1;
-        if (LEFT_KEYS.has(code)) right -= 1;
-      }
+      // 同じ方向に割り当たったキー (例: KeyW と ArrowUp) を同時に押しても
+      // その方向へは1のままにする。押されたキーをそのまま加算すると
+      // W+ArrowUp+D が {forward: 2, right: 1} になり、normalize後の斜め方向が
+      // 実際の入力と食い違うため (moveCharacter は forward/right を等価な
+      // 軸の強さとして扱う)。
+      const forward =
+        (isAnyPressed(pressed, FORWARD_KEYS) ? 1 : 0) -
+        (isAnyPressed(pressed, BACKWARD_KEYS) ? 1 : 0);
+      const right =
+        (isAnyPressed(pressed, RIGHT_KEYS) ? 1 : 0) - (isAnyPressed(pressed, LEFT_KEYS) ? 1 : 0);
 
       return { forward, right };
     },

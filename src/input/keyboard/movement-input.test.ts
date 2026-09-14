@@ -83,6 +83,19 @@ describe('attachMovementInput', () => {
     expect(adapter.getInput()).toEqual({ forward: -1, right: -1 });
   });
 
+  it('同じ方向に割り当たったキー (KeyW と ArrowUp) を同時押ししても forward は 1 のまま', () => {
+    // 各キーを押されたぶんだけ加算すると、KeyW + ArrowUp + KeyD が
+    // {forward: 2, right: 1} になり、moveCharacter の normalize が
+    // 期待する斜め方向とずれる (レビュー指摘)。
+    adapter = attachMovementInput();
+
+    dispatchKeyDown('KeyW');
+    dispatchKeyDown('ArrowUp');
+    dispatchKeyDown('KeyD');
+
+    expect(adapter.getInput()).toEqual({ forward: 1, right: 1 });
+  });
+
   it.each([
     ['スライダー', 'input'],
     ['ボタン', 'button'],
