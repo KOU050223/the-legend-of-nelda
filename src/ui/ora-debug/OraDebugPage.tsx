@@ -75,6 +75,7 @@ export function OraDebugPage(): React.JSX.Element {
   const [hand, setHand] = useState<HandObservation>(emptyHandObservation);
   const [recognition, setRecognition] = useState<OraRecognition>(emptyRecognition);
   const [lastAction, setLastAction] = useState<OraGameAction>();
+  const [attackMinSpeed, setAttackMinSpeed] = useState(0.35);
 
   const stop = useCallback(() => {
     if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current);
@@ -126,7 +127,7 @@ export function OraDebugPage(): React.JSX.Element {
           `手追跡モデルを読み込めませんでした。ATTACKは無効です。${cause instanceof Error ? ` ${cause.message}` : ''}`,
         );
       }
-      const recognizer = createOraGestureRecognizer();
+      const recognizer = createOraGestureRecognizer({ attackMinSpeed });
       const adapter = createOraInputAdapter(setLastAction);
 
       const detectFrame = (): void => {
@@ -151,7 +152,7 @@ export function OraDebugPage(): React.JSX.Element {
       stop();
       setError(cause instanceof Error ? cause.message : 'Webカメラを開始できませんでした。');
     }
-  }, [stop]);
+  }, [attackMinSpeed, stop]);
 
   return (
     <main className={styles.page}>
@@ -167,6 +168,19 @@ export function OraDebugPage(): React.JSX.Element {
             カメラを停止
           </button>
         </div>
+        <label className={styles.threshold}>
+          <span>ATTACK速度閾値: {attackMinSpeed.toFixed(2)}</span>
+          <input
+            type="range"
+            min="0.1"
+            max="1"
+            step="0.05"
+            value={attackMinSpeed}
+            disabled={active}
+            onChange={(event) => setAttackMinSpeed(Number(event.target.value))}
+          />
+          <small>小さいほど軽い振りで発火します。変更後はカメラを開始し直してください。</small>
+        </label>
         {error && (
           <p className={styles.error} role="alert">
             {error}
@@ -203,6 +217,10 @@ export function OraDebugPage(): React.JSX.Element {
             <dd className={hand.right ? styles.tracking : styles.notTracking}>
               {formatHandStatus(hand)}
             </dd>
+          </div>
+          <div>
+            <dt>ATTACK閾値</dt>
+            <dd>{attackMinSpeed.toFixed(2)}</dd>
           </div>
           <div>
             <dt>ORA pose</dt>
