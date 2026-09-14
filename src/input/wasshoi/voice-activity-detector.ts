@@ -2,6 +2,8 @@ import type { VoiceActivityConfig, VoiceActivityState, WasshoiEvent } from './ty
 
 export interface VoiceActivityDetector {
   update(rms: number, timestampMs: number): WasshoiEvent | null;
+  setThreshold(threshold: number): void;
+  getThreshold(): number;
   getState(): VoiceActivityState;
   getDurationMs(timestampMs: number): number;
   getIntensity(): number;
@@ -19,6 +21,7 @@ export function toIntensity(peakRms: number, threshold: number): number {
  * マイク・録音・ネットワークのどれからも独立してテストできるようにする。
  */
 export function createVoiceActivityDetector(config: VoiceActivityConfig): VoiceActivityDetector {
+  let threshold = config.threshold;
   let state: VoiceActivityState = 'silence';
   let startedAtMs: number | null = null;
   let lastVoicedAtMs: number | null = null;
@@ -29,7 +32,7 @@ export function createVoiceActivityDetector(config: VoiceActivityConfig): VoiceA
 
     const event: WasshoiEvent = {
       type: 'WASSHOI',
-      intensity: toIntensity(peakRms, config.threshold),
+      intensity: toIntensity(peakRms, threshold),
       durationMs: Math.max(0, endedAtMs - startedAtMs),
     };
     state = 'silence';
@@ -42,7 +45,7 @@ export function createVoiceActivityDetector(config: VoiceActivityConfig): VoiceA
   return {
     update(rms, timestampMs) {
       const normalizedRms = Math.max(0, rms);
-      const voiced = normalizedRms >= config.threshold;
+      const voiced = normalizedRms >= threshold;
 
       if (state === 'silence') {
         if (!voiced) return null;
@@ -69,10 +72,15 @@ export function createVoiceActivityDetector(config: VoiceActivityConfig): VoiceA
       return null;
     },
     getState: () => state,
+    setThreshold(nextThreshold) {
+      // 発話中に閾値を変えると、発話の途中で切断されうるため次の無音区間まで保留する。
+      if (state === 'silence') threshold = Math.max(0, nextThreshold);
+    },
+    getThreshold: () => threshold,
     getDurationMs(timestampMs) {
       return startedAtMs === null ? 0 : Math.max(0, timestampMs - startedAtMs);
     },
-    getIntensity: () => toIntensity(peakRms, config.threshold),
+    getIntensity: () => toIntensity(peakRms, threshold),
     reset() {
       const event = state === 'speaking' && lastVoicedAtMs !== null ? finish(lastVoicedAtMs) : null;
       state = 'silence';

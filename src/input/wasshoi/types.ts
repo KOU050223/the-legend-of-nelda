@@ -33,5 +33,9 @@ export interface WasshoiDebugSnapshot {
   durationMs: number;
   /** 発話中の最大RMSから求めた値。無音時は0。 */
   intensity: number;
+  /** 無音中に推定した環境ノイズのRMS。 */
+  noiseFloor: number;
+  /** 手動閾値と環境ノイズから決めた実効閾値。 */
+  effectiveThreshold: number;
   lastEvent: WasshoiEvent | null;
 }

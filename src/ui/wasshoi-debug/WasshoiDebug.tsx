@@ -13,32 +13,38 @@ import {
 
 import styles from './WasshoiDebug.module.css';
 
+const THRESHOLD_STORAGE_KEY = 'nelda.wasshoi.threshold';
+
+function loadThreshold(): number {
+  const stored = Number(window.localStorage.getItem(THRESHOLD_STORAGE_KEY));
+  return Number.isFinite(stored) && stored >= 0.001 && stored <= 0.05
+    ? stored
+    : DEFAULT_VOICE_ACTIVITY_CONFIG.threshold;
+}
+
 /** Issue #50 の独立した手動確認画面。ゲーム本体・マルチプレイ通信には接続しない。 */
 export function WasshoiDebug(): React.JSX.Element {
   const [status, setStatus] = useState<WasshoiInputStatus>('idle');
   const [snapshot, setSnapshot] = useState<WasshoiDebugSnapshot | null>(null);
-  const [sampleReady, setSampleReady] = useState(false);
-  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
+  const [lastOutput, setLastOutput] = useState('—');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<WasshoiInputController | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [threshold, setThreshold] = useState(DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
+  const [threshold, setThreshold] = useState(loadThreshold);
 
-  const play = useCallback(
-    async (event: WasshoiEvent): Promise<void> => {
-      const controller = controllerRef.current;
-      // 停止操作で確定した最終イベントは再生しない。停止済みのContextへ
-      // 再生を要求して「鳴らない」という誤表示を出すのを防ぐ。
-      if (controller === null) return;
-      const played = await controller.playRecordedSample(event);
-      if (!played && sampleReady) {
-        setError('自動再生が止められました。下のプレーヤーで一度試聴してください。');
-      }
-    },
-    [sampleReady],
-  );
+  useEffect(() => {
+    window.localStorage.setItem(THRESHOLD_STORAGE_KEY, String(threshold));
+  }, [threshold]);
+
+  const play = useCallback(async (event: WasshoiEvent): Promise<void> => {
+    const controller = controllerRef.current;
+    // 停止操作で確定した最終イベントは再生しない。停止済みのContextへ
+    // 再生を要求して「鳴らない」という誤表示を出すのを防ぐ。
+    if (controller === null) return;
+    const played = await controller.playWasshoi(event);
+    setLastOutput(played ? 'PLAYED' : 'NOT PLAYED');
+    if (!played) setError('システムわっしょーいを再生できませんでした。');
+  }, []);
 
   const onEvent = useCallback(
     (event: WasshoiEvent): void => {
@@ -47,25 +53,19 @@ export function WasshoiDebug(): React.JSX.Element {
         rms: previous?.rms ?? 0,
         durationMs: 0,
         intensity: 0,
+        noiseFloor: previous?.noiseFloor ?? 0,
+        effectiveThreshold: previous?.effectiveThreshold ?? threshold,
         lastEvent: event,
       }));
       void play(event);
     },
-    [play],
+    [play, threshold],
   );
 
   const stop = useCallback((): void => {
     controllerRef.current?.stop();
     controllerRef.current = null;
-    setRecording(false);
     setRunning(false);
-    // 録音Sampleはマイク入力のAudioContextにだけ保持している。停止後にREADYのまま
-    // 残すと、再有効化した別セッションで再生できるように見えてしまうため捨てる。
-    setSampleReady(false);
-    setSampleUrl((previous) => {
-      if (previous !== null) URL.revokeObjectURL(previous);
-      return null;
-    });
   }, []);
 
   useEffect(
@@ -79,13 +79,7 @@ export function WasshoiDebug(): React.JSX.Element {
     setStatus(next);
     if (next === 'idle' || next === 'error' || next === 'permission-denied') {
       controllerRef.current = null;
-      setRecording(false);
       setRunning(false);
-      setSampleReady(false);
-      setSampleUrl((previous) => {
-        if (previous !== null) URL.revokeObjectURL(previous);
-        return null;
-      });
     }
   }, []);
 
@@ -105,46 +99,15 @@ export function WasshoiDebug(): React.JSX.Element {
     }
   }, [handleStatusChange, onEvent, threshold]);
 
-  const toggleRecording = useCallback(async (): Promise<void> => {
-    const controller = controllerRef.current;
-    if (controller === null) return;
-    setError(null);
-    try {
-      if (!recording) {
-        controller.startRecording();
-        setRecording(true);
-        return;
-      }
-      const sample = await controller.stopRecording();
-      const nextUrl = URL.createObjectURL(sample);
-      setSampleUrl((previous) => {
-        if (previous !== null) URL.revokeObjectURL(previous);
-        return nextUrl;
-      });
-      setSampleReady(true);
-      setRecording(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setRecording(false);
-    }
-  }, [recording]);
-
-  const preview = (): void => {
-    const audio = audioRef.current;
-    if (audio === null) return;
-    audio.currentTime = 0;
-    void audio.play().catch(() => setError('ブラウザのプレーヤーから再生できませんでした。'));
-  };
-
   return (
     <main className={styles.page}>
       <section className={styles.panel} aria-label="わっしょーいデバッグ">
-        <p className={styles.eyebrow}>PAY DAISUKE / ISSUE #50</p>
+        <p className={styles.eyebrow}>PAY DAISUKE / ISSUE #75</p>
         <h1>Wasshoi Debug</h1>
         <p className={styles.description}>
           発話内容は保存も送信もしません。声量と長さだけを「わっしょーい」に変換します。
         </p>
-        <p className={styles.guide}>録音後はマイク入力を停止せず、そのまま普通に話してください。</p>
+        <p className={styles.guide}>マイクを許可したら、そのまま普通に話してください。</p>
 
         <dl className={styles.rows}>
           <Row label="MIC" value={status.toUpperCase()} />
@@ -153,7 +116,13 @@ export function WasshoiDebug(): React.JSX.Element {
           <Row label="INTENSITY" value={(snapshot?.intensity ?? 0).toFixed(2)} />
           <Row label="DURATION" value={`${Math.round(snapshot?.durationMs ?? 0)} ms`} />
           <Row label="THRESHOLD" value={threshold.toFixed(3)} />
-          <Row label="SAMPLE" value={sampleReady ? 'READY' : 'NOT READY'} />
+          <Row label="NOISE FLOOR" value={(snapshot?.noiseFloor ?? 0).toFixed(3)} />
+          <Row
+            label="EFFECTIVE GATE"
+            value={(snapshot?.effectiveThreshold ?? threshold).toFixed(3)}
+          />
+          <Row label="WASSHOI ENGINE" value={running ? 'READY' : 'IDLE'} />
+          <Row label="LAST OUTPUT" value={lastOutput} />
         </dl>
 
         <output className={styles.event} aria-label="最後のWasshoiEvent">
@@ -163,15 +132,6 @@ export function WasshoiDebug(): React.JSX.Element {
         </output>
 
         {error !== null && <p className={styles.error}>{error}</p>}
-
-        {sampleUrl !== null && (
-          <div className={styles.samplePlayer}>
-            <p>録音Sample（まずここで音が鳴るか確認）</p>
-            {/* ユーザー自身が録音した短い効果音であり、字幕トラックを持たない。 */}
-            {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-            <audio ref={audioRef} className={styles.audio} controls src={sampleUrl} />
-          </div>
-        )}
 
         {!running && (
           <label className={styles.threshold}>
@@ -193,19 +153,8 @@ export function WasshoiDebug(): React.JSX.Element {
           </button>
         ) : (
           <>
-            <button type="button" className={styles.button} onClick={() => void toggleRecording()}>
-              {recording ? '録音を完了する' : '「わっしょーい」を録音する'}
-            </button>
-            <button
-              type="button"
-              className={styles.button}
-              disabled={!sampleReady}
-              onClick={preview}
-            >
-              わっしょーいを試聴する（プレーヤー）
-            </button>
             <button type="button" className={styles.secondaryButton} onClick={stop}>
-              録音を破棄してマイク入力を停止する
+              マイク入力を停止する
             </button>
           </>
         )}

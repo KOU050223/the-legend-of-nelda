@@ -47,6 +47,16 @@ describe('createVoiceActivityDetector', () => {
     expect(event).toMatchObject({ type: 'WASSHOI', durationMs: 1_000 });
     expect(detector.getState()).toBe('silence');
   });
+
+  it('無音時だけ発話判定の閾値を更新できる', () => {
+    const detector = createVoiceActivityDetector(config);
+    detector.setThreshold(0.1);
+    expect(detector.getThreshold()).toBe(0.1);
+
+    detector.update(0.2, 0);
+    detector.setThreshold(0.5);
+    expect(detector.getThreshold()).toBe(0.1);
+  });
 });
 
 describe('toIntensity', () => {
