@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatNote, hzToNote, midiToHz, toSolfege } from './note-classifier';
+import { formatNote, frameToNote, hzToNote, midiToHz, toSolfege } from './note-classifier';
 import type { NoteName } from './types';
 
 describe('hzToNote', () => {
@@ -76,6 +76,20 @@ describe('hzToNote', () => {
 
   it('clarity をそのまま引き継ぐ', () => {
     expect(hzToNote(440, 0.93)?.clarity).toBeCloseTo(0.93, 5);
+  });
+});
+
+describe('frameToNote', () => {
+  it('検出フレームをそのまま音へ変換する', () => {
+    const note = frameToNote({ frequencyHz: 523.25, clarity: 0.95, rms: 0.2, timestampMs: 10 });
+
+    expect(note?.name).toBe('C');
+    expect(note?.octave).toBe(5);
+    expect(note?.clarity).toBeCloseTo(0.95, 5);
+  });
+
+  it('周波数として成立しないフレームは音にしない', () => {
+    expect(frameToNote({ frequencyHz: 0, clarity: 0.95, rms: 0.2, timestampMs: 0 })).toBeNull();
   });
 });
 

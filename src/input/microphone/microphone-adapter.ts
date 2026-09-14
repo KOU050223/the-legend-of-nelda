@@ -81,31 +81,43 @@ async function createWebAudioSession(stream: AudioInputStream): Promise<AudioAna
 
   const context = new AudioContext();
 
-  // getUserMedia の await でユーザー操作のスタックから外れるため、suspended の
-  // まま始まることがある。その状態だと getFloatTimeDomainData が常に無音を返し、
-  // 「エラーも出ないのに反応しない」状態になるので、再開できたかまで確かめる。
-  if (context.state === 'suspended') {
-    await context.resume();
+  try {
+    // getUserMedia の await でユーザー操作のスタックから外れるため、suspended の
+    // まま始まることがある。その状態だと getFloatTimeDomainData が常に無音を返し、
+    // 「エラーも出ないのに反応しない」状態になるので、再開できたかまで確かめる。
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+
+    // iOS Safari などでは resume が拒否されたまま解決することがある。
+    if (context.state !== 'running') {
+      throw new Error(`AudioContext を再開できない (state=${context.state})`);
+    }
+
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    source.connect(analyser);
+
+    return {
+      sampleRate: context.sampleRate,
+      frameSize: analyser.fftSize,
+      readFrame(samples) {
+        analyser.getFloatTimeDomainData(samples);
+      },
+      dispose() {
+        source.disconnect();
+        analyser.disconnect();
+        // 二重 close などで reject しても、停止処理としては done 扱いでよい。
+        context.close().catch(() => undefined);
+      },
+    };
+  } catch (error) {
+    // 組み立てに失敗した AudioContext を放置しない。再試行のたびに増えると
+    // ブラウザ側の上限に達して、以降マイクを開けなくなる。
+    context.close().catch(() => undefined);
+    throw error;
   }
-
-  const source = context.createMediaStreamSource(stream);
-  const analyser = context.createAnalyser();
-  analyser.fftSize = FFT_SIZE;
-  source.connect(analyser);
-
-  return {
-    sampleRate: context.sampleRate,
-    frameSize: analyser.fftSize,
-    readFrame(samples) {
-      analyser.getFloatTimeDomainData(samples);
-    },
-    dispose() {
-      source.disconnect();
-      analyser.disconnect();
-      // 二重 close などで reject しても、停止処理としては done 扱いでよい。
-      context.close().catch(() => undefined);
-    },
-  };
 }
 
 /** Debug UI へ現在値を流すためのフック。ゲーム本体は購読しない。 */
@@ -213,6 +225,16 @@ export async function attachMicrophoneNoteInput(
   const trackSettings = stream.getAudioTracks()[0]?.getSettings() ?? null;
 
   const analyze = (): void => {
+    // 解析やリスナーが投げても 33ms ごとに例外を出し続けない。
+    try {
+      analyzeFrame();
+    } catch (error) {
+      onDebug?.({ status: 'error', frame: null, accepted: false, trackSettings });
+      console.error('マイク入力の解析に失敗', error);
+    }
+  };
+
+  const analyzeFrame = (): void => {
     session.readFrame(samples);
 
     const nowMs = clock.now();

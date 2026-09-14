@@ -10,6 +10,12 @@ import { DEFAULT_PITCH_INPUT_CONFIG } from '@/input/microphone/types';
 import styles from './MicrophoneDebug.module.css';
 
 /**
+ * このパネルが使う閾値。Adapter へ渡す値と表示を同じ定数から引き、
+ * 「表示は 0.9 なのに実際は別の値」というズレを作らない。
+ */
+const CONFIG = DEFAULT_PITCH_INPUT_CONFIG;
+
+/**
  * オカリナ実機で閾値を合わせるための開発用パネル。(Issue #43)
  *
  * ゲーム本番UIへ密結合させない。ここが無くても音声入力基盤は動く。
@@ -64,6 +70,10 @@ export function MicrophoneDebug(): React.JSX.Element {
     };
   }, [stop]);
 
+  const handleNote = useCallback((event: NoteEvent): void => {
+    setStableNote(event.type === 'note-off' ? null : event.note);
+  }, []);
+
   const start = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
@@ -71,7 +81,9 @@ export function MicrophoneDebug(): React.JSX.Element {
 
     try {
       // マイク許可はページロード時ではなく、このボタン操作から要求する。
+      // 閾値は CONFIG を渡し、下の表示と実際に使う値がずれないようにする。
       const detach = await attachMicrophoneNoteInput(handleNote, {
+        config: CONFIG,
         onStatusChange: setStatus,
         onDebug: setSnapshot,
       });
@@ -83,6 +95,7 @@ export function MicrophoneDebug(): React.JSX.Element {
       }
 
       stopRef.current = detach;
+      startingRef.current = false;
       setRunning(true);
     } catch (error) {
       startingRef.current = false;
@@ -90,11 +103,7 @@ export function MicrophoneDebug(): React.JSX.Element {
       if (disposedRef.current) return;
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-
-    function handleNote(event: NoteEvent): void {
-      setStableNote(event.type === 'note-off' ? null : event.note);
-    }
-  }, []);
+  }, [handleNote]);
 
   const frame = snapshot?.frame ?? null;
   const rawNote = frame === null ? null : frameToNote(frame);
@@ -120,13 +129,10 @@ export function MicrophoneDebug(): React.JSX.Element {
 
       <h3 className={styles.subtitle}>Thresholds</h3>
       <dl className={styles.rows}>
-        <Row label="minRms" value={String(DEFAULT_PITCH_INPUT_CONFIG.minRms)} />
-        <Row label="minClarity" value={String(DEFAULT_PITCH_INPUT_CONFIG.minClarity)} />
-        <Row label="stableFrames" value={String(DEFAULT_PITCH_INPUT_CONFIG.stableFrames)} />
-        <Row
-          label="Range"
-          value={`${DEFAULT_PITCH_INPUT_CONFIG.minFrequencyHz}–${DEFAULT_PITCH_INPUT_CONFIG.maxFrequencyHz} Hz`}
-        />
+        <Row label="minRms" value={String(CONFIG.minRms)} />
+        <Row label="minClarity" value={String(CONFIG.minClarity)} />
+        <Row label="stableFrames" value={String(CONFIG.stableFrames)} />
+        <Row label="Range" value={`${CONFIG.minFrequencyHz}–${CONFIG.maxFrequencyHz} Hz`} />
         <Row label="Track" value={formatTrackSettings(snapshot?.trackSettings ?? null)} />
       </dl>
 

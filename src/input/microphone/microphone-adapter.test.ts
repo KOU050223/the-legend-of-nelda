@@ -383,6 +383,31 @@ describe('attachMicrophoneNoteInput', () => {
     stop();
   });
 
+  // 棄却されたフレームもデバッグへ出す。閾値で弾かれたのか、そもそも
+  // ピッチが取れていないのかを実機で切り分けるため。
+  it('閾値で弾いたフレームも理由が分かる形でデバッグへ渡す', async () => {
+    const snapshots: { accepted: boolean; frame: PitchFrame | null }[] = [];
+    const timer = createManualTimer();
+    const session = createFakeSession();
+    const quiet = { ...voicedFrame(C5), rms: 0.0001 };
+
+    const stop = await attachMicrophoneNoteInput(() => undefined, {
+      clock: createFakeClock(),
+      detector: createScriptedDetector([quiet]),
+      getUserMedia: () => Promise.resolve(createFakeStream(createFakeTrack())),
+      createSession: session.create,
+      onDebug: (snapshot) => snapshots.push(snapshot),
+      setInterval: timer.setInterval,
+      clearInterval: timer.clearInterval,
+    });
+
+    timer.tick();
+    stop();
+
+    expect(snapshots[0]?.accepted).toBe(false);
+    expect(snapshots[0]?.frame).not.toBeNull();
+  });
+
   it('実際に適用されたマイク設定をデバッグへ渡す', async () => {
     const snapshots: unknown[] = [];
     const timer = createManualTimer();
