@@ -57,19 +57,45 @@ export function isDiscreteGameActionType(value: string): value is DiscreteGameAc
 }
 
 /**
- * 入力源の共通形。
+ * 入力源が守る共通の契約。
  *
- * - `GameAction` だけを通知する (ブラウザ固有型を Game Logic へ渡さない)
- * - 購読解除関数を返す
+ * **出力型 `T` をジェネリックにしてある。**全部の入力源が `GameAction` を
+ * 出すわけではないため。オカリナ (マイク) は終盤の最終局面だけで使い、
+ * 通常戦闘やオラ大輔の通常能力には使わない
+ * (docs/phase2-gameplay-spec.md §13)。通常戦闘の `GameAction` へ無理に
+ * 対応付けると、仕様が「別途設計する」としている入力方式を先取りで
+ * 決めてしまう。
  *
- * この2点を型で縛っておくと、ARマーカー / マイクの Adapter を後から足すとき、
- * 満たすべき形がここを見れば分かる (#55 完了条件)。
+ * 共通化するのは**全ての入力源に等しく要る2点**だけに絞る。
+ *
+ * - ブラウザ固有型 (KeyboardEvent / MediaStream / AudioContext / PCM) を
+ *   Game Logic へ渡さず、正規化した値だけを通知する
+ * - 後始末できる (`detach`)
+ *
+ * 起動は `Promise` を返せる形にしてある。マイクは `getUserMedia` の許可待ち
+ * があり同期では繋がらないため。Keyboard のように即座に繋がるものは
+ * そのまま返してよい (`Awaitable`)。
+ *
+ * ARマーカー (#49) を足すときは、`GameAction` を出す
+ * `AttachInputAdapter` を満たす形で書けばよい。マイクは
+ * `AttachInputAdapter<NoteEvent>` にあたる。
  */
 export type GameActionListener = (action: GameAction) => void;
 
+export type InputListener<T> = (value: T) => void;
+
 export interface InputAdapter {
-  /** 購読を解除する。 */
+  /** 購読を解除し、握っているリソースを解放する。 */
   detach(): void;
 }
 
-export type AttachInputAdapter = (onAction: GameActionListener) => InputAdapter;
+/** 同期でも Promise でも返せる。マイクだけが非同期になる。 */
+export type Awaitable<T> = T | Promise<T>;
+
+/**
+ * 入力源を繋ぐ関数の形。
+ * 既定の出力型は `GameAction`（Keyboard / ARマーカー）。
+ */
+export type AttachInputAdapter<T = GameAction> = (
+  onValue: InputListener<T>,
+) => Awaitable<InputAdapter>;

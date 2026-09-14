@@ -216,13 +216,69 @@ Phase 1では概ね以下の5レイヤーへ分離する。
 
 Game Logicへ直接DOMイベントを渡さず、ゲーム用Actionへ変換する。
 
+```text
+Input Source → Input Adapter → Action → Game Logic
+```
+
+### 入力源が守る共通の契約
+
+入力源の種類によらず、次の2点を守る。型は
+`src/game/types/game-action.ts` の `AttachInputAdapter` が表す。
+
+1. **ブラウザ固有型を Game Logic へ渡さない。** `KeyboardEvent` /
+   `MediaStream` / `AudioContext` / PCM Array は Adapter の内側に留め、
+   正規化した値だけを通知する。
+2. **後始末できる。** `detach()` でリソースを解放する。マイクを握ったままに
+   するとランプが点きっぱなしになる。
+
+起動は `Promise` を返してよい。マイクは `getUserMedia` の許可待ちがあり
+同期では繋がらないため。キーボードのように即座に繋がるものはそのまま返す。
+
+### Phase 1 と Phase 2 で Action が2系統ある
+
+現在、出力する Action の型が2つ併存している。**どちらを触るかは、実装する
+シーンで決まる。**
+
+| | Phase 1（`?scene=combat`） | Phase 2（`?scene=boss`） |
+| --- | --- | --- |
+| Action 型 | `PlayerAction` | `GameAction` |
+| 値 | `DODGE_LEFT` / `DODGE_RIGHT` / `GUARD` / `ATTACK` | `MOVE` / `ATTACK` / `DODGE` / `INTERACT` / `REVIVE` / `CHARACTER_ACTION` |
+| Keyboard Adapter | `keyboard-adapter.ts` | `game-action-adapter.ts` |
+| キー割り当て | `key-bindings.ts` | `game-action-bindings.ts` |
+
 例:
 
 ```text
-ArrowLeft
-↓
-PlayerAction.DODGE_LEFT
+Phase 1:  ArrowLeft → PlayerAction.DODGE_LEFT
+Phase 2:  KeyW      → GameAction { type: 'MOVE', input: { forward: 1, right: 0 } }
 ```
+
+置換ではなく併存にしているのは、Phase 1 の戦闘一式（`combat-session` /
+`judge` / `state-machine` / `Hud`）が `PlayerAction` を前提に動いており、
+Phase 2 は別シーンとして立ち上がるため。Phase 1 を畳むときに
+`PlayerAction` ごと消せるよう、**Phase 2 側のコードは `PlayerAction` を
+import しない**。
+
+キー割り当ても別表にしている。Phase 1 は `KeyA`/`KeyD` が DODGE・`KeyS` が
+GUARD だが、Phase 2 は WASD が移動で、ガードは基本アクションに含めない
+（`phase2-gameplay-spec.md` §4.3）。同じ表へ混ぜるとどちらのシーンでも
+キーが噛み合わない。
+
+### 出力型は入力源ごとに違ってよい
+
+すべての入力源が `GameAction` を出すわけではない。
+
+| 入力源 | 出力型 | 備考 |
+| --- | --- | --- |
+| Keyboard | `GameAction` | |
+| ARマーカー（オラ大輔 / 未実装） | `GameAction` | `phase2-ora-input-spec.md` |
+| マイク（オカリナ） | `NoteEvent` | 終盤の最終局面専用 |
+
+オカリナは通常戦闘やオラ大輔の通常能力には使わず、終盤で初めて登場する
+（`phase2-gameplay-spec.md` §13）。通常戦闘の `GameAction` へ対応付けると、
+仕様が「別途設計する」としている入力方式を先取りで決めることになるため、
+`NoteEvent` のままにしてある。安眠の旋律の設計が決まった時点で、
+`microphone-input-adapter.ts` へ変換を足す。
 
 ---
 

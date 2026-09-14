@@ -113,6 +113,18 @@ export function attachKeyboardGameActions(
   };
 }
 
-/** `AttachInputAdapter` を満たす形。移動を使わない用途向け。 */
-export const attachKeyboardInputAdapter: AttachInputAdapter = (onAction) =>
-  attachKeyboardGameActions(onAction);
+/**
+ * 共通契約 (`AttachInputAdapter`) を満たす形。
+ *
+ * 移動を `pollMove()` で取り出さず、押しっぱなしの状態も毎回の通知として
+ * 受け取りたい呼び出し側向け。ARマーカーの Adapter を足すときは、
+ * この形に揃えれば Game Logic 側は入力元を知らないまま繋がる。
+ */
+export const attachKeyboardInputAdapter: AttachInputAdapter = (onAction) => {
+  const adapter = attachKeyboardGameActions(onAction);
+  return {
+    detach() {
+      adapter.detach();
+    },
+  };
+};
