@@ -27,6 +27,7 @@ function createBattleSnapshot(): BattleSnapshot {
       takenAt: 0,
     },
     players: [],
+    barrier: null,
   };
 }
 
@@ -56,6 +57,7 @@ function createBattleHarness(
     },
     players: [],
     snapshot: () => createBattleSnapshot(),
+    barrierViewFor: () => null,
   };
 
   return { battle, elapsed: () => elapsed, submitted, updates };
