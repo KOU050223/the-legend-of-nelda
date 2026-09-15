@@ -92,7 +92,15 @@ export function App(): React.JSX.Element {
   if (screen === 'TITLE') return <TitleScreen />;
 
   if (screen === 'INTRO') {
-    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('MATCHING')} />;
+    return (
+      <IntroCutscene
+        onComplete={() =>
+          useScreenStore
+            .getState()
+            .goTo(useScreenStore.getState().mode === 'SINGLE' ? 'WORLD' : 'MATCHING')
+        }
+      />
+    );
   }
 
   if (screen === 'MATCHING') {

@@ -78,10 +78,10 @@ describe('ルートの画面遷移', () => {
     expect(screen.queryByRole('region', { name: '演出設定' })).not.toBeInTheDocument();
   });
 
-  it('タイトルから「はじめから」を押すとイントロ画面が出る (Issue #64)', () => {
+  it('タイトルから「ひとりで」を押すとイントロ画面が出る (Issue #110)', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ひとりで' }));
 
     expect(screen.getByRole('button', { name: 'イントロをスキップ' })).toBeInTheDocument();
   });
@@ -96,11 +96,21 @@ describe('ルートの画面遷移', () => {
     expect(gameSceneProps.at(-1)?.world).toBe(true);
   });
 
-  it('イントロをスキップするとマッチングを開く', () => {
+  it('ひとり用のイントロをスキップするとワールドを開く (Issue #110)', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ひとりで' }));
 
+    fireEvent.click(screen.getByRole('button', { name: 'イントロをスキップ' }));
+
+    expect(gameSceneProps.at(-1)?.world).toBe(true);
+    expect(window.location.pathname).toBe('/world');
+  });
+
+  it('みんな用のイントロをスキップするとマッチングを開く (Issue #110)', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'みんなで' }));
     fireEvent.click(screen.getByRole('button', { name: 'イントロをスキップ' }));
 
     expect(screen.getByTestId('matching-screen')).toBeInTheDocument();
@@ -119,7 +129,7 @@ describe('ルートの画面遷移', () => {
   it('画面を選ぶと直接開ける URL に移動する', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ひとりで' }));
 
     expect(window.location.pathname).toBe('/intro');
   });
@@ -127,7 +137,7 @@ describe('ルートの画面遷移', () => {
   it('ブラウザの戻る操作で画面もタイトルへ戻る', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ひとりで' }));
     window.history.replaceState({}, '', '/');
     fireEvent(window, new PopStateEvent('popstate'));
 
