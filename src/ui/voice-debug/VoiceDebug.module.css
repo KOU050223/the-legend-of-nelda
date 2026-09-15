@@ -1,0 +1,63 @@
+@import '../wasshoi-debug/WasshoiDebug.module.css';
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.form label {
+  display: grid;
+  gap: 0.3rem;
+  color: #d7c9e3;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+.form input,
+.form select {
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 0.35rem;
+  background: #201531;
+  color: #fff;
+  font: inherit;
+}
+h2 {
+  margin: 0.25rem 0 0.5rem;
+  color: #f4b8ff;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+}
+.participants {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.participants li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.3rem;
+  background: rgb(255 255 255 / 7%);
+}
+.participants span {
+  color: #b9a9cb;
+  font-size: 0.72rem;
+}
+.participants .speaking {
+  color: #b9ff78;
+}
+.tokenServerNote {
+  margin: 0;
+  color: #d7c9e3;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+@media (width <= 34rem) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+}

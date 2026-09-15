@@ -9,7 +9,6 @@ import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
 import { createGameEventBus } from '@/game/events/game-event';
-import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 import {
   createBossBattle,
   type BattleOutcome,
@@ -19,8 +18,12 @@ import {
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 
 import { FollowCamera } from '../camera/FollowCamera';
-import { CharacterModel } from '../character/CharacterModel';
-import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
+import { CharacterActor } from '../character/character-actor';
+import { syncCharacterRoot } from '../character/character-root';
+import {
+  DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
+  HoriDaisukeModel,
+} from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 
@@ -40,12 +43,6 @@ import { DangerZoneMarks } from './DangerZoneMarks';
 
 /** 操作するプレイヤー。 */
 const LOCAL_PLAYER_ID = 'odoruno';
-
-/**
- * 3人ぶんの見た目の色。スポーン地点の並び順に当てる
- * (#54 の WorldScene と同じ割り当て)。
- */
-const CHARACTER_COLORS = ['#e07a3f', '#3f8f5f', '#5f7fd0'] as const;
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
@@ -162,8 +159,7 @@ export function BossArenaScene(): React.JSX.Element {
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
   const bossRoot = useRef<Group>(null);
-  const mateRoots = useRef(new Map<string, Group>());
-
+  const actorRoots = useRef(new Map<string, Group>());
   // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
@@ -204,7 +200,6 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
-      mateRoots.current.clear();
       setBattle(createBattle());
       setOutcome('ONGOING');
       setZones([]);
@@ -235,11 +230,8 @@ export function BossArenaScene(): React.JSX.Element {
     bossRoot.current?.position.set(snapshot.boss.position.x, 0, snapshot.boss.position.z);
 
     for (const player of snapshot.players) {
-      const root =
-        player.id === LOCAL_PLAYER_ID ? localRoot.current : mateRoots.current.get(player.id);
-      if (root == null) continue;
-      root.position.set(player.position.x, 0, player.position.z);
-      root.rotation.set(0, player.rotationY, 0);
+      const root = actorRoots.current.get(player.id);
+      if (root !== undefined) syncCharacterRoot(root, player);
     }
 
     // HP や状態が変わったときだけ再レンダーする。
@@ -284,27 +276,35 @@ export function BossArenaScene(): React.JSX.Element {
         <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
       </group>
 
-      {view.players.map((player) =>
-        player.id === LOCAL_PLAYER_ID ? (
-          <group key={player.id} ref={localRoot}>
-            <CharacterModel color={CHARACTER_COLORS[1]} />
-            <StatusBar player={player} local />
-          </group>
-        ) : (
-          <group
-            key={player.id}
+      {/*
+        3人の大輔 (#79 のGLBモデル)。どのモデルを出すかは characterId から
+        引く。`player.id === 'pay'` のようなidでの分岐は書かない
+        (phase2-player-balance.ts と同じく、キャラ差はデータで持つ)。
+
+        ボスと同じ理由で、GLBの読み込みは Suspense で受け止める。境界は
+        1人ずつ分ける。3人を1つの境界でまとめると、誰か1人のGLBが読み込み
+        中の間ずっと3人とも unmount され、その間 localRoot が null になって
+        FollowCamera が追従先を見失う (カメラがキャラを映さなくなる)。各Actorは
+        モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
+        Actor Rootへ反映する。
+      */}
+      {view.players.map((player) => (
+        <Suspense key={player.id} fallback={null}>
+          <CharacterActor
             ref={(node) => {
-              if (node === null) mateRoots.current.delete(player.id);
-              else mateRoots.current.set(player.id, node);
+              if (node === null) {
+                actorRoots.current.delete(player.id);
+                if (player.id === LOCAL_PLAYER_ID) localRoot.current = null;
+              } else {
+                actorRoots.current.set(player.id, node);
+                if (player.id === LOCAL_PLAYER_ID) localRoot.current = node;
+              }
             }}
-          >
-            <CharacterModel
-              color={player.id === 'pay' ? CHARACTER_COLORS[0] : CHARACTER_COLORS[2]}
-            />
-            <StatusBar player={player} />
-          </group>
-        ),
-      )}
+            player={player}
+            local={player.id === LOCAL_PLAYER_ID}
+          />
+        </Suspense>
+      ))}
 
       {/*
         drei の Text はフォント読み込み中に suspend する。境界を挟まないと
@@ -345,51 +345,22 @@ function OutcomeBanner({ outcome }: { outcome: SceneOutcome }): React.JSX.Elemen
   );
 }
 
-/** バーの幅。追従カメラは近いので、頭上サイズで足りる。 */
-const BAR_WIDTH = 1.4;
-const BAR_HEIGHT = 0.16;
-
 /**
- * 頭上のHPバー。倒れている間は蘇生ゲージに切り替わる。
+ * ボスのHPバーの高さ。ボスの表示高さのすぐ上へ置く。
  *
- * HUD は別Issueだが、これが無いと倒れた仲間が「連打1回目」なのか
- * 「あと1回で起きる」のかが画面から読めず、蘇生が成立しているかを
- * 目で確かめられない。最小限の表示だけ置く。
+ * プレイヤーのバーと同じ理由で、頭から離しすぎない。遠近法で、高い位置に
+ * あるものほど画面の端にあるときに横へ大きくずれて見え、モデルと別の場所に
+ * バーが浮いているように読める。
  */
-function StatusBar({
-  player,
-  local = false,
-}: {
-  player: PlayerSnapshot;
-  local?: boolean;
-}): React.JSX.Element {
-  const reviving = player.status === 'FALLING_ASLEEP';
-  const ratio = reviving ? reviveRatio(player) : player.hp / player.hpMax;
-  const color = reviving ? '#ffd60a' : local ? '#4cd964' : '#f2f2f7';
+const BOSS_BAR_HEIGHT = BOSS_DISPLAY_HEIGHT + 0.4;
 
-  // 親の group が位置を持つので、バーは相対位置で置く。
-  return (
-    <Billboard position={[0, reviving ? 1 : 2.1, 0]}>
-      <mesh>
-        <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
-        <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
-      </mesh>
-      {/* 左端を固定して伸縮させるため、幅の半分だけ中心をずらす。 */}
-      <mesh position={[(-BAR_WIDTH * (1 - ratio)) / 2, 0, 0.01]}>
-        <planeGeometry args={[BAR_WIDTH * ratio, BAR_HEIGHT]} />
-        <meshBasicMaterial color={color} depthWrite={false} />
-      </mesh>
-    </Billboard>
-  );
-}
-
-/** ボスのHPバー。プレイヤーより大きく、頭上高くに置く。 */
+/** ボスのHPバー。プレイヤーより大きく、頭上に置く。 */
 function BossNameplate({ hp, hpMax }: { hp: number; hpMax: number }): React.JSX.Element {
   const ratio = hp / hpMax;
   const width = 4;
 
   return (
-    <Billboard position={[0, 4, 0]}>
+    <Billboard position={[0, BOSS_BAR_HEIGHT, 0]}>
       <mesh>
         <planeGeometry args={[width, 0.3]} />
         <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
