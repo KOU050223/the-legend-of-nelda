@@ -284,19 +284,22 @@ export function BossArenaScene(): React.JSX.Element {
         引く。`player.id === 'pay'` のようなidでの分岐は書かない
         (phase2-player-balance.ts と同じく、キャラ差はデータで持つ)。
 
-        ボスと同じ理由で、GLBの読み込みは Suspense で受け止める。3人ぶんを
-        1つの境界でまとめ、1人読み込み中に他が消えないようにする。
+        ボスと同じ理由で、GLBの読み込みは Suspense で受け止める。境界は
+        1人ずつ分ける。3人を1つの境界でまとめると、誰か1人のGLBが読み込み
+        中の間ずっと3人とも unmount され、その間 localRoot が null になって
+        FollowCamera が追従先を見失う (カメラがキャラを映さなくなる)。
       */}
-      <Suspense fallback={null}>
-        {view.players.map((player) =>
-          player.id === LOCAL_PLAYER_ID ? (
-            <group key={player.id} ref={localRoot}>
+      {view.players.map((player) =>
+        player.id === LOCAL_PLAYER_ID ? (
+          <Suspense key={player.id} fallback={null}>
+            <group ref={localRoot}>
               <CharacterModel characterId={player.characterId} />
               <StatusBar player={player} local />
             </group>
-          ) : (
+          </Suspense>
+        ) : (
+          <Suspense key={player.id} fallback={null}>
             <group
-              key={player.id}
               ref={(node) => {
                 if (node === null) mateRoots.current.delete(player.id);
                 else mateRoots.current.set(player.id, node);
@@ -305,9 +308,9 @@ export function BossArenaScene(): React.JSX.Element {
               <CharacterModel characterId={player.characterId} />
               <StatusBar player={player} />
             </group>
-          ),
-        )}
-      </Suspense>
+          </Suspense>
+        ),
+      )}
 
       {/*
         drei の Text はフォント読み込み中に suspend する。境界を挟まないと
