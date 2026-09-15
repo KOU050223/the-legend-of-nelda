@@ -50,6 +50,12 @@ h2 {
 .participants .speaking {
   color: #b9ff78;
 }
+.tokenServerNote {
+  margin: 0;
+  color: #d7c9e3;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
 @media (width <= 34rem) {
   .form {
     grid-template-columns: 1fr;

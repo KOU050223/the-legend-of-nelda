@@ -1,4 +1,11 @@
-import { ConnectionState, Room, RoomEvent, Track, type Participant } from 'livekit-client';
+import {
+  ConnectionState,
+  Room,
+  RoomEvent,
+  TokenSource,
+  Track,
+  type Participant,
+} from 'livekit-client';
 
 import type { WasshoiEvent } from '@/input/wasshoi/types';
 
@@ -135,6 +142,25 @@ export async function requestLiveKitCredentials(
     return { url: configuredUrl, token: developmentToken };
   }
   throw new Error('LiveKit token endpoint or development token is not configured');
+}
+
+/**
+ * LiveKit Cloud の Development Token Server は開発専用の発行元。
+ * API Secret を browser へ渡さずに済むが、権限制御を信頼できないため本番には使わない。
+ */
+export async function requestDevelopmentLiveKitCredentials(
+  tokenServerId: string,
+  request: LiveKitTokenRequest,
+): Promise<LiveKitCredentials> {
+  if (tokenServerId.trim() === '')
+    throw new Error('LiveKit Development Token Server ID を入力してください');
+  const response = await TokenSource.sandboxTokenServer(tokenServerId.trim()).fetch({
+    roomName: request.roomName,
+    participantIdentity: request.playerId,
+    participantName: request.playerId,
+    participantMetadata: JSON.stringify({ role: request.role }),
+  });
+  return { url: response.serverUrl, token: response.participantToken };
 }
 
 /** A Room owns all listener and remote-audio cleanup for one game voice session. */

@@ -19,6 +19,8 @@ content-type: application/json
 
 静的サイトだけで行う短期 PoC は `.env` に `VITE_LIVEKIT_URL` と、Cloud dashboard が発行した短命・room/identity 固定の `VITE_LIVEKIT_DEV_TOKEN` を置いてよい。これは token を**発行する**秘密ではない。`.env.example` をコピーし、実 token はコミットしない。
 
+さらに手早く試す場合は、LiveKit Cloud の Project Settings で **Development Token Server** を有効化し、表示される `token-server-...` ID を Voice Debug の `DEVELOPMENT TOKEN SERVER ID` へ入力する。`開発用 token を発行する` を押すと、入力済みの ROOM / PLAYER ID / ROLE で短命 token を取得する。この機能は誰でも任意の token を発行できる開発用の仕組みなので、本番・発表環境では使わない。
+
 ## 3 Client 確認
 
 1. `pnpm dev` を起動し、3 台の PC または 3 つのブラウザプロファイルで `https://<開発PCのLAN IP>:5173/?debug=voice` を開く。初回は自己署名証明書の警告を許可する。1台だけなら `https://localhost:5173/?debug=voice` でよい。

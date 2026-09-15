@@ -9,6 +9,7 @@ import {
 import type { WasshoiEvent } from '@/input/wasshoi/types';
 import {
   createLiveKitVoiceSession,
+  requestDevelopmentLiveKitCredentials,
   requestLiveKitCredentials,
   type LiveKitVoiceSession,
   type VoiceRole,
@@ -49,6 +50,9 @@ export function VoiceDebug(): React.JSX.Element {
   const [playerId, setPlayerId] = useState(createPlayerId);
   const [liveKitUrl, setLiveKitUrl] = useState(import.meta.env.VITE_LIVEKIT_URL ?? '');
   const [developmentToken, setDevelopmentToken] = useState('');
+  const [developmentTokenServerId, setDevelopmentTokenServerId] = useState(
+    import.meta.env.VITE_LIVEKIT_DEVELOPMENT_TOKEN_SERVER_ID ?? '',
+  );
   const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(defaultSnapshot);
   const [payMicStatus, setPayMicStatus] = useState<WasshoiInputStatus>('idle');
   const [payInputActive, setPayInputActive] = useState(false);
@@ -111,6 +115,28 @@ export function VoiceDebug(): React.JSX.Element {
       setBusy(false);
     }
   }, [busy, developmentToken, liveKitUrl, playerId, role, roomName]);
+
+  const issueDevelopmentToken = useCallback(async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const credentials = await requestDevelopmentLiveKitCredentials(developmentTokenServerId, {
+        roomName,
+        playerId,
+        role,
+      });
+      setLiveKitUrl(credentials.url);
+      setDevelopmentToken(credentials.token);
+      setSnapshot((current) => ({ ...current, error: null }));
+    } catch (error) {
+      setSnapshot((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, developmentTokenServerId, playerId, role, roomName]);
 
   const toggleMicrophone = useCallback(async (): Promise<void> => {
     const session = sessionRef.current;
@@ -192,6 +218,14 @@ export function VoiceDebug(): React.JSX.Element {
                 onChange={(event) => setDevelopmentToken(event.target.value)}
               />
             </label>
+            <label>
+              DEVELOPMENT TOKEN SERVER ID
+              <input
+                value={developmentTokenServerId}
+                placeholder="token-server-…"
+                onChange={(event) => setDevelopmentTokenServerId(event.target.value)}
+              />
+            </label>
           </div>
         )}
 
@@ -226,14 +260,27 @@ export function VoiceDebug(): React.JSX.Element {
         {snapshot.error !== null && <p className={styles.error}>{snapshot.error}</p>}
 
         {!connected ? (
-          <button
-            type="button"
-            className={styles.button}
-            disabled={busy}
-            onClick={() => void connect()}
-          >
-            {busy ? 'CONNECTING…' : 'ROOM に接続する'}
-          </button>
+          <>
+            <p className={styles.tokenServerNote}>
+              Development Token Server は開発専用です。発行後に ROOM へ接続してください。
+            </p>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={busy}
+              onClick={() => void issueDevelopmentToken()}
+            >
+              {busy ? 'ISSUING…' : '開発用 token を発行する'}
+            </button>
+            <button
+              type="button"
+              className={styles.button}
+              disabled={busy}
+              onClick={() => void connect()}
+            >
+              {busy ? 'CONNECTING…' : 'ROOM に接続する'}
+            </button>
+          </>
         ) : (
           <>
             <button type="button" className={styles.button} onClick={() => void toggleMicrophone()}>
