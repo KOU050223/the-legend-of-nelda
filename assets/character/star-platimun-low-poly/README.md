@@ -48,7 +48,28 @@ Auto-Rigger が想定する姿勢そのものなので触っていない。
 FBXへ同梱し、このキャラだけで完結させる方が食い違わない。
 
 そのため `assets/motions/` の共有モーションはこのキャラへは適用できない。
-別のモーションを足すときも、同じくMixamoから With Skin で落とす。
+
+### モーションを足す
+
+追加のモーションは Mixamo から **Without Skin**（In Place・30fps）で落とし、
+`export/motions/` へ置く。ボーン名の集合がベースのリグと一致していれば、
+メッシュ無しのモーションだけで足りる。共有の `assets/motions/` ではなく
+キャラ側へ置くのは、このリグが52ボーンで共有側の33ボーンと集合が違うため。
+
+置いたら `scripts/build-star-platinum-glb.py` の `MOTIONS` へファイル名と
+クリップ名を足してGLBを作り直す。ボーン名が食い違う場合はエラーで止まる
+（黙って姿勢が壊れたGLBを作らないため）。
+
+現在入っているモーション:
+
+| FBX                 | クリップ名 | 由来         |
+| ------------------- | ---------- | ------------ |
+| （ベースFBXに同梱） | `idle`     | Neutral Idle |
+| `Punch Combo.fbx`   | `punch`    | Punch Combo  |
+
+`punch` はまだゲーム側から再生していない。使うときは
+`src/rendering/character/character-models.ts` の `clip` を切り替えるか、
+堀大輔の `horiDaisukeMotions.ts` のようなクリップ定義を作る。
 
 ### GLBへまとめる
 

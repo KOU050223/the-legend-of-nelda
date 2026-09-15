@@ -4,6 +4,7 @@
       (Mixamo Auto-Rigger でリグを付け、Neutral Idle を With Skin で
        ダウンロードしたもの。Standard Skeleton 65ボーンで、末端の leaf bone を
        除いた52ボーンを取り込む)
+      + assets/character/star-platimun-low-poly/export/motions/ のモーションFBX
       + assets/character/star-platimun-low-poly/textures/*_baseColor.jpg
 出力: public/models/star-platinum.glb
 
@@ -11,8 +12,9 @@
 
     blender --background --python scripts/build-star-platinum-glb.py
 
-堀大輔の `build-hori-daisuke-glb.py` と違い、モーションFBXを別途合成しない。
-リグとモーションが1本のFBXへ同梱されているため。
+モーションはキャラ固有の `export/motions/` だけを見る。このキャラのリグは
+Standard Skeleton (52ボーン) で、共有の `assets/motions/` が前提とする
+`mixamorig:*` 33ボーンとは集合が一致しないため、共有側は使えない。
 
 MixamoのFBXはルートに X軸90° の回転が乗ってくる。`assets/AGENTS.md` の
 「新しくMixamo経由のモデルを足すときは、Blenderで回転・スケールを適用し、
@@ -36,13 +38,89 @@ SRC = CHARACTER / 'export' / 'Neutral Idle.fbx'
 TEXTURES = CHARACTER / 'textures'
 OUT = REPO / 'public' / 'models' / 'star-platinum.glb'
 
-"""GLB内でのクリップ名。character-models.ts の `clip` と一致させる。
-片方だけ変えるとクリップを引けなくなる。"""
-CLIP_NAME = 'idle'
+"""ベースFBXに同梱されているアクションのクリップ名。character-models.ts の
+`clip` と一致させる。片方だけ変えるとクリップを引けなくなる。"""
+BASE_CLIP = 'idle'
+
+"""モーションFBXのファイル名 -> GLB内のクリップ名。
+モーションを追加したら export/motions/ へ置き、ここへ足す。"""
+MOTIONS: dict[str, str] = {
+    'Punch Combo.fbx': 'punch',
+}
+
+MOTION_DIR = CHARACTER / 'export' / 'motions'
+
+"""FBXインポート設定。ベースとモーションで必ず同じ値を使う。異なるスケールで
+読むと Hips の location チャンネルだけ桁がずれ、キャラが沈む・飛ぶ。"""
+FBX_IMPORT_KWARGS = {
+    'global_scale': 1.0,
+    'use_anim': True,
+    'automatic_bone_orientation': False,
+    'ignore_leaf_bones': True,
+}
 
 """baseColor テクスチャの一辺の上限 (px)。元は2048前後あり、そのままだと
 GLBが数MiBになる。プレイヤーサイズの表示なら1024で足りる。"""
 MAX_TEXTURE_SIZE = 1024
+
+
+def take_action(obj: bpy.types.Object) -> bpy.types.Action:
+    """オブジェクトから再生中のアクションを1本だけ取り出す。"""
+    anim = obj.animation_data
+    if anim is None or anim.action is None:
+        raise RuntimeError(f'{obj.name!r} has no action')
+    action = anim.action
+    anim.action = None
+    return action
+
+
+def stash(obj: bpy.types.Object, action: bpy.types.Action) -> None:
+    """アクションをNLAトラックへ積む。エクスポータが全クリップを確実に拾う。"""
+    anim = obj.animation_data or obj.animation_data_create()
+    track = anim.nla_tracks.new()
+    track.name = action.name
+    track.strips.new(action.name, int(action.frame_range[0]), action)
+    track.mute = True
+
+
+def remove_object_tree(obj: bpy.types.Object) -> None:
+    for child in list(obj.children_recursive):
+        bpy.data.objects.remove(child, do_unlink=True)
+    bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def load_motion(base: bpy.types.Object, path: Path, clip_name: str) -> None:
+    """モーションFBXを読み、アクションだけをベースArmatureへ移す。"""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=str(path), **FBX_IMPORT_KWARGS)
+    imported = [o for o in bpy.data.objects if o not in before]
+
+    armatures = [o for o in imported if o.type == 'ARMATURE']
+    if len(armatures) != 1:
+        raise RuntimeError(f'{path.name}: expected 1 armature, got {len(armatures)}')
+    source = armatures[0]
+
+    # ボーン名は両方向で一致させる。モーション側に余分があるとそのチャンネルが
+    # 無視され、逆にベースのボーンが欠けていると、そのボーンだけバインドポーズの
+    # まま取り残されて姿勢が壊れる。どちらも黙って通さない。
+    base_bones = {b.name for b in base.data.bones}
+    source_bones = {b.name for b in source.data.bones}
+    if source_bones != base_bones:
+        unknown = sorted(source_bones - base_bones)
+        missing = sorted(base_bones - source_bones)
+        raise RuntimeError(
+            f'{path.name}: bone set differs from base rig'
+            f' (not in base: {unknown}, missing from motion: {missing})'
+        )
+
+    action = take_action(source)
+    action.name = clip_name
+    stash(base, action)
+    print(f'motion {clip_name!r} from {path.name} frames={tuple(action.frame_range)}')
+
+    for obj in imported:
+        if obj.name in bpy.data.objects:
+            remove_object_tree(obj)
 
 
 def bind_base_color(material: bpy.types.Material) -> None:
@@ -68,7 +146,7 @@ def bind_base_color(material: bpy.types.Material) -> None:
 
 def main() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=str(SRC), ignore_leaf_bones=True)
+    bpy.ops.import_scene.fbx(filepath=str(SRC), **FBX_IMPORT_KWARGS)
 
     # Maya由来の空Object (`group*` / `pSphere1` など) がFBXへ残っている。
     # 一部はスケールが 0 に近く、そのまま書き出すとthree.js側で逆行列の
@@ -98,8 +176,19 @@ def main() -> None:
     actions = list(bpy.data.actions)
     if len(actions) != 1:
         raise SystemExit(f'expected 1 action, found {[a.name for a in actions]}')
-    print(f'renaming action {actions[0].name!r} -> {CLIP_NAME!r}')
-    actions[0].name = CLIP_NAME
+    print(f'renaming action {actions[0].name!r} -> {BASE_CLIP!r}')
+    base_action = actions[0]
+    base_action.name = BASE_CLIP
+    # ベースのアクションもNLAへ積む。直接再生中のものとNLAが混ざると、
+    # エクスポータがどちらか一方しか拾わないことがある。
+    take_action(armature)
+    stash(armature, base_action)
+
+    for filename, clip_name in MOTIONS.items():
+        path = MOTION_DIR / filename
+        if not path.exists():
+            raise FileNotFoundError(f'motion fbx not found: {path.relative_to(REPO)}')
+        load_motion(armature, path, clip_name)
 
     for material in bpy.data.materials:
         bind_base_color(material)
