@@ -46,8 +46,7 @@ export function FinaleOverlay({
       <section className={styles.overlay} aria-live="polite">
         <div className={styles.noSleep}>
           <div className={styles.scanlines} />
-          <p className={styles.warning}>⚠ WARNING ⚠ ﾃﾞｰｰｰﾝ!!! ⚠ WARNING ⚠</p>
-          <p className={styles.boot}>SLEEP SYSTEM / EMERGENCY OVERRIDE / EXECUTING...</p>
+          <p className={styles.warning}>⚠ WARNING　絶対に寝ないモード発動 ⚠</p>
           <div className={styles.titleCard}>
             <p className={styles.katakana}>アルティメットスリーピングキャンセルモード</p>
             <h1 className={styles.absolute}>絶対に寝ない</h1>
@@ -103,9 +102,11 @@ export function FinaleOverlay({
   if (finale === 'OCARINA_APPEARING' || finale === 'WAITING_FOR_MELODY') {
     return (
       <section className={styles.overlay} aria-live="polite">
-        <div className={styles.ocarina}>
+        <div className={`${styles.ocarina} ${performing ? styles.ocarinaPerforming : ''}`}>
           {finale === 'OCARINA_APPEARING' ? (
-            <p>……空から、何かが降りてくる。</p>
+            <div className={styles.ocarinaPrompt}>
+              <p>……空から、何かが降りてくる。</p>
+            </div>
           ) : (
             <>
               {performing ? (
@@ -117,7 +118,7 @@ export function FinaleOverlay({
                   showNextHint={showMelodyHint}
                 />
               ) : (
-                <>
+                <div className={styles.ocarinaPrompt}>
                   <p>
                     伝説のオカリナが
                     <br />
@@ -134,7 +135,7 @@ export function FinaleOverlay({
                   >
                     演奏を始める
                   </button>
-                </>
+                </div>
               )}
             </>
           )}
@@ -245,11 +246,22 @@ function HoriFallingAsleep(): React.JSX.Element {
 
 function Ending(): React.JSX.Element {
   const goTo = useScreenStore((state) => state.goTo);
-  const [creditsSkipped, setCreditsSkipped] = useState(false);
+  const [creditsRolling, setCreditsRolling] = useState(false);
+  const [showFinal, setShowFinal] = useState(false);
+
+  useEffect(() => {
+    // 「安眠が戻った」の余韻を残してから、下からではなく上からロールを始める。
+    const startTimer = window.setTimeout(() => setCreditsRolling(true), 3_400);
+    const endTimer = window.setTimeout(() => setShowFinal(true), 21_400);
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, []);
 
   return (
     <section
-      className={`${styles.overlay} ${styles.ending} ${creditsSkipped ? styles.endingSkipped : ''}`}
+      className={`${styles.overlay} ${styles.ending} ${showFinal ? styles.endingSkipped : ''}`}
       aria-live="polite"
     >
       <video
@@ -266,7 +278,7 @@ function Ending(): React.JSX.Element {
         <p className={styles.endingLine}>安眠が戻った。</p>
       </div>
       <div className={styles.creditsViewport} aria-label="スタッフロール">
-        <div className={styles.credits}>
+        <div className={`${styles.credits} ${creditsRolling ? styles.creditsRolling : ''}`}>
           <p>THE LEGEND OF NELDA</p>
           <strong>END CREDITS</strong>
           <p>CAST</p>
@@ -296,12 +308,8 @@ function Ending(): React.JSX.Element {
           <strong>そして、8時間の睡眠</strong>
         </div>
       </div>
-      {!creditsSkipped && (
-        <button
-          className={styles.skipCredits}
-          type="button"
-          onClick={() => setCreditsSkipped(true)}
-        >
+      {creditsRolling && !showFinal && (
+        <button className={styles.skipCredits} type="button" onClick={() => setShowFinal(true)}>
           エンドロールをスキップ
         </button>
       )}
@@ -311,10 +319,6 @@ function Ending(): React.JSX.Element {
             <p>THE LEGEND OF NELDA</p>
             <h1>THE END</h1>
           </div>
-        </div>
-        <div className={styles.sleepResult}>
-          <span>堀大輔</span>
-          <strong>本日の睡眠時間　8時間00分</strong>
         </div>
         <button
           className={styles.returnTitle}

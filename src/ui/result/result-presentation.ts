@@ -1,5 +1,6 @@
 import type { GameClock } from '@/game/clock';
 import type { GameEventBus } from '@/game/events/game-event';
+import { DEFEAT_CINEMATIC_TIMING } from '@/game/cinematic/defeat-cinematic';
 import { useGameStore } from '@/store/game-store';
 
 export const RESULT_TIMING = {
@@ -9,6 +10,12 @@ export const RESULT_TIMING = {
   subtitle: 2500,
   restart: 3200,
 };
+
+export const DEFEAT_RESULT_TIMING = {
+  ...DEFEAT_CINEMATIC_TIMING,
+  title: DEFEAT_CINEMATIC_TIMING.badEnd,
+  subtitle: DEFEAT_CINEMATIC_TIMING.badEnd,
+} as const;
 
 /** Terminal events alone trigger presentation. The session owns its clock and cleanup. */
 export function syncResultWithGameEvents(eventBus: GameEventBus, clock: GameClock) {
@@ -27,10 +34,11 @@ export function syncResultWithGameEvents(eventBus: GameEventBus, clock: GameCloc
   return {
     update() {
       const result = useGameStore.getState().result;
-      if (disposed || startedAt === null || !result || result.elapsedMs >= RESULT_TIMING.restart)
-        return;
+      const duration =
+        result?.outcome === 'defeat' ? DEFEAT_RESULT_TIMING.restart : RESULT_TIMING.restart;
+      if (disposed || startedAt === null || !result || result.elapsedMs >= duration) return;
       useGameStore.setState({
-        result: { ...result, elapsedMs: Math.min(RESULT_TIMING.restart, clock.now() - startedAt) },
+        result: { ...result, elapsedMs: Math.min(duration, clock.now() - startedAt) },
       });
     },
     dispose() {
