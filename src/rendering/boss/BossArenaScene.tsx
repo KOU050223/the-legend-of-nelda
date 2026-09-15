@@ -280,6 +280,8 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
+      previousPositions.current.clear();
+      previousBossPosition.current = undefined;
       setBattle(createBattle());
       setOutcome('ONGOING');
       setZones([]);

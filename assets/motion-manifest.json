@@ -44,7 +44,7 @@
           "label": "sleep"
         }
       },
-      "defaultClip": "idle",
+      "defaultClip": "stand-up",
       "rules": [
         { "when": "attacking", "clip": "punch" },
         { "when": "dodging", "clip": "roll" },
