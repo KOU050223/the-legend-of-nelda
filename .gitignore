@@ -31,3 +31,6 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+
+# Blenderのビルドスクリプトが motion_manifest を読むと生成される
+__pycache__/

@@ -21,6 +21,9 @@ export const SOUND_IDS = [
   'pillow-sweep-wind',
   'yawn-inhale',
   'futon-jingle',
+  // ボスの技。予兆ではなく判定 (ACTIVE) が出る瞬間に鳴る。
+  'alarm-burst',
+  'hori-complaint',
   // 着弾・結果
   'hit-impact',
   'dodge-success',
@@ -36,12 +39,24 @@ export interface SoundDefinition {
   src: string;
   /** 素材ごとの音量差を吸収する係数 (0〜1)。 */
   gain: number;
+  /**
+   * 鳴り終わったら続けて鳴らす SE。
+   *
+   * 尺を定数で持って `setTimeout` で繋ぐと、素材を録り直すたびにコードの
+   * 数値がずれる (実際 `telegraph-se-duration.test.ts` は、素材とコードの
+   * 尺がずれたことを拾うために足されている)。実ファイルの `ended` から
+   * 繋げば、長さの出どころは素材1つで済む。
+   */
+  followedBy?: SoundId;
 }
 
 export const SOUND_MANIFEST: Readonly<Record<SoundId, SoundDefinition>> = {
   'pillow-sweep-wind': { src: '/audio/se/pillow-sweep-wind.wav', gain: 0.6 },
   'yawn-inhale': { src: '/audio/se/yawn-inhale.wav', gain: 0.5 },
   'futon-jingle': { src: '/audio/se/futon-jingle.wav', gain: 0.55 },
+  // 絶対起床アラームの衝撃波。鳴り終わりに堀大輔の「やめてもらっていいですか」が続く。
+  'alarm-burst': { src: '/audio/se/alarm-burst.wav', gain: 0.7, followedBy: 'hori-complaint' },
+  'hori-complaint': { src: '/audio/se/hori-complaint.wav', gain: 0.8 },
   'hit-impact': { src: '/audio/se/hit-impact.wav', gain: 0.7 },
   'dodge-success': { src: '/audio/se/dodge-success.wav', gain: 0.5 },
   'guard-success': { src: '/audio/se/guard-success.wav', gain: 0.6 },

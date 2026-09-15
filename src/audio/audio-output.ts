@@ -127,7 +127,20 @@ export function createHtmlAudioOutput(): AudioOutput {
     instance.volume = Math.min(1, Math.max(0, volume * definition.gain));
 
     playing.add(instance);
-    instance.addEventListener('ended', () => playing.delete(instance), { once: true });
+    instance.addEventListener(
+      'ended',
+      () => {
+        const wasPlaying = playing.delete(instance);
+        // 続きの音 (絶対起床アラームの爆発音 → 「やめてもらっていいですか」)
+        // を繋ぐ。尺は素材が持つので、コード側に長さの定数を置かない。
+        //
+        // `playing` に居たものだけ繋ぐ。dispose() は playing を空にしてから
+        // 止めるので、破棄後に鳴り始めた続きが残らない。`pause()` は ended を
+        // 出さない実装が多いが、それに頼らず delete の結果で判断する。
+        if (wasPlaying && definition.followedBy) start(definition.followedBy, volume);
+      },
+      { once: true },
+    );
 
     // 再生できない場面は普通に起きる (操作前の自動再生をブラウザが拒否する、
     // テスト環境に音源が無い)。演出が鳴らないだけでゲームは続くので、
@@ -160,11 +173,15 @@ export function createHtmlAudioOutput(): AudioOutput {
       }
       pending = null;
 
-      for (const instance of playing) {
+      // 先に空にしてから止める。止めてから空にすると、pause() が ended を
+      // 出す実装で続きの音 (followedBy) が鳴り始めてしまう。
+      const stopping = [...playing];
+      playing.clear();
+
+      for (const instance of stopping) {
         instance.pause();
         instance.src = '';
       }
-      playing.clear();
 
       for (const element of preloaded.values()) {
         element.pause();

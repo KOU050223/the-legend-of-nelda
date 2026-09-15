@@ -55,6 +55,27 @@ describe('soundForEvent', () => {
     expect(new Set(sounds).size).toBe(cues.length);
   });
 
+  // ボス戦は PoC と別経路。Cue ID ではなく技IDで引く。
+  it('絶対起床アラームは判定が出た瞬間に爆発音が鳴る', () => {
+    expect(soundForEvent({ type: 'BOSS_ATTACK_ACTIVE', attackId: 'WAKE_UP_ALARM' })).toBe(
+      'alarm-burst',
+    );
+  });
+
+  it.each(['BLUE_LIGHT', 'COMPRESSION_FIELD', 'MORNING_DASH'] as const)(
+    '%s はまだ専用の音を持たない',
+    (attackId) => {
+      expect(soundForEvent({ type: 'BOSS_ATTACK_ACTIVE', attackId })).toBeNull();
+    },
+  );
+
+  it('ボスの技は予兆では鳴らない', () => {
+    // BOSS_ATTACK_STARTED は予兆の頭。ここで鳴ると技が出る前に音が来る。
+    expect(
+      soundForEvent({ type: 'BOSS_ATTACK_STARTED', attackId: 'WAKE_UP_ALARM', telegraphMs: 1400 }),
+    ).toBeNull();
+  });
+
   it('枕は左右どちらから来ても同じ風切り音になる', () => {
     const left = soundForEvent({
       type: 'ATTACK_AUDIO_CUE',

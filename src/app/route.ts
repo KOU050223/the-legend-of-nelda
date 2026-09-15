@@ -40,12 +40,13 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
     return 'ORA_DEBUG';
   }
 
+  // `/world` はイントロ終了後の正式な遷移先。DEV 限定にすると、本番では
+  // URL を更新しても TITLE として解釈され、イントロ完了後にタイトルへ戻ってしまう。
+  if (location.pathname === '/world') return 'WORLD';
+
   if (import.meta.env.DEV) {
     if (location.pathname === '/debug/ora') return 'ORA_DEBUG';
-    if (
-      location.pathname === '/world' ||
-      new URLSearchParams(location.search).get('scene') === 'world'
-    ) {
+    if (new URLSearchParams(location.search).get('scene') === 'world') {
       return 'WORLD';
     }
     if (new URLSearchParams(location.search).get('scene') === 'combat') {

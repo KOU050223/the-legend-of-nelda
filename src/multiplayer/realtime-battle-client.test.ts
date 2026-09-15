@@ -51,6 +51,7 @@ const battle: BattleSnapshot = {
   },
   players: [],
   barrier: null,
+  finale: 'NONE',
 };
 const attack: GameAction = { type: 'ATTACK' };
 

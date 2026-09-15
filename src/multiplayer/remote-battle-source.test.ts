@@ -56,6 +56,7 @@ describe('createRemoteBattleSource', () => {
       },
       players: [],
       barrier: null,
+      finale: 'NONE',
     };
     const received: BattleSnapshot[] = [];
 

@@ -100,6 +100,14 @@ export type GameEvent =
   | { type: 'HORI_HP_CHANGED'; hp: number; hpMax: number }
   | { type: 'BOSS_PHASE_CHANGED'; from: BossPhase; to: BossPhase }
   | { type: 'BOSS_ATTACK_STARTED'; attackId: HoriAttackId; telegraphMs: number }
+  /**
+   * 予兆が明けて判定 (ACTIVE) が出た。技が実際に「出る」瞬間。
+   *
+   * `BOSS_ATTACK_STARTED` は予兆の頭で流れるので、着弾の瞬間に鳴らしたい音
+   * (絶対起床アラームの衝撃波) はそちらでは早すぎる。処理落ちで ACTIVE の尺を
+   * まるごと飛ばした場合も、判定と同じく1回だけ流す。
+   */
+  | { type: 'BOSS_ATTACK_ACTIVE'; attackId: HoriAttackId }
   | { type: 'BOSS_ATTACK_HIT'; attackId: HoriAttackId; targetId: string; damage: number }
   | { type: 'BOSS_ATTACK_ENDED'; attackId: HoriAttackId }
   /** 結界中 / NO SLEEP MODE で攻撃が通らなかった。0 DAMAGE 表示の起点。 */

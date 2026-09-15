@@ -10,16 +10,30 @@ export interface BattleSource {
   tick(deltaSeconds: number): void;
 }
 
-/** 既存のBossBattleをBattleSourceへ適合させる。 */
-export function createLocalBattleSource(battle: BossBattle, localPlayerId: string): BattleSource {
+/**
+ * 既存のBossBattleをBattleSourceへ適合させる。
+ *
+ * 操作するプレイヤーを関数で受け取れるようにしてある。ローカルでは画面から
+ * 操作キャラを切り替えられる (Issue #106) ので、固定のIDを閉じ込めると
+ * 切り替えても入力が前のキャラへ飛び続ける。送るたびに読み直す。
+ */
+export function createLocalBattleSource(
+  battle: BossBattle,
+  localPlayerId: string | (() => string),
+): BattleSource {
   const stateHandlers = new Set<(snapshot: BattleSnapshot) => void>();
+  const readLocalPlayerId = (): string =>
+    typeof localPlayerId === 'function' ? localPlayerId() : localPlayerId;
 
   return {
-    localPlayerId,
+    // 参照した時点の操作キャラ。リモートと違い、ローカルでは切り替わる。
+    get localPlayerId() {
+      return readLocalPlayerId();
+    },
     kind: 'LOCAL',
 
     submit(action) {
-      battle.submit(localPlayerId, action);
+      battle.submit(readLocalPlayerId(), action);
     },
 
     onState(handler) {

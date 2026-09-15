@@ -4,8 +4,11 @@ import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vitest/config';
 
+import { motionManifestPlugin } from './vite-plugin-motion-manifest.ts';
+import { motionUploadPlugin } from './vite-plugin-motion-upload.ts';
+
 export default defineConfig({
-  plugins: [react(), basicSsl({ name: 'nelda-lan' })],
+  plugins: [react(), basicSsl({ name: 'nelda-lan' }), motionManifestPlugin(), motionUploadPlugin()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

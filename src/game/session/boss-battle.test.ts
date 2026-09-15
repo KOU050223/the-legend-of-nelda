@@ -16,9 +16,12 @@ import { createGameEventBus, type GameEvent } from '../events/game-event';
 import { DEVICE_ANCHORS } from '../arena/arena';
 import { comboStepAt } from '../player/attack-combo';
 import { BARRIER_DEVICE_IDS, type BarrierDeviceId } from '../barrier/barrier-challenge';
+import { FINALE_STATES } from '../finale/finale-state';
 import { createBossBattle, outcomeOfSnapshot, type BossBattle } from './boss-battle';
 
-function setup(options: { attack?: HoriAttackId; initialHp?: number } = {}) {
+function setup(
+  options: { attack?: HoriAttackId; initialHp?: number; debugSkipBarriers?: boolean } = {},
+) {
   const pinned = options.attack;
   const clock = createFakeClock(0);
   const events = createGameEventBus();
@@ -33,6 +36,9 @@ function setup(options: { attack?: HoriAttackId; initialHp?: number } = {}) {
       { id: 'pay', characterId: 'PAY', position: { x: 10, z: 0 } },
       { id: 'ora', characterId: 'ORA', position: { x: -10, z: 0 } },
     ],
+    ...(options.debugSkipBarriers === undefined
+      ? {}
+      : { debugSkipBarriers: options.debugSkipBarriers }),
     createBoss: (bossOptions: HoriBossOptions) =>
       createHoriBoss({
         ...bossOptions,
@@ -66,6 +72,16 @@ function barrierSnapshot(battle: BossBattle) {
   const barrier = battle.snapshot().barrier;
   if (barrier === null) throw new Error('結界 snapshot が無い');
   return barrier;
+}
+
+/** 最終局面そのものの細部はHoriBossの責務なので、ここではBattleの接続だけを作る。 */
+function enterNoSleepMode(battle: BossBattle): void {
+  const snapshot = battle.boss.snapshot();
+  battle.boss.restore({
+    ...snapshot,
+    hp: snapshot.hpMax * 0.1,
+    phase: 'NO_SLEEP_MODE',
+  });
 }
 
 describe('ボスの攻撃がプレイヤーHPを削る', () => {
@@ -211,8 +227,17 @@ describe('倒れた仲間の扱い', () => {
 });
 
 describe('勝敗', () => {
-  it('スナップショットのボスHPが0以下なら勝利を返す', () => {
-    expect(outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ASLEEP' }] })).toBe('VICTORY');
+  it('スナップショットのfinaleがCOMPLETEなら勝利を返す', () => {
+    expect(
+      outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ASLEEP' }], finale: 'COMPLETE' }),
+    ).toBe('VICTORY');
+  });
+
+  it('ボスHPが0でもfinaleが終わっていなければ勝利にしない', () => {
+    // HPで勝ちにすると最終局面の演出が流れないまま決着してしまう (§5.5)。
+    expect(
+      outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ACTIVE' }], finale: 'MEMORY' }),
+    ).toBe('ONGOING');
   });
 
   it('スナップショットのプレイヤーが1人以上かつ全員ASLEEPなら敗北を返す', () => {
@@ -257,26 +282,87 @@ describe('勝敗', () => {
     expect(battle.outcome()).toBe('ONGOING');
   });
 
-  it('ボスHPが尽きたら勝利', () => {
+  it('ボスHPが0でも、堀大輔が眠るまでは勝利にしない', () => {
     const { battle } = setup();
 
-    // 結界と NO SLEEP MODE を抜けながら削り切る。
-    for (let i = 0; i < 200; i += 1) {
-      const snapshot = battle.boss.snapshot();
-      if (snapshot.hp <= 0) break;
-      if (snapshot.phase === 'BARRIER_1' || snapshot.phase === 'BARRIER_2') {
-        battle.boss.breakBarrier();
-        continue;
-      }
-      if (snapshot.phase === 'NO_SLEEP_MODE') {
-        // 最終フェーズは通常攻撃で削れない (§12)。ここでは決着の形だけ見る。
-        battle.boss.restore({ ...snapshot, hp: 0 });
-        break;
-      }
-      battle.boss.damage(50);
-    }
+    const snapshot = battle.boss.snapshot();
+    battle.boss.restore({ ...snapshot, hp: 0 });
 
+    expect(battle.outcome()).toBe('ONGOING');
+  });
+
+  it('最終演出が完了すると、HPを残したまま勝利になる', () => {
+    const { battle, clock } = setup();
+    enterNoSleepMode(battle);
+    battle.update(0.016);
+    clock.advance(4_000);
+    battle.update(0.016);
+
+    for (let index = 1; index < FINALE_STATES.length; index += 1) battle.advanceFinale();
+
+    expect(battle.boss.snapshot().hp).toBe(battle.boss.snapshot().hpMax * 0.1);
+    expect(battle.snapshot().finale).toBe('COMPLETE');
     expect(battle.outcome()).toBe('VICTORY');
+  });
+});
+
+describe('最終局面のBossBattle統合', () => {
+  it('デバッグ操作では、結界を経ずにHP10%の最終形態直後へ移れる', () => {
+    const { battle } = setup();
+
+    battle.debugEnterNoSleepMode();
+
+    expect(battle.boss.snapshot().phase).toBe('NO_SLEEP_MODE');
+    expect(battle.boss.snapshot().hp).toBe(battle.boss.snapshot().hpMax * 0.1);
+    expect(battle.snapshot().finale).toBe('NONE');
+    expect(battle.snapshot().barrier).toBeNull();
+  });
+
+  it('最終形態直後は通常操作を残し、時間経過で最終演出へ進める', () => {
+    const { battle, clock } = setup();
+    enterNoSleepMode(battle);
+    const player = playerById(battle, 'odoruno');
+    const before = player.snapshot().position;
+
+    battle.submit('odoruno', { type: 'MOVE', input: { forward: 1, right: 0 } });
+    battle.update(1);
+
+    expect(battle.snapshot().finale).toBe('NONE');
+    expect(player.snapshot().position).not.toEqual(before);
+
+    clock.advance(4_000);
+    battle.update(0.016);
+
+    expect(battle.snapshot().finale).toBe('FINAL_STANDOFF');
+  });
+
+  it('無効化された通常攻撃を受けると、時間を待たず最終演出へ進める', () => {
+    const { battle, clock } = setup();
+    enterNoSleepMode(battle);
+    const hp = battle.boss.snapshot().hp;
+
+    battle.submit('odoruno', { type: 'ATTACK' });
+    clock.advance(comboStepAt(0).windupMs + 1);
+    battle.update(0.016);
+
+    expect(battle.boss.snapshot().hp).toBe(hp);
+    expect(battle.snapshot().finale).toBe('FINAL_STANDOFF');
+  });
+
+  it('FINAL_STANDOFF以降はプレイヤー入力とBoss AIを止める', () => {
+    const { battle, clock } = setup();
+    enterNoSleepMode(battle);
+    battle.update(0.016);
+    clock.advance(4_000);
+    battle.update(0.016);
+    const player = playerById(battle, 'odoruno');
+    const before = player.snapshot().position;
+
+    battle.submit('odoruno', { type: 'MOVE', input: { forward: 1, right: 0 } });
+    battle.update(1);
+
+    expect(player.snapshot().position).toEqual(before);
+    expect(battle.boss.snapshot().activeAttack).toBeNull();
   });
 });
 
@@ -298,6 +384,21 @@ describe('戦闘全体のスナップショット', () => {
 });
 
 describe('結界チャレンジのBossBattle統合', () => {
+  it('開発用の結界スキップでは、結界を自動解除して総攻撃へ進める', () => {
+    const { battle, emitted } = setup({ debugSkipBarriers: true });
+
+    battle.boss.damage(300);
+    expect(battle.snapshot().barrier).toBeNull();
+    const snapshot = battle.boss.snapshot();
+
+    expect(snapshot.phase).toBe('FIELD_ADDED');
+    expect(snapshot.bossDownUntil).not.toBeNull();
+    expect(emitted).toContainEqual({
+      type: 'BOSS_DOWN_STARTED',
+      durationMs: BOSS_DOWN_DURATION_MS,
+    });
+  });
+
   it('BARRIER_1へ入ると共有状態とPay専用viewが生成される', () => {
     const { battle } = setup();
 
