@@ -26,20 +26,76 @@
   image-rendering: pixelated;
 }
 
-/* 左下の勇者。背景の崖の上に立たせる。 */
-.hero {
+/* 空にうっすら浮く、3人の勇者の幻影。タイトルやメニューより後ろへ置く。 */
+.skyFigures {
   position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.skyFigure {
+  position: absolute;
+  display: block;
+  max-width: none;
+  opacity: 0.2;
+  image-rendering: pixelated;
+  filter: grayscale(0.68) contrast(1.2) saturate(0.62);
+  mix-blend-mode: multiply;
+}
+
+.oraShadow {
+  top: 9%;
+  left: 27%;
+  width: min(27vw, 330px);
+  transform: rotate(-8deg);
+}
+
+.payShadow {
+  top: 16%;
+  right: 7%;
+  width: min(23vw, 280px);
+  opacity: 0.17;
+  transform: rotate(7deg);
+}
+
+.odorunoShadow {
+  right: 30%;
+  bottom: 7%;
+  width: min(33vw, 400px);
+  opacity: 0.16;
+  transform: rotate(5deg);
+}
+
+/* 左下の勇者。背景の崖の上に立たせる。 */
+.heroButton {
+  position: absolute;
+  z-index: 2;
   left: 4%;
   /* 足元が背景の崖の天面に着く位置。 */
   bottom: 17%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.hero {
+  display: block;
   width: auto;
   height: min(40vh, 36vw);
   image-rendering: pixelated;
   filter: drop-shadow(3px 3px 0 #2c3a3155);
 }
 
+.heroButton:focus-visible {
+  outline: 3px solid #ffef9b;
+  outline-offset: 5px;
+}
+
 .menu {
   position: absolute;
+  z-index: 2;
   top: 12%;
   right: 5%;
   width: min(52%, 620px);
@@ -80,6 +136,26 @@
   margin-top: clamp(18px, 5vh, 52px);
 }
 
+@media (max-width: 640px) {
+  .oraShadow {
+    top: 12%;
+    left: 18%;
+    width: 39vw;
+  }
+
+  .payShadow {
+    top: 16%;
+    right: -3%;
+    width: 34vw;
+  }
+
+  .odorunoShadow {
+    right: 20%;
+    bottom: 16%;
+    width: 45vw;
+  }
+}
+
 .link,
 .primary {
   border: none;
@@ -111,9 +187,126 @@
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .link,
-  .primary {
-    transition: transform 0.12s steps(2);
+.hero {
+  opacity: 0;
+  animation: heroEnter 0.72s 0.08s steps(8, end) forwards;
+}
+
+.heroReactionA,
+.heroReactionB {
+  animation: heroReact 0.46s steps(4, end) both;
+}
+
+.logo {
+  opacity: 0;
+  transform-origin: 82% 50%;
+  animation: logoEnter 0.8s 0.38s cubic-bezier(0.17, 0.92, 0.28, 1.28) forwards;
+}
+
+.subtitle {
+  opacity: 0;
+  animation: subtitleEnter 0.38s 0.9s ease-out forwards;
+}
+
+.links {
+  opacity: 0;
+  animation: menuEnter 0.35s 1.05s ease-out forwards;
+}
+
+.link,
+.primary {
+  transition: transform 0.12s steps(2);
+}
+
+@keyframes heroReact {
+  0% {
+    opacity: 1;
+    filter: drop-shadow(3px 3px 0 #2c3a3155) brightness(1);
+    transform: translate(0) rotate(0) scale(1);
+  }
+
+  32% {
+    opacity: 1;
+    filter: drop-shadow(5px 5px 0 #3c1b1555) brightness(1.45);
+    transform: translate(-3px, -8px) rotate(-4deg) scale(1.08);
+  }
+
+  62% {
+    opacity: 1;
+    transform: translate(3px, 2px) rotate(3deg) scale(0.97);
+  }
+
+  100% {
+    opacity: 1;
+    filter: drop-shadow(3px 3px 0 #2c3a3155) brightness(1);
+    transform: translate(0) rotate(0) scale(1);
+  }
+}
+
+@keyframes heroEnter {
+  0% {
+    opacity: 0;
+    filter: drop-shadow(8px 12px 0 #16203588) brightness(0.6);
+    transform: translate(-18%, 18%) scale(0.72);
+  }
+
+  68% {
+    opacity: 1;
+    filter: drop-shadow(5px 5px 0 #2c3a3188) brightness(1.16);
+    transform: translate(2%, -3%) scale(1.07);
+  }
+
+  100% {
+    opacity: 1;
+    filter: drop-shadow(3px 3px 0 #2c3a3155);
+    transform: translate(0) scale(1);
+  }
+}
+
+@keyframes logoEnter {
+  0% {
+    opacity: 0;
+    filter: brightness(2.4) drop-shadow(0 0 26px #fff4a8);
+    letter-spacing: 0.2em;
+    transform: scale(0.62) skewX(-9deg);
+  }
+
+  58% {
+    opacity: 1;
+    filter: brightness(1.35) drop-shadow(0 0 18px #fff3a2);
+    letter-spacing: 0.06em;
+    transform: scale(1.1) skewX(2deg);
+  }
+
+  100% {
+    opacity: 1;
+    filter: drop-shadow(1px 0 0 #8c3c1a) drop-shadow(-1px 0 0 #8c3c1a) drop-shadow(0 1px 0 #8c3c1a)
+      drop-shadow(0 -1px 0 #8c3c1a) drop-shadow(0 4px 0 #6e2a1277);
+    letter-spacing: 0.04em;
+    transform: scale(1) skewX(0);
+  }
+}
+
+@keyframes subtitleEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menuEnter {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }

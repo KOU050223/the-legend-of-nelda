@@ -4,6 +4,7 @@ import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
+import { FirstPersonHealthHud } from '@/rendering/camera/FirstPersonHealthHud';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
@@ -122,6 +123,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
     return (
       <div className={styles.root}>
         <GameScene multiplayer />
+        <FirstPersonHealthHud />
         <VoiceHud />
       </div>
     );
@@ -134,6 +136,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
     return (
       <div className={styles.root}>
         <GameScene world />
+        <FirstPersonHealthHud />
         <FinalePresentation />
         <WorldTutorialGuide />
         <PlayerSwitch />

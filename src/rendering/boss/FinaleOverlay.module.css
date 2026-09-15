@@ -19,8 +19,9 @@
   place-content: center;
   min-height: 100%;
   background:
-    repeating-linear-gradient(-45deg, #6f0718cc 0 13px, #9e111dcc 13px 26px),
-    radial-gradient(circle, #e49a22aa, #180207dd 68%);
+    linear-gradient(90deg, #00000022 50%, transparent 50%) 0 0 / 38px 38px,
+    repeating-linear-gradient(-45deg, #6d1118 0 13px, #9b2225 13px 26px),
+    radial-gradient(ellipse at 50% 48%, #f4c24d 0 4%, #b1121f 35%, #320815 78%);
   animation: warningIn 0.65s ease-out both;
 }
 
@@ -34,59 +35,84 @@
 }
 
 .warning {
-  margin: 0 0 16px;
-  color: #ffe35b;
+  margin: 0 0 12px;
+  padding: 7px 18px;
+  color: #fff7a8;
+  background: #3b0714;
+  border: 3px ridge #ffe279;
+  box-shadow: 0 4px 0 #59010c;
   font:
-    800 clamp(11px, 1.6vw, 20px)/1 system-ui,
+    900 clamp(13px, 1.8vw, 23px)/1 Impact,
     sans-serif;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
+  transform: skewX(-4deg);
   animation: warningStamp 0.35s 0.2s both;
 }
 
 .boot {
-  margin: 0 0 20px;
-  color: #ffdc67;
-  font: 700 clamp(9px, 1.1vw, 14px)/1.2 monospace;
-  letter-spacing: 0.14em;
+  margin: 0 0 22px;
+  color: #ffffd4;
+  font: 700 clamp(10px, 1.25vw, 16px)/1.2 monospace;
+  letter-spacing: 0.18em;
+  text-shadow: 2px 2px 0 #50030a;
   animation: bootIn 0.4s 0.45s both;
 }
 
 .titleCard {
-  border: 2px solid #ffcb4b;
-  padding: clamp(18px, 3vw, 42px) clamp(20px, 4vw, 72px);
-  background: linear-gradient(135deg, #58000fe8, #a10b19d9 55%, #571008e8);
+  border: 5px ridge #f7dd77;
+  outline: 4px solid #6f3712;
+  outline-offset: -13px;
+  padding: clamp(30px, 4vw, 62px) clamp(28px, 5vw, 90px);
+  background:
+    linear-gradient(#ffffff18 0 9%, transparent 10% 89%, #00000033 90%),
+    linear-gradient(135deg, #6a0615, #d6211e 48%, #75100d 49% 68%, #c82021 69%, #570512);
   box-shadow:
-    inset 0 0 0 5px #fff2b326,
-    0 0 44px #ff9c21bb;
+    inset 0 0 0 4px #511220,
+    inset 0 12px 0 #ffffff22,
+    10px 12px 0 #3c0814,
+    0 0 36px #ff9c21bb;
   animation: cardSlam 0.5s 0.65s cubic-bezier(0.16, 0.9, 0.3, 1.25) both;
 }
 
 .katakana {
-  margin: 0;
-  font-size: clamp(13px, 2.4vw, 31px);
-  letter-spacing: 0.12em;
-  transform: skewY(-4deg);
+  margin: 0 0 8px;
+  color: #fff0a6;
+  font:
+    900 clamp(15px, 2.5vw, 34px)/1 Arial Black,
+    Impact,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-shadow: 3px 3px 0 #611018;
+  transform: skewY(-5deg) scaleX(1.06);
 }
 
 .absolute {
-  margin: 8px 0 0;
-  color: #fff2a4;
-  font-size: clamp(52px, 11vw, 150px);
-  letter-spacing: 0.2em;
-  line-height: 0.95;
-  -webkit-text-stroke: 2px #8d0712;
+  margin: 0;
+  color: #fff6b4;
+  font:
+    900 clamp(64px, 12vw, 168px)/0.88 Arial Black,
+    Impact,
+    sans-serif;
+  letter-spacing: 0.08em;
+  -webkit-text-stroke: 4px #771219;
+  text-shadow: 7px 8px 0 #3f0611;
+  transform: scaleX(1.08) skewX(-3deg);
 }
 
 .stats {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 5px 22px;
+  gap: 6px 30px;
   justify-content: center;
-  margin: 25px 0 0;
+  margin: 31px auto 0;
+  padding: 10px 22px;
+  background: #24040bb8;
+  border: 2px solid #e8ba57;
   font:
-    700 clamp(13px, 1.5vw, 19px)/1.1 system-ui,
+    900 clamp(14px, 1.65vw, 22px)/1.1 Arial,
     sans-serif;
   letter-spacing: 0.12em;
+  text-shadow: 2px 2px 0 #48040c;
 }
 
 .stats span:nth-child(even) {
@@ -150,11 +176,22 @@
   position: absolute;
   inset: 0;
   display: grid;
-  align-content: center;
+  align-content: end;
   justify-items: center;
-  padding: 0 4vw;
+  padding: 0 4vw clamp(24px, 5vh, 64px);
   background: radial-gradient(circle at 50% 56%, #f5c74844, transparent 42%);
   animation: cinematicIn 0.45s ease-out both;
+}
+
+.ocarinaPerforming {
+  align-content: center;
+  padding-bottom: 0;
+}
+
+.ocarinaPrompt {
+  width: min(880px, 92vw);
+  padding: clamp(12px, 2vw, 22px) clamp(18px, 4vw, 46px);
+  background: linear-gradient(90deg, transparent, #12070e99 15% 85%, transparent);
 }
 
 .ocarina p {
@@ -169,8 +206,9 @@
   display: block;
   margin-top: 16px;
   color: #ffe781;
-  font-size: clamp(28px, 5vw, 66px);
-  letter-spacing: 0.18em;
+  font-size: clamp(20px, 3.6vw, 54px);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
 }
 
 .startMelody {
@@ -577,7 +615,7 @@
   inset: 0;
   background: radial-gradient(ellipse at 50% 30%, #15204788, #050610e8 80%);
 }
-.ending > :not(.endingMovie):not(.endingShade) {
+.ending > .endingIntro {
   position: relative;
   z-index: 1;
 }
@@ -588,8 +626,7 @@
 }
 .endingPrologue,
 .endingLine,
-.endingTitle,
-.sleepResult {
+.endingTitle {
   margin: 0;
   opacity: 0;
 }
@@ -613,7 +650,6 @@
   inset: 0;
   display: grid;
   place-content: center;
-  transform: translateY(-300px);
 }
 .endingTitle {
   width: min(100vw, 1900px);
@@ -632,23 +668,6 @@
   line-height: 0.9;
   -webkit-text-stroke: 2px #744311;
 }
-.sleepResult {
-  position: absolute;
-  top: 62%;
-  left: 50%;
-  transform: translate(-50%, 0);
-  display: grid;
-  gap: 8px;
-  padding: 15px 25px;
-  border: 1px solid #d8bd70;
-  background: #16182dcc;
-  font: clamp(16px, 2vw, 25px)/1.3 system-ui;
-  animation: endingResultIn 0.7s 24s forwards;
-}
-.sleepResult strong {
-  color: #ffe790;
-  font-size: clamp(18px, 2.3vw, 30px);
-}
 .ending > .creditsViewport {
   position: absolute;
   inset: 0;
@@ -660,31 +679,36 @@
   top: 0;
   left: 50%;
   display: grid;
-  width: min(760px, 80vw);
-  gap: 10px;
+  width: min(960px, 88vw);
+  gap: 14px;
   margin: 0;
   color: #fff3c8;
-  font-size: clamp(14px, 1.8vw, 22px);
-  line-height: 1.2;
+  font-size: clamp(20px, 2.4vw, 32px);
+  line-height: 1.35;
   opacity: 0;
   text-align: center;
-  animation: creditsRoll 18s 3.5s linear forwards;
+  transform: translate(-50%, -110%);
+}
+.creditsRolling {
+  animation: creditsRoll 18s linear forwards;
 }
 .credits p {
-  margin: 28px 0 0;
+  margin: 38px 0 2px;
   color: #d8bd70;
-  font: 700 clamp(10px, 1.2vw, 15px)/1 system-ui;
-  letter-spacing: 0.25em;
+  font: 800 clamp(13px, 1.55vw, 21px)/1.2 system-ui;
+  letter-spacing: 0.3em;
 }
 .credits strong {
   color: #fff8d9;
+  letter-spacing: 0.03em;
   font-weight: 700;
 }
 .ending > .skipCredits {
-  position: absolute;
-  right: 28px;
-  bottom: 24px;
+  position: fixed;
+  inset: auto 28px 24px auto;
   z-index: 2;
+  width: auto;
+  max-width: calc(100vw - 56px);
   padding: 9px 14px;
   color: #ffedba;
   background: #151222cc;
@@ -698,6 +722,7 @@
   top: 74%;
   left: 50%;
   transform: translateX(-50%);
+  min-width: min(14rem, calc(100vw - 3rem));
   padding: 13px 30px;
   color: #241606;
   background: linear-gradient(#fff1b7, #dba840);
@@ -706,6 +731,8 @@
     0 5px 0 #6c3b12,
     0 0 20px #f5c44988;
   font: 900 clamp(15px, 1.7vw, 21px)/1 system-ui;
+  line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
   pointer-events: auto;
   opacity: 0;
@@ -724,7 +751,6 @@
   animation: none;
 }
 .endingSkipped .endingTitle,
-.endingSkipped .sleepResult,
 .endingSkipped .returnTitle {
   opacity: 1;
   animation: none;
@@ -1023,12 +1049,8 @@
 
 @keyframes creditsRoll {
   0% {
-    opacity: 0;
-    transform: translate(-50%, -110%);
-  }
-  7%,
-  92% {
     opacity: 1;
+    transform: translate(-50%, -110%);
   }
   100% {
     opacity: 0;
@@ -1044,17 +1066,6 @@
   to {
     opacity: 1;
     transform: translateX(-50%) scale(1);
-  }
-}
-
-@keyframes endingResultIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 18px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
   }
 }
 
@@ -1078,8 +1089,6 @@
   .endingPrologue,
   .endingLine,
   .endingTitle,
-  .sleepResult,
-  .credits,
   .returnTitle {
     animation-duration: 0.01ms;
   }

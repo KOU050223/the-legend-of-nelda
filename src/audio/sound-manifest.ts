@@ -26,6 +26,10 @@ export const SOUND_IDS = [
   'hori-complaint',
   // 着弾・結果
   'hit-impact',
+  // プレイヤー別の被弾ボイス
+  'odoruno-damage',
+  'pay-damage',
+  'ora-damage',
   'dodge-success',
   'guard-success',
   'counter-success',
@@ -58,6 +62,9 @@ export const SOUND_MANIFEST: Readonly<Record<SoundId, SoundDefinition>> = {
   'alarm-burst': { src: '/audio/se/alarm-burst.wav', gain: 0.7, followedBy: 'hori-complaint' },
   'hori-complaint': { src: '/audio/se/hori-complaint.wav', gain: 0.8 },
   'hit-impact': { src: '/audio/se/hit-impact.wav', gain: 0.7 },
+  'odoruno-damage': { src: '/audio/se/odoruno-damage.mp3', gain: 0.9 },
+  'pay-damage': { src: '/audio/se/pay-damage.wav', gain: 0.85 },
+  'ora-damage': { src: '/audio/se/ora-damage.mp3', gain: 0.9 },
   'dodge-success': { src: '/audio/se/dodge-success.wav', gain: 0.5 },
   'guard-success': { src: '/audio/se/guard-success.wav', gain: 0.6 },
   'counter-success': { src: '/audio/se/counter-success.wav', gain: 0.75 },
