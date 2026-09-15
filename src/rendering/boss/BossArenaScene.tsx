@@ -55,6 +55,7 @@ import {
 import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
+import { DumbbellSlam, type DumbbellSlamFrame } from './DumbbellSlam';
 import {
   publishFinalePresentation,
   resetFinalePresentation,
@@ -333,6 +334,9 @@ export function BossArenaScene({
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
+  // 絶対起床アラームの演出 (ダンベル投げ + 衝撃波、#122) の入力。経過時間が
+  // 毎フレーム変わるので state ではなく ref で渡す。
+  const dumbbellSlam = useRef<DumbbellSlamFrame | null>(null);
   // リモートは最初の STATE が来るまで snapshot を持てないので null から始める。
   const [view, setView] = useState<View | null>(() =>
     localBattle === null
@@ -713,6 +717,17 @@ export function BossArenaScene({
       active !== null && snapshot.boss.takenAt - active.startedAt >= active.timing.telegraphMs,
     );
 
+    // 絶対起床アラームだけ、地面へ叩きつけるダンベルと衝撃波を出す (#122)。
+    // リングの中心は判定と同じ aim.origin を使う。
+    dumbbellSlam.current =
+      active === null || active.attackId !== 'WAKE_UP_ALARM'
+        ? null
+        : {
+            origin: active.aim.origin,
+            elapsedMs: snapshot.boss.takenAt - active.startedAt,
+            timing: active.timing,
+          };
+
     const nextOutcome = sceneOutcome(snapshot, activePlayerId);
     setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
@@ -723,6 +738,10 @@ export function BossArenaScene({
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
+
+      {/* 絶対起床アラームのダンベル投げと衝撃波 (#122)。判定は持たない飾りなので
+          演出強度 0 では消える。危険範囲そのものは上の DangerZoneMarks が描く。 */}
+      <DumbbellSlam frame={dumbbellSlam} />
 
       {/*
         堀大輔 (#67 のGLBモデル)。位置は毎フレーム bossRoot へ直接入れるので、
