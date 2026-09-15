@@ -21,6 +21,16 @@
   animation: guide-in 260ms ease-out both;
 }
 
+.worldGuide {
+  top: 22%;
+  left: 50%;
+  gap: 0.28rem;
+}
+
+.worldGuide::before {
+  top: 2rem;
+}
+
 .guide::before {
   position: absolute;
   top: 1.4rem;
@@ -69,6 +79,11 @@
     top: 31%;
     left: 42%;
     transform: translateX(1.5rem);
+  }
+
+  .worldGuide {
+    top: 24%;
+    left: 38%;
   }
 
   @keyframes guide-in {

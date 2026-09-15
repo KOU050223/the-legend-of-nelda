@@ -20,6 +20,7 @@ import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter'
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
 import { syncCharacterRoot } from '../character/character-root';
+import { TutorialFairy } from '../character/TutorialFairy';
 import {
   DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
   HoriDaisukeModel,
@@ -305,6 +306,13 @@ export function BossArenaScene(): React.JSX.Element {
           />
         </Suspense>
       ))}
+
+      {/* ワールド探索中も操作キャラの周囲をナビ妖精が案内する。 */}
+      <TutorialFairy
+        anchor={localRoot}
+        fallbackPosition={[PLAYER_SPAWN.x, 0, PLAYER_SPAWN.z]}
+        visible
+      />
 
       {/*
         drei の Text はフォント読み込み中に suspend する。境界を挟まないと

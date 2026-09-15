@@ -12,6 +12,7 @@ import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
+import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 
 import { useScreenStore } from './screen';
 import { currentRoute, subscribeToRoute } from './route';
@@ -77,6 +78,7 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene world />
+        <WorldTutorialGuide />
         <MicrophoneDebugPanel />
       </div>
     );
