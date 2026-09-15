@@ -2,17 +2,23 @@ import { describe, expect, it } from 'vitest';
 
 import { createHoriBoss, type HoriBossOptions } from '../boss/hori-boss';
 import { createFakeClock } from '../clock';
-import { DEFAULT_HORI_ATTACKS, type HoriAttackId } from '../config/phase2-boss-balance';
+import {
+  BOSS_DOWN_DURATION_MS,
+  DEFAULT_HORI_ATTACKS,
+  type HoriAttackId,
+} from '../config/phase2-boss-balance';
 import {
   CHARACTER_STATS,
   DEFAULT_REVIVAL,
   REVIVE_INPUT_INTERVAL_MS,
 } from '../config/phase2-player-balance';
 import { createGameEventBus, type GameEvent } from '../events/game-event';
+import { DEVICE_ANCHORS } from '../arena/arena';
 import { comboStepAt } from '../player/attack-combo';
+import { BARRIER_DEVICE_IDS, type BarrierDeviceId } from '../barrier/barrier-challenge';
 import { createBossBattle, type BossBattle } from './boss-battle';
 
-function setup(options: { attack?: HoriAttackId } = {}) {
+function setup(options: { attack?: HoriAttackId; initialHp?: number } = {}) {
   const pinned = options.attack;
   const clock = createFakeClock(0);
   const events = createGameEventBus();
@@ -28,9 +34,11 @@ function setup(options: { attack?: HoriAttackId } = {}) {
       { id: 'ora', characterId: 'ORA', position: { x: -10, z: 0 } },
     ],
     createBoss: (bossOptions: HoriBossOptions) =>
-      createHoriBoss(
-        pinned === undefined ? bossOptions : { ...bossOptions, pickAttack: () => pinned },
-      ),
+      createHoriBoss({
+        ...bossOptions,
+        ...(pinned === undefined ? {} : { pickAttack: () => pinned }),
+        ...(options.initialHp === undefined ? {} : { initialHp: options.initialHp }),
+      }),
   });
 
   return { battle, clock, emitted };
@@ -40,6 +48,24 @@ function playerById(battle: BossBattle, id: string) {
   const found = battle.players.find((player) => player.snapshot().id === id);
   if (found === undefined) throw new Error(`${id} が居ない`);
   return found;
+}
+
+function devicePosition(deviceId: BarrierDeviceId) {
+  const index = BARRIER_DEVICE_IDS.indexOf(deviceId);
+  const anchor = DEVICE_ANCHORS[index];
+  if (anchor === undefined) throw new Error(`装置 ${deviceId} の anchor が無い`);
+  return { x: anchor.x, z: anchor.z };
+}
+
+function movePlayerToDevice(battle: BossBattle, playerId: string, deviceId: BarrierDeviceId) {
+  const player = playerById(battle, playerId);
+  player.restore({ ...player.snapshot(), position: devicePosition(deviceId) });
+}
+
+function barrierSnapshot(battle: BossBattle) {
+  const barrier = battle.snapshot().barrier;
+  if (barrier === null) throw new Error('結界 snapshot が無い');
+  return barrier;
 }
 
 describe('ボスの攻撃がプレイヤーHPを削る', () => {
@@ -248,5 +274,199 @@ describe('戦闘全体のスナップショット', () => {
     // 検査する。複製そのものは structuredClone で行う。
     expect(JSON.parse(JSON.stringify(snapshot)) as unknown).toEqual(snapshot);
     expect(snapshot.players).toHaveLength(3);
+  });
+});
+
+describe('結界チャレンジのBossBattle統合', () => {
+  it('BARRIER_1へ入ると共有状態とPay専用viewが生成される', () => {
+    const { battle } = setup();
+
+    battle.boss.damage(300);
+
+    const snapshot = barrierSnapshot(battle);
+    const payView = battle.barrierViewFor('pay');
+
+    expect(battle.boss.snapshot().phase).toBe('BARRIER_1');
+    expect(snapshot.devices).toHaveLength(3);
+    expect(payView?.solutionDeviceIds).toEqual(['DEVICE_1']);
+    expect(battle.barrierViewFor('odoruno')).toBeNull();
+    expect(battle.barrierViewFor('ora')).toBeNull();
+    expect(JSON.stringify(battle.snapshot())).not.toContain('solutionDeviceIds');
+    expect(JSON.stringify(battle.snapshot())).not.toContain('nextDeviceId');
+  });
+
+  it('ODORUNOの確保とORAの起動をBossBattleから結界へ渡してBARRIER_1を解除する', () => {
+    const { battle, emitted } = setup();
+    battle.boss.damage(300);
+    movePlayerToDevice(battle, 'odoruno', 'DEVICE_1');
+    movePlayerToDevice(battle, 'ora', 'DEVICE_1');
+
+    battle.submit('odoruno', { type: 'INTERACT' });
+
+    expect(barrierSnapshot(battle).devices[1]?.status).toBe('SECURED');
+    expect(battle.boss.snapshot().phase).toBe('BARRIER_1');
+
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+
+    expect(battle.boss.snapshot().phase).toBe('FIELD_ADDED');
+    expect(battle.snapshot().barrier).toBeNull();
+    expect(emitted).toContainEqual({
+      type: 'BOSS_DOWN_STARTED',
+      durationMs: BOSS_DOWN_DURATION_MS,
+    });
+  });
+
+  it('非ACTIVE・範囲外・Role不一致は進捗を保ち、近接範囲内の誤操作だけをリセットする', () => {
+    const { battle } = setup();
+    battle.boss.damage(300);
+    movePlayerToDevice(battle, 'odoruno', 'DEVICE_1');
+    movePlayerToDevice(battle, 'ora', 'DEVICE_1');
+    movePlayerToDevice(battle, 'pay', 'DEVICE_1');
+
+    battle.submit('odoruno', { type: 'INTERACT' });
+    const solutionBeforeIgnoredActions = battle.barrierViewFor('pay')?.solutionDeviceIds;
+
+    battle.submit('pay', { type: 'INTERACT' });
+    battle.submit('ora', { type: 'INTERACT' });
+    battle.submit('odoruno', { type: 'CHARACTER_ACTION' });
+    playerById(battle, 'ora').restore({
+      ...playerById(battle, 'ora').snapshot(),
+      position: { x: DEVICE_ANCHORS[1]!.x + 3 + 1e-6, z: DEVICE_ANCHORS[1]!.z },
+    });
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+
+    expect(barrierSnapshot(battle).devices[1]?.status).toBe('SECURED');
+    expect(battle.barrierViewFor('pay')?.solutionDeviceIds).toEqual(solutionBeforeIgnoredActions);
+
+    movePlayerToDevice(battle, 'odoruno', 'DEVICE_0');
+    battle.submit('odoruno', { type: 'INTERACT' });
+
+    expect(barrierSnapshot(battle).devices.map((device) => device.status)).toEqual([
+      'IDLE',
+      'IDLE',
+      'IDLE',
+    ]);
+    expect(barrierSnapshot(battle).nextStepIndex).toBe(0);
+    expect(barrierSnapshot(battle).securedDeviceId).toBeNull();
+    expect(battle.barrierViewFor('pay')?.solutionDeviceIds).toEqual(solutionBeforeIgnoredActions);
+  });
+
+  it('BARRIER_2では各段階のACTIVATEDを保持し、正解順の最後で解除する', () => {
+    const { battle, clock } = setup();
+    battle.boss.damage(300);
+    movePlayerToDevice(battle, 'odoruno', 'DEVICE_1');
+    movePlayerToDevice(battle, 'ora', 'DEVICE_1');
+    battle.submit('odoruno', { type: 'INTERACT' });
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+
+    clock.advance(BOSS_DOWN_DURATION_MS);
+    battle.update(0.016);
+    battle.boss.damage(300);
+
+    const solutionDeviceIds = battle.barrierViewFor('pay')?.solutionDeviceIds;
+    if (solutionDeviceIds === undefined) throw new Error('BARRIER_2のPay viewが無い');
+    expect(solutionDeviceIds).toEqual(['DEVICE_2', 'DEVICE_0', 'DEVICE_1']);
+    const firstDeviceId = solutionDeviceIds[0];
+    const thirdDeviceId = solutionDeviceIds[2];
+    if (firstDeviceId === undefined || thirdDeviceId === undefined) {
+      throw new Error('BARRIER_2の正解列が短い');
+    }
+
+    movePlayerToDevice(battle, 'odoruno', firstDeviceId);
+    movePlayerToDevice(battle, 'ora', firstDeviceId);
+    battle.submit('odoruno', { type: 'INTERACT' });
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+    expect(barrierSnapshot(battle).nextStepIndex).toBe(1);
+
+    movePlayerToDevice(battle, 'odoruno', thirdDeviceId);
+    battle.submit('odoruno', { type: 'INTERACT' });
+
+    expect(barrierSnapshot(battle).devices.map((device) => device.status)).toEqual([
+      'IDLE',
+      'IDLE',
+      'IDLE',
+    ]);
+    expect(barrierSnapshot(battle).nextStepIndex).toBe(0);
+    expect(battle.barrierViewFor('pay')?.solutionDeviceIds).toEqual(solutionDeviceIds);
+
+    const intermediateSnapshots: Array<{
+      deviceId: BarrierDeviceId;
+      status: string | undefined;
+      nextStepIndex: number;
+      securedDeviceId: BarrierDeviceId | null;
+      nextDeviceId: BarrierDeviceId | null | undefined;
+    }> = [];
+
+    for (const [index, deviceId] of solutionDeviceIds.entries()) {
+      movePlayerToDevice(battle, 'odoruno', deviceId);
+      movePlayerToDevice(battle, 'ora', deviceId);
+      battle.submit('odoruno', { type: 'INTERACT' });
+      battle.submit('ora', { type: 'CHARACTER_ACTION' });
+
+      if (index < solutionDeviceIds.length - 1) {
+        const snapshot = barrierSnapshot(battle);
+        const device = snapshot.devices.find((candidate) => candidate.id === deviceId);
+        intermediateSnapshots.push({
+          deviceId,
+          status: device?.status,
+          nextStepIndex: snapshot.nextStepIndex,
+          securedDeviceId: snapshot.securedDeviceId,
+          nextDeviceId: battle.barrierViewFor('pay')?.nextDeviceId,
+        });
+      }
+    }
+
+    expect(intermediateSnapshots).toEqual([
+      {
+        deviceId: 'DEVICE_2',
+        status: 'ACTIVATED',
+        nextStepIndex: 1,
+        securedDeviceId: null,
+        nextDeviceId: 'DEVICE_0',
+      },
+      {
+        deviceId: 'DEVICE_0',
+        status: 'ACTIVATED',
+        nextStepIndex: 2,
+        securedDeviceId: null,
+        nextDeviceId: 'DEVICE_1',
+      },
+    ]);
+    expect(battle.boss.snapshot().phase).toBe('OVERDRIVE');
+    expect(battle.snapshot().barrier).toBeNull();
+  });
+
+  it('FALLING_ASLEEP中は確保状態を維持し、既存の蘇生後に再開できる', () => {
+    const { battle, clock } = setup();
+    battle.boss.damage(300);
+    movePlayerToDevice(battle, 'odoruno', 'DEVICE_1');
+    movePlayerToDevice(battle, 'ora', 'DEVICE_1');
+    battle.submit('odoruno', { type: 'INTERACT' });
+
+    const ora = playerById(battle, 'ora');
+    ora.takeDamage(999);
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+
+    expect(barrierSnapshot(battle).devices[1]?.status).toBe('SECURED');
+    expect(battle.barrierViewFor('pay')).not.toBeNull();
+
+    const odoruno = playerById(battle, 'odoruno');
+    for (let i = 0; i < 20; i += 1) {
+      battle.submit('odoruno', { type: 'REVIVE' });
+      clock.advance(REVIVE_INPUT_INTERVAL_MS);
+    }
+
+    expect(ora.snapshot().status).toBe('ACTIVE');
+    battle.submit('ora', { type: 'CHARACTER_ACTION' });
+    expect(battle.boss.snapshot().phase).toBe('FIELD_ADDED');
+
+    const pay = playerById(battle, 'pay');
+    pay.takeDamage(999);
+    expect(battle.barrierViewFor('pay')).toBeNull();
+    clock.advance(DEFAULT_REVIVAL.sleepCountdownMs);
+    battle.update(0.016);
+    expect(pay.snapshot().status).toBe('ASLEEP');
+    expect(battle.barrierViewFor('pay')).toBeNull();
+    expect(odoruno.snapshot().status).toBe('ACTIVE');
   });
 });
