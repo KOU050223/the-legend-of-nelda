@@ -19,11 +19,31 @@ const FIXED_ROSTER = [
   { id: 'ora-player', characterId: 'ORA' },
 ] as const satisfies readonly PlayerSeed[];
 
-const FIXED_TOKEN_TO_PLAYER_ID: ReadonlyMap<string, string> = new Map([
-  ['token-odoruno', 'odoruno-player'],
-  ['token-pay', 'pay-player'],
-  ['token-ora', 'ora-player'],
-]);
+/**
+ * 参加用トークンはソースに固定公開しない(誰でもそのplayerを名乗れてしまうため)。
+ * `NELDA_TOKEN_ODORUNO` / `NELDA_TOKEN_PAY` / `NELDA_TOKEN_ORA` から読む。
+ * テストは `AuthorityServerOptions.tokenToPlayerId` へ直接注入する。
+ */
+function tokenToPlayerIdFromEnv(env: NodeJS.ProcessEnv): ReadonlyMap<string, string> {
+  const entries: readonly [string, string][] = [
+    ['NELDA_TOKEN_ODORUNO', 'odoruno-player'],
+    ['NELDA_TOKEN_PAY', 'pay-player'],
+    ['NELDA_TOKEN_ORA', 'ora-player'],
+  ];
+  const missing = entries.filter(([name]) => env[name] === undefined || env[name] === '');
+  if (missing.length > 0) {
+    const names = missing.map(([name]) => name).join(', ');
+    throw new Error(`participation tokens are not set: ${names}`);
+  }
+
+  return new Map(
+    entries.map(([name, playerId]) => {
+      const token = env[name];
+      if (token === undefined) throw new Error(`unreachable: ${name} was checked above`);
+      return [token, playerId];
+    }),
+  );
+}
 
 const FIXED_PLAYER_ID_TO_CHARACTER_ID: ReadonlyMap<string, CharacterId> = new Map([
   ['odoruno-player', 'ODORUNO'],
@@ -65,6 +85,12 @@ export interface AuthorityServerOptions {
   readonly gameUpdateIntervalMs?: number;
   /** ms。STATE broadcast。省略時は暫定値を使う。 */
   readonly stateBroadcastIntervalMs?: number;
+  /**
+   * 参加用トークン→playerId。ソースに固定公開する値を渡さないこと。
+   * 直接起動時は環境変数から作る({@link tokenToPlayerIdFromEnv})。
+   * テストは固定fixtureを直接ここへ注入する。
+   */
+  readonly tokenToPlayerId: ReadonlyMap<string, string>;
 }
 
 export interface AuthorityServer {
@@ -84,7 +110,7 @@ export function createAuthorityServer(options: AuthorityServerOptions): Authorit
   const battleRoom = createBattleRoom({
     battle,
     transport,
-    tokenToPlayerId: FIXED_TOKEN_TO_PLAYER_ID,
+    tokenToPlayerId: options.tokenToPlayerId,
     playerIdToCharacterId: FIXED_PLAYER_ID_TO_CHARACTER_ID,
   });
 
@@ -102,6 +128,14 @@ export function createAuthorityServer(options: AuthorityServerOptions): Authorit
   const stateBroadcastTimer = setInterval(() => {
     battleRoom.publishState();
   }, stateBroadcastIntervalMs);
+
+  // listen失敗(EADDRINUSE等)を含むserver-levelのerrorでは、timerを残したまま
+  // 応答不能なプロセスにしない。個別接続のerrorはnode-authority-transport.ts側で
+  // 別途隔離済みで、ここには来ない。
+  wss.once('error', () => {
+    clearInterval(gameUpdateTimer);
+    clearInterval(stateBroadcastTimer);
+  });
 
   let closePromise: Promise<void> | undefined;
 
@@ -155,7 +189,10 @@ function isDirectEntryPoint(): boolean {
 
 if (isDirectEntryPoint()) {
   const port = Number(process.env.PORT ?? 3_000);
-  const server = createAuthorityServer({ port });
+  const server = createAuthorityServer({
+    port,
+    tokenToPlayerId: tokenToPlayerIdFromEnv(process.env),
+  });
   const shutdown = (): void => {
     void server.close();
   };

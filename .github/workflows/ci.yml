@@ -50,5 +50,8 @@ jobs:
       - name: Unit test
         run: pnpm test
 
+      - name: Server unit test
+        run: pnpm test:server
+
       - name: Build
         run: pnpm build

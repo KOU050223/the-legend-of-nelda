@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, type RawData } from 'ws';
 
 import {
@@ -17,6 +17,12 @@ interface TestClient {
 
 const servers: AuthorityServer[] = [];
 const clients: WebSocket[] = [];
+
+const TEST_TOKEN_TO_PLAYER_ID: ReadonlyMap<string, string> = new Map([
+  ['token-odoruno', 'odoruno-player'],
+  ['token-pay', 'pay-player'],
+  ['token-ora', 'ora-player'],
+]);
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,6 +108,7 @@ describe('createAuthorityServer', () => {
       port: 0,
       gameUpdateIntervalMs: 5,
       stateBroadcastIntervalMs: 10_000,
+      tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID,
     });
     servers.push(server);
     const odoruno = await connectClient(server, 'token-odoruno');
@@ -181,6 +188,7 @@ describe('createAuthorityServer', () => {
       port: 0,
       gameUpdateIntervalMs: 5,
       stateBroadcastIntervalMs: 10_000,
+      tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID,
     });
     servers.push(server);
     const first = await connectClient(server, 'token-pay');
@@ -222,5 +230,25 @@ describe('createAuthorityServer', () => {
     await Promise.all([firstClose, secondClose]);
     await waitFor(() => reconnected.socket.readyState === WebSocket.CLOSED);
     expect(reconnected.socket.readyState).toBe(WebSocket.CLOSED);
+  });
+
+  it('portのlisten失敗時はgame update timerを止めプロセスを生かしたままにしない', async () => {
+    const first = createAuthorityServer({ port: 0, tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID });
+    servers.push(first);
+    await waitFor(() => first.port > 0);
+
+    const second = createAuthorityServer({
+      port: first.port,
+      gameUpdateIntervalMs: 5,
+      tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID,
+    });
+    servers.push(second);
+    const updateSpy = vi.spyOn(second.battleRoom, 'update');
+
+    await wait(100);
+    const callsAfterFailure = updateSpy.mock.calls.length;
+    await wait(100);
+
+    expect(updateSpy.mock.calls.length).toBe(callsAfterFailure);
   });
 });
