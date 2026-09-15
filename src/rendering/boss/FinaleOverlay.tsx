@@ -2,10 +2,12 @@ import type { BossPhase } from '@/game/boss/boss-phase';
 import type { FinaleState } from '@/game/finale/finale-state';
 import type { MicrophoneInputStatus } from '@/input/microphone/types';
 import type { NoteName } from '@/input/microphone/types';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import horiFrontPhoto from '../../../assets/character/hori-daisuke-v1/source/source-front.png';
-import horiGymPhoto from '../../../assets/character/hori-daisuke-v1/source/source-gym.png';
+import horiMemory1 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori1.png';
+import horiMemory2 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori2.png';
+import horiMemory3 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori3.png';
+import horiMemory4 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori4.png';
 
 import type { PlayedMelodyNote } from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
@@ -146,34 +148,71 @@ function MelodyAccepted(): React.JSX.Element {
  * 現時点では既存の堀大輔写真を仮素材として使い、演出の尺と遷移を先に成立させる。
  */
 const MEMORY_STILLS = [
-  { src: horiFrontPhoto, caption: '「彼にもかつて――」', detail: '「眠っていた頃があった。」' },
-  { src: horiGymPhoto, caption: '「あの日も――」', detail: '「この日も――」' },
+  {
+    src: horiMemory1,
+    caption: '「彼にもかつて――」',
+    detail: '「目を閉じる、という習慣があった。」',
+    archive: 'SLEEP ARCHIVE / KITCHEN / 20:14',
+  },
+  {
+    src: horiMemory2,
+    caption: '「あの日も――」',
+    detail: '「食卓に、静かな眠りがあった。」',
+    archive: 'SLEEP ARCHIVE / TABLE / 20:15',
+  },
+  {
+    src: horiMemory3,
+    caption: '「この日も――」',
+    detail: '「ソファに身をあずけていた。」',
+    archive: 'SLEEP ARCHIVE / SOFA / 22:47',
+  },
+  {
+    src: horiMemory4,
+    caption: '「そして彼は――」',
+    detail: '「眠っていた。」',
+    archive: 'SLEEP ARCHIVE / MAXIMUM SLEEP',
+  },
 ] as const;
 
 function MemoryReel(): React.JSX.Element {
+  const [stillIndex, setStillIndex] = useState(0);
+  const still = MEMORY_STILLS[stillIndex];
+
+  useEffect(() => {
+    if (stillIndex >= MEMORY_STILLS.length - 1) return undefined;
+
+    const timer = window.setTimeout(() => setStillIndex((current) => current + 1), 3_350);
+    return () => window.clearTimeout(timer);
+  }, [stillIndex]);
+
+  if (still === undefined) return <></>;
+
   return (
     <section className={`${styles.overlay} ${styles.memory}`} aria-live="polite">
       <div className={styles.memoryLightLeak} />
       <p className={styles.memoryChapter}>MEMORY OF SLEEP</p>
-      <div className={styles.memoryStills}>
-        {MEMORY_STILLS.map((still, index) => (
-          <figure
-            className={`${styles.memoryStill} ${index === 0 ? styles.memoryStillLeft : styles.memoryStillRight}`}
-            key={still.src}
-          >
-            <img src={still.src} alt="堀大輔の過去の記憶" />
-            <figcaption>
-              <span>{still.caption}</span>
-              <strong>{still.detail}</strong>
-            </figcaption>
-          </figure>
-        ))}
+      <figure className={styles.memoryStill} key={still.src}>
+        <img src={still.src} alt="堀大輔の過去の睡眠の記憶" />
+        <figcaption>
+          <span>{still.caption}</span>
+          <strong>{still.detail}</strong>
+        </figcaption>
+        <small>{still.archive}</small>
+      </figure>
+      <div className={styles.memoryCounter} aria-label={`回想 ${stillIndex + 1} 枚目`}>
+        <span>◉ REC</span>
+        <b>
+          {String(stillIndex + 1).padStart(2, '0')} /{' '}
+          {String(MEMORY_STILLS.length).padStart(2, '0')}
+        </b>
       </div>
-      <p className={styles.memoryRealization}>
-        「そうか……。」
-        <br />
-        「俺は……眠ることを、忘れていたのか。」
-      </p>
+      {stillIndex === MEMORY_STILLS.length - 1 && (
+        <p className={styles.memoryRealization}>
+          「そうか……。」
+          <br />
+          「俺は……眠ることを、忘れていたのか。」
+        </p>
+      )}
     </section>
   );
 }
