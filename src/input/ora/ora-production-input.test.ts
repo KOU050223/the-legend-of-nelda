@@ -183,8 +183,10 @@ function submitUtterance(transcript: string, speechRms: number): void {
   FakeSpeechRecognition.instances.at(-1)?.emitFinal(transcript);
 }
 
-function attackActions(actions: readonly GameAction[]): GameAction[] {
-  return actions.filter((action) => action.type === 'ATTACK');
+type AttackAction = Extract<GameAction, { type: 'ATTACK' }>;
+
+function attackActions(actions: readonly GameAction[]): AttackAction[] {
+  return actions.filter((action): action is AttackAction => action.type === 'ATTACK');
 }
 
 function setupSuccessfulResources(): void {
@@ -328,7 +330,8 @@ describe('createOraProductionInput', () => {
     submitUtterance('オラ', 0.02);
     runNextTimeout();
 
-    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }]);
+    expect(attackActions(actions)).toHaveLength(1);
+    expect(attackActions(actions)[0]?.intensity).toBeCloseTo(3 / 13, 6);
 
     adapter.detach();
   });
@@ -346,9 +349,12 @@ describe('createOraProductionInput', () => {
     ]);
 
     runNextTimeout();
-    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }]);
+    expect(attackActions(actions)).toEqual([{ type: 'ATTACK', intensity: 1 }]);
     runNextTimeout();
-    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }, { type: 'ATTACK' }]);
+    expect(attackActions(actions)).toEqual([
+      { type: 'ATTACK', intensity: 1 },
+      { type: 'ATTACK', intensity: 1 },
+    ]);
 
     adapter.detach();
   });

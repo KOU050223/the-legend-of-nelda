@@ -355,13 +355,13 @@ export async function attachOraProductionInput(
     }
   };
 
-  const scheduleAttack = (delayMs: number): void => {
+  const scheduleAttack = (delayMs: number, intensity: number): void => {
     if (stopped) return;
     let timeoutId: number | undefined;
     try {
       timeoutId = startTimeout(() => {
         if (timeoutId !== undefined) pendingAttackTimeoutIds.delete(timeoutId);
-        emit({ type: 'ATTACK' });
+        emit({ type: 'ATTACK', intensity });
       }, delayMs);
       pendingAttackTimeoutIds.add(timeoutId);
     } catch (error) {
@@ -441,8 +441,8 @@ export async function attachOraProductionInput(
       });
       if (!calibrated) continue;
 
-      for (let attackIndex = 0; attackIndex < attacks.length; attackIndex += 1) {
-        scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS);
+      for (const [attackIndex, attack] of attacks.entries()) {
+        scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS, attack.intensity);
       }
     }
   };

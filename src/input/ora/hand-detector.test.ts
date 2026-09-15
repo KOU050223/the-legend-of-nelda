@@ -51,7 +51,7 @@ describe('createMediaPipeHandDetector', () => {
     });
   });
 
-  it('左右の手首を返し、それぞれ同じ側の前フレームから速度を計算する', async () => {
+  it('左右の手首を鏡像のxで返し、それぞれ同じ側の前フレームから速度を計算する', async () => {
     mocks.detectForVideo
       .mockReturnValueOnce({
         handedness: [[{ categoryName: 'Left' }], [{ categoryName: 'Right' }]],
@@ -68,19 +68,24 @@ describe('createMediaPipeHandDetector', () => {
     const first = detector.detect(video, 1_000);
     const second = detector.detect(video, 1_100);
 
-    expect(first).toEqual({
+    // フロントカメラの生フレームは鏡像ではないため、xは 1 - 生の値 になる。
+    expect(first).toMatchObject({
       capturedAt: 1_000,
-      left: { x: 0.2, y: 0.3, velocityX: 0, velocityY: 0 },
-      right: { x: 0.7, y: 0.8, velocityX: 0, velocityY: 0 },
+      left: { y: 0.3, velocityX: 0, velocityY: 0 },
+      right: { y: 0.8, velocityX: 0, velocityY: 0 },
     });
+    expect(first.left?.x).toBeCloseTo(0.8);
+    expect(first.right?.x).toBeCloseTo(0.3);
     expect(second).toMatchObject({
       capturedAt: 1_100,
-      left: { x: 0.3, y: 0.4 },
-      right: { x: 0.8, y: 0.7 },
+      left: { y: 0.4 },
+      right: { y: 0.7 },
     });
-    expect(second.left?.velocityX).toBeCloseTo(1);
+    expect(second.left?.x).toBeCloseTo(0.7);
+    expect(second.right?.x).toBeCloseTo(0.2);
+    expect(second.left?.velocityX).toBeCloseTo(-1);
     expect(second.left?.velocityY).toBeCloseTo(1);
-    expect(second.right?.velocityX).toBeCloseTo(1);
+    expect(second.right?.velocityX).toBeCloseTo(-1);
     expect(second.right?.velocityY).toBeCloseTo(-1);
   });
 

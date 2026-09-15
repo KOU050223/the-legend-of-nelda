@@ -1,4 +1,10 @@
-import { COMBO_STEPS, COMBO_WINDOW_MS, type ComboStep } from '../config/phase2-player-balance';
+import {
+  COMBO_STEPS,
+  COMBO_WINDOW_MS,
+  ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
+  ORA_VOICE_DAMAGE_MULTIPLIER_MIN,
+  type ComboStep,
+} from '../config/phase2-player-balance';
 
 /**
  * 通常攻撃の3段連撃。docs/phase2-gameplay-spec.md §4.1。
@@ -17,6 +23,8 @@ export interface ComboSwing {
   readonly stepIndex: number;
   /** 振り始めた時刻 (GameClock の now)。 */
   readonly startedAt: number;
+  /** 音声ATTACKの声量から求めたダメージ倍率。旧スナップショットでは未指定。 */
+  readonly damageMultiplier?: number;
   /** すでにダメージを与えたか。1段で二重に当てない。 */
   readonly hasHit: boolean;
 }
@@ -25,6 +33,17 @@ export function comboStepAt(index: number): ComboStep {
   return (
     COMBO_STEPS[index] ??
     COMBO_STEPS[0] ?? { windupMs: 0, activeMs: 0, recoverMs: 0, damageScale: 1 }
+  );
+}
+
+/** 音声ATTACKの声量をダメージ倍率へ変換する。 */
+export function damageMultiplierForIntensity(intensity: number | undefined): number {
+  if (intensity === undefined) return 1;
+  // Protocolは有限数だけを検証するため、Authority側でも受信値の範囲を信用しない。
+  const clampedIntensity = Math.min(1, Math.max(0, intensity));
+  return (
+    ORA_VOICE_DAMAGE_MULTIPLIER_MIN +
+    clampedIntensity * (ORA_VOICE_DAMAGE_MULTIPLIER_MAX - ORA_VOICE_DAMAGE_MULTIPLIER_MIN)
   );
 }
 

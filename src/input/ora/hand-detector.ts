@@ -62,10 +62,15 @@ function createHandPosition(
   const wrist = landmarks?.[0];
   if (!wrist) return undefined;
 
+  // フロントカメラの生フレームは鏡像ではない (右手を挙げると画面の左側に映る)。
+  // プレイヤーは鏡を見る感覚で操作するため、xだけ反転してからNeutral比較・
+  // 速度計算に使う。yは反転不要 (上下は鏡でもそのまま)。
+  const mirroredX = 1 - wrist.x;
+
   const position: HandPosition = {
-    x: wrist.x,
+    x: mirroredX,
     y: wrist.y,
-    velocityX: before && seconds > 0 ? (wrist.x - before.x) / seconds : 0,
+    velocityX: before && seconds > 0 ? (mirroredX - before.x) / seconds : 0,
     velocityY: before && seconds > 0 ? (wrist.y - before.y) / seconds : 0,
   };
   const isOpen = detectOpenHand(landmarks);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BattleSnapshot } from '../game/session/boss-battle';
-import { isAuthorityToClientMessage, isClientToAuthorityMessage } from './protocol';
+import { isAuthorityToClientMessage, isClientToAuthorityMessage, isGameAction } from './protocol';
 
 function createBattleSnapshot(): BattleSnapshot {
   return {
@@ -40,6 +40,33 @@ function createBattleSnapshot(): BattleSnapshot {
     finale: 'NONE',
   };
 }
+
+describe('isGameAction', () => {
+  it('ATTACKだけはintensity無しと有限数のintensityを受理する', () => {
+    const actions: unknown[] = [
+      { type: 'ATTACK' },
+      { type: 'ATTACK', intensity: 0 },
+      { type: 'ATTACK', intensity: 1 },
+      // 範囲外の有限値は、Authority側のダメージ計算でクランプする。
+      { type: 'ATTACK', intensity: -1 },
+      { type: 'ATTACK', intensity: 2 },
+    ];
+
+    expect(actions.map(isGameAction)).toEqual([true, true, true, true, true]);
+  });
+
+  it('ATTACKの非有限・不正なintensityと、他の離散アクションのpayloadを拒否する', () => {
+    const actions: unknown[] = [
+      { type: 'ATTACK', intensity: Number.NaN },
+      { type: 'ATTACK', intensity: Number.POSITIVE_INFINITY },
+      { type: 'ATTACK', intensity: '1' },
+      { type: 'ATTACK', intensity: 0.5, extra: true },
+      { type: 'DODGE', intensity: 0.5 },
+    ];
+
+    expect(actions.map(isGameAction)).toEqual([false, false, false, false, false]);
+  });
+});
 
 describe('isClientToAuthorityMessage', () => {
   it('共有tokenのJOINではopaqueなparticipantIdだけを受理しplayerIdやroleを受理しない', () => {

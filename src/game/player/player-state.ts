@@ -10,7 +10,13 @@ import {
 import { facingRotationY, moveCharacter } from '../movement/movement';
 import type { MovementInput, PlanarPosition } from '../movement/types';
 import type { GameAction } from '../types/game-action';
-import { comboPhaseAt, comboStepAt, nextComboStep, type ComboSwing } from './attack-combo';
+import {
+  comboPhaseAt,
+  comboStepAt,
+  damageMultiplierForIntensity,
+  nextComboStep,
+  type ComboSwing,
+} from './attack-combo';
 
 /**
  * 1人のプレイヤーの状態。docs/phase2-gameplay-spec.md §4 / §5。
@@ -165,10 +171,15 @@ export function createPlayer(options: PlayerOptions): Player {
     return comboPhaseAt(clock.now() - swing.startedAt, step) !== 'DONE';
   }
 
-  function startAttack(): void {
+  function startAttack(intensity: number | undefined): void {
     const stepIndex = nextComboStep(swing, clock.now());
     if (stepIndex === null) return;
-    swing = { stepIndex, startedAt: clock.now(), hasHit: false };
+    swing = {
+      stepIndex,
+      startedAt: clock.now(),
+      damageMultiplier: damageMultiplierForIntensity(intensity),
+      hasHit: false,
+    };
   }
 
   function startDodge(): void {
@@ -205,7 +216,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (action.type === 'ATTACK') {
-        startAttack();
+        startAttack(action.intensity);
         return;
       }
       if (action.type === 'DODGE') {
@@ -244,7 +255,7 @@ export function createPlayer(options: PlayerOptions): Player {
           swing = { ...swing, hasHit: true };
           onAttackHit?.({
             attackerId: id,
-            damage: stats.attackPower * step.damageScale,
+            damage: stats.attackPower * step.damageScale * (swing.damageMultiplier ?? 1),
             origin: position,
           });
         }

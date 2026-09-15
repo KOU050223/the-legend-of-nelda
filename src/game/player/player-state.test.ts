@@ -8,6 +8,8 @@ import {
   COMBO_STEPS,
   COMBO_WINDOW_MS,
   DEFAULT_REVIVAL,
+  ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
+  ORA_VOICE_DAMAGE_MULTIPLIER_MIN,
   REVIVE_INPUT_INTERVAL_MS,
   type CharacterId,
 } from '../config/phase2-player-balance';
@@ -99,6 +101,34 @@ describe('通常攻撃の3段連撃', () => {
     clock.advance(2);
     player.update(0.016);
     expect(hits).toHaveLength(1);
+  });
+
+  it('intensityなしのATTACKは従来どおりの基準ダメージにする', () => {
+    const { player, clock, hits } = setup();
+
+    player.submit({ type: 'ATTACK' });
+    clock.advance(comboStepAt(0).windupMs);
+    player.update(0.016);
+
+    expect(hits[0]?.damage).toBe(CHARACTER_STATS.PAY.attackPower);
+  });
+
+  it('音声ATTACKの声量をダメージへ反映し、Authority側で範囲外をクランプする', () => {
+    const cases = [
+      { intensity: 0, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MIN },
+      { intensity: 1, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MAX },
+      { intensity: -1, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MIN },
+      { intensity: 2, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MAX },
+    ];
+
+    for (const { intensity, multiplier } of cases) {
+      const { player, clock, hits } = setup();
+      player.submit({ type: 'ATTACK', intensity });
+      clock.advance(comboStepAt(0).windupMs);
+      player.update(0.016);
+
+      expect(hits[0]?.damage).toBeCloseTo(CHARACTER_STATS.PAY.attackPower * multiplier);
+    }
   });
 
   it('1回の振りで二重に当たらない', () => {
@@ -454,10 +484,11 @@ describe('プレイヤー状態のスナップショット', () => {
   it('攻撃の途中で復元しても、同じ時刻に判定が出る', () => {
     const step = comboStepAt(0);
     const origin = setup();
-    origin.player.submit({ type: 'ATTACK' });
+    origin.player.submit({ type: 'ATTACK', intensity: 1 });
     origin.clock.advance(step.windupMs / 2);
 
     const wire: PlayerSnapshot = structuredClone(origin.player.snapshot());
+    expect(wire.swing?.damageMultiplier).toBe(ORA_VOICE_DAMAGE_MULTIPLIER_MAX);
 
     const replica = setup();
     replica.clock.advance(step.windupMs / 2);
@@ -470,5 +501,8 @@ describe('プレイヤー状態のスナップショット', () => {
     replica.clock.advance(2);
     replica.player.update(0.016);
     expect(replica.hits).toHaveLength(1);
+    expect(replica.hits[0]?.damage).toBeCloseTo(
+      CHARACTER_STATS.PAY.attackPower * ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
+    );
   });
 });
