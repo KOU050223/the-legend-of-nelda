@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { currentRoute, navigateToScreen } from './route';
-export type Screen = 'TITLE' | 'INTRO' | 'BATTLE' | 'WORLD';
+export type Screen = 'TITLE' | 'INTRO' | 'BATTLE' | 'WORLD' | 'MATCHING' | 'GAME';
 
 interface ScreenStore {
   screen: Screen;
@@ -10,7 +10,7 @@ interface ScreenStore {
 
 function initialScreen(): Screen {
   const route = currentRoute();
-  return route === 'INTRO' || route === 'BATTLE' || route === 'WORLD' ? route : 'TITLE';
+  return route === 'ORA_DEBUG' ? 'TITLE' : route;
 }
 
 export const useScreenStore = create<ScreenStore>((set) => ({

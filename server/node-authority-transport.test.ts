@@ -135,10 +135,14 @@ describe('createNodeAuthorityTransport', () => {
     transport.onMessage((_connectionId, message) => received.push(message));
     const client = await openClient(url);
 
-    client.send(JSON.stringify({ type: 'JOIN', token: 'token-pay' }));
+    client.send(
+      JSON.stringify({ type: 'JOIN', token: 'token-pay', participantId: 'participant-pay' }),
+    );
     await waitFor(() => received.length === 1);
 
-    expect(received).toEqual([{ type: 'JOIN', token: 'token-pay' }]);
+    expect(received).toEqual([
+      { type: 'JOIN', token: 'token-pay', participantId: 'participant-pay' },
+    ]);
     expect(error).toHaveBeenCalled();
     error.mockRestore();
   });

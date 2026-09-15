@@ -19,7 +19,6 @@ import type { PlanarPosition } from '../movement/types';
 import type { GameEventBus } from '../events/game-event';
 import {
   createPlayer,
-  isAllAsleep,
   isWithinAttackReach,
   type Player,
   type PlayerSnapshot,
@@ -66,6 +65,21 @@ export interface BattleSnapshot {
 }
 
 export type BattleOutcome = 'ONGOING' | 'VICTORY' | 'DEFEAT';
+
+/** スナップショットだけから判定できる戦闘の勝敗。 */
+export function outcomeOfSnapshot(snapshot: {
+  readonly boss: { readonly hp: number };
+  readonly players: readonly { readonly status: PlayerSnapshot['status'] }[];
+}): BattleOutcome {
+  if (snapshot.boss.hp <= 0) return 'VICTORY';
+  if (
+    snapshot.players.length > 0 &&
+    snapshot.players.every((player) => player.status === 'ASLEEP')
+  ) {
+    return 'DEFEAT';
+  }
+  return 'ONGOING';
+}
 
 export interface BossBattle {
   /** 1人のプレイヤーの入力を処理する。 */
@@ -218,10 +232,10 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     },
 
     outcome() {
-      if (boss.snapshot().hp <= 0) return 'VICTORY';
-      // 3人全員が完全に寝たら敗北 (§5.5)。
-      if (isAllAsleep(players)) return 'DEFEAT';
-      return 'ONGOING';
+      return outcomeOfSnapshot({
+        boss: boss.snapshot(),
+        players: players.map((player) => player.snapshot()),
+      });
     },
 
     boss,

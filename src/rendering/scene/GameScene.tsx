@@ -9,6 +9,7 @@ import { PlayerMesh } from '../player/PlayerMesh';
 import { VfxScene } from '../vfx/VfxScene';
 import { Ground } from '../world/Ground';
 import { WorldScene } from './WorldScene';
+import { MultiplayerArenaScene } from './MultiplayerArenaScene';
 
 /** 現在の戦闘フィールドの広さ。既存の見た目を維持する (Issue #41)。 */
 const COMBAT_GROUND_SIZE = 24;
@@ -28,6 +29,8 @@ export interface GameSceneProps {
    * 省略時は従来どおりURLで決める (既存の呼び出しを変えない)。
    */
   world?: boolean;
+  /** 本番マルチプレイ (GAME画面) の中身を出すかどうか。worldより優先する。 */
+  multiplayer?: boolean;
 }
 
 /**
@@ -36,17 +39,21 @@ export interface GameSceneProps {
  * 決着時のみ ResultCamera が固定位置から演出する。
  * (docs/technical-design.md §3.1)
  */
-export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
-  const showWorldScene = world ?? requestedScene() === 'world';
+export function GameScene({ world, multiplayer }: GameSceneProps = {}): React.JSX.Element {
+  // WorldSceneとMultiplayerArenaSceneは同じ草原の見た目 (BossArenaScene) を
+  // 共有するため、背景・光源はこの2つをまとめて「アリーナ系」として選ぶ。
+  const showArenaVisuals = multiplayer || (world ?? requestedScene() === 'world');
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>
-      <color attach="background" args={[showWorldScene ? WORLD_BACKGROUND : COMBAT_BACKGROUND]} />
+      <color attach="background" args={[showArenaVisuals ? WORLD_BACKGROUND : COMBAT_BACKGROUND]} />
 
-      <ambientLight intensity={showWorldScene ? 0.7 : 0.4} />
+      <ambientLight intensity={showArenaVisuals ? 0.7 : 0.4} />
       <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
 
-      {showWorldScene ? (
+      {multiplayer ? (
+        <MultiplayerArenaScene />
+      ) : showArenaVisuals ? (
         <WorldScene />
       ) : (
         <>

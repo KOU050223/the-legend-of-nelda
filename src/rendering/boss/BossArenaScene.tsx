@@ -5,6 +5,7 @@ import { Vector3, type Group } from 'three';
 
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
+import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
@@ -13,8 +14,9 @@ import {
   createBossBattle,
   type BattleOutcome,
   type BattleSnapshot,
-  type BossBattle,
+  outcomeOfSnapshot,
 } from '@/game/session/boss-battle';
+import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 
 import { FollowCamera } from '../camera/FollowCamera';
@@ -41,8 +43,8 @@ import { DangerZoneMarks } from './DangerZoneMarks';
  * 操作するのは1人 (オドルノ) だけ。3人分の同時操作は #52 P6。
  */
 
-/** 操作するプレイヤー。 */
-const LOCAL_PLAYER_ID = 'odoruno';
+/** source未指定時に使うローカル操作プレイヤー。 */
+const DEFAULT_LOCAL_PLAYER_ID = 'odoruno';
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
@@ -64,7 +66,7 @@ function pinnedAttackId(): HoriAttackId | null {
   return HORI_ATTACK_IDS.find((id) => id === requested) ?? null;
 }
 
-function createBattle(): BossBattle {
+function createBattle(localPlayerId = DEFAULT_LOCAL_PLAYER_ID) {
   const pinned = pinnedAttackId();
   return createBossBattle({
     clock: createRealClock(),
@@ -72,13 +74,17 @@ function createBattle(): BossBattle {
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
-      { id: LOCAL_PLAYER_ID, characterId: 'ODORUNO', position: PLAYER_SPAWN },
+      { id: localPlayerId, characterId: 'ODORUNO', position: PLAYER_SPAWN },
       { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
       { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
+}
+
+function createDefaultBattleSource(localPlayerId = DEFAULT_LOCAL_PLAYER_ID): BattleSource {
+  return createLocalBattleSource(createBattle(localPlayerId), localPlayerId);
 }
 
 /**
@@ -122,24 +128,36 @@ function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolea
  */
 type SceneOutcome = BattleOutcome | 'LOCAL_DOWN';
 
-function sceneOutcome(battle: BossBattle): SceneOutcome {
-  const settled = battle.outcome();
+function sceneOutcome(snapshot: BattleSnapshot, localPlayerId: string): SceneOutcome {
+  const settled = outcomeOfSnapshot(snapshot);
   if (settled !== 'ONGOING') return settled;
 
-  const local = battle.players.find((player) => player.snapshot().id === LOCAL_PLAYER_ID);
+  const local = snapshot.players.find((player) => player.id === localPlayerId);
   // 倒れて寝落ちのカウントが始まっている間も、操作は戻らない。
-  return local !== undefined && local.snapshot().status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
+  return local !== undefined && local.status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
 }
 
-export function BossArenaScene(): React.JSX.Element {
-  // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
-  // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
-  // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [battle, setBattle] = useState<BossBattle>(createBattle);
+interface BossArenaSceneProps {
+  readonly source?: BattleSource;
+}
+
+export function BossArenaScene({
+  source: providedSource,
+}: BossArenaSceneProps = {}): React.JSX.Element {
+  // source未指定時だけローカル戦闘を遅延生成する。リモートsourceが渡されたときに
+  // 不要なローカル戦闘を作らないので、呼び出し側の権威モデルを変えない。
+  const [fallbackSource, setFallbackSource] = useState<BattleSource | null>(() =>
+    providedSource === undefined ? createDefaultBattleSource() : null,
+  );
+  const source = providedSource ?? fallbackSource;
+  if (source === null) {
+    throw new Error('BattleSource is unavailable');
+  }
+  const activeSource = source;
 
   // 画面に出す決着。
   //
-  // `battle.outcome()` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
+  // `outcomeOfSnapshot` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
   // (§5.5)。ただし今は操作できるのがオドルノ1人しか居ない。倒れても
   // 仲間2人は ACTIVE のままなので `outcome()` は ONGOING から動かず、
   // 操作だけが効かない状態で止まる (蘇生は ACTIVE な仲間からしか出せない)。
@@ -160,11 +178,23 @@ export function BossArenaScene(): React.JSX.Element {
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
   const bossRoot = useRef<Group>(null);
   const actorRoots = useRef(new Map<string, Group>());
+  const snapshotRef = useRef<BattleSnapshot | null>(null);
   // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
-  const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
+  const [view, setView] = useState<BattleSnapshot | null>(null);
+
+  useEffect(() => {
+    snapshotRef.current = null;
+
+    return source.onState((snapshot) => {
+      snapshotRef.current = snapshot;
+      setView((previous) =>
+        previous !== null && isSameView(previous, snapshot) ? previous : snapshot,
+      );
+    });
+  }, [source]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -179,8 +209,8 @@ export function BossArenaScene(): React.JSX.Element {
       // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
       // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
       // 別方向へ転がる。
-      if (adapter !== null) battle.submit(LOCAL_PLAYER_ID, adapter.pollMove());
-      battle.submit(LOCAL_PLAYER_ID, action);
+      if (adapter !== null) source.submit(adapter.pollMove());
+      source.submit(action);
     });
     const input = adapter;
 
@@ -190,7 +220,7 @@ export function BossArenaScene(): React.JSX.Element {
       inputRef.current = null;
       input.detach();
     };
-  }, [battle]);
+  }, [source]);
 
   // 決着したら R でやり直す。決着後は戦闘を進めないので、ここだけは
   // キーボードを直接見る (GameAction にやり直しは無い。やり直しは
@@ -200,7 +230,8 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
-      setBattle(createBattle());
+      if (activeSource.kind !== 'LOCAL' || providedSource !== undefined) return;
+      setFallbackSource(createDefaultBattleSource(activeSource.localPlayerId));
       setOutcome('ONGOING');
       setZones([]);
       setImminent(false);
@@ -208,7 +239,7 @@ export function BossArenaScene(): React.JSX.Element {
 
     window.addEventListener('keydown', onRestart);
     return () => window.removeEventListener('keydown', onRestart);
-  }, [outcome]);
+  }, [activeSource.kind, activeSource.localPlayerId, outcome, providedSource]);
 
   useFrame((_, delta) => {
     // 決着後は時間を進めない。倒れたまま技を撃たれ続けると、
@@ -219,11 +250,12 @@ export function BossArenaScene(): React.JSX.Element {
 
     // 移動は押しっぱなしの状態なので毎フレーム取り出す。
     const input = inputRef.current;
-    if (input !== null) battle.submit(LOCAL_PLAYER_ID, input.pollMove());
+    if (input !== null) source.submit(input.pollMove());
 
-    battle.update(delta);
+    source.tick(delta);
 
-    const snapshot = battle.snapshot();
+    const snapshot = snapshotRef.current;
+    if (snapshot === null) return;
 
     // 位置と向きは Object3D へ直接反映する。真実源はロジック側
     // (boss-battle) で、ここは映すだけ。
@@ -235,7 +267,9 @@ export function BossArenaScene(): React.JSX.Element {
     }
 
     // HP や状態が変わったときだけ再レンダーする。
-    setView((previous) => (isSameView(previous, snapshot) ? previous : snapshot));
+    setView((previous) =>
+      previous !== null && isSameView(previous, snapshot) ? previous : snapshot,
+    );
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
@@ -244,13 +278,17 @@ export function BossArenaScene(): React.JSX.Element {
       .filter((player) => player.status === 'ACTIVE')
       .map((player) => ({ id: player.id, position: player.position }));
 
-    const nextZones = battle.boss.dangerZones(targets);
+    const nextZones = dangerZonesOfActiveAttack(
+      snapshot.boss.activeAttack,
+      targets,
+      snapshot.boss.takenAt,
+    );
     setZones((previous) => (isSameZones(previous, nextZones) ? previous : nextZones));
     setImminent(
-      active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
+      active !== null && snapshot.boss.takenAt - active.startedAt >= active.timing.telegraphMs,
     );
 
-    const nextOutcome = sceneOutcome(battle);
+    const nextOutcome = sceneOutcome(snapshot, source.localPlayerId);
     setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
 
@@ -273,7 +311,7 @@ export function BossArenaScene(): React.JSX.Element {
         <Suspense fallback={null}>
           <HoriDaisukeModel />
         </Suspense>
-        <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
+        {view !== null && <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />}
       </group>
 
       {/*
@@ -288,20 +326,20 @@ export function BossArenaScene(): React.JSX.Element {
         モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
         Actor Rootへ反映する。
       */}
-      {view.players.map((player) => (
+      {view?.players.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <CharacterActor
             ref={(node) => {
               if (node === null) {
                 actorRoots.current.delete(player.id);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = null;
+                if (player.id === source.localPlayerId) localRoot.current = null;
               } else {
                 actorRoots.current.set(player.id, node);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = node;
+                if (player.id === source.localPlayerId) localRoot.current = node;
               }
             }}
             player={player}
-            local={player.id === LOCAL_PLAYER_ID}
+            local={player.id === source.localPlayerId}
           />
         </Suspense>
       ))}
@@ -312,7 +350,10 @@ export function BossArenaScene(): React.JSX.Element {
       */}
       {outcome !== 'ONGOING' && (
         <Suspense fallback={null}>
-          <OutcomeBanner outcome={outcome} />
+          <OutcomeBanner
+            outcome={outcome}
+            canRestart={activeSource.kind === 'LOCAL' && providedSource === undefined}
+          />
         </Suspense>
       )}
 
@@ -331,16 +372,26 @@ export function BossArenaScene(): React.JSX.Element {
  * カメラの前へ出さず、ボスの頭上に置く。操作キャラが倒れているときも
  * ボスは必ず画面に入っているため。
  */
-function OutcomeBanner({ outcome }: { outcome: SceneOutcome }): React.JSX.Element {
+function OutcomeBanner({
+  outcome,
+  canRestart,
+}: {
+  outcome: SceneOutcome;
+  canRestart: boolean;
+}): React.JSX.Element {
   const won = outcome === 'VICTORY';
   return (
     <Billboard position={[BOSS_ANCHOR.x, 7, BOSS_ANCHOR.z]}>
       <Text fontSize={1.1} color={won ? '#4cd964' : '#ff453a'} anchorY="bottom">
         {won ? 'WAKE UP!' : 'ZZZ...'}
       </Text>
-      <Text fontSize={0.45} color="#f2f2f7" anchorY="top" position={[0, -0.2, 0]}>
-        R でやり直す
-      </Text>
+      {/* Rでのやり直しはローカルdev経路専用。リモートでは押しても何も
+          起きないため、その場合はヒント自体を出さない (UIが嘘をつかない)。 */}
+      {canRestart && (
+        <Text fontSize={0.45} color="#f2f2f7" anchorY="top" position={[0, -0.2, 0]}>
+          R でやり直す
+        </Text>
+      )}
     </Billboard>
   );
 }

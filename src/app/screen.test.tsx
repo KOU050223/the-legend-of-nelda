@@ -34,6 +34,10 @@ vi.mock('@/intro/IntroCutscene', () => ({
   ),
 }));
 
+vi.mock('@/ui/matching/MatchingScreen', () => ({
+  MatchingScreen: () => <div data-testid="matching-screen" />,
+}));
+
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
@@ -81,14 +85,24 @@ describe('ルートの画面遷移', () => {
     expect(gameSceneProps.at(-1)?.world).toBe(true);
   });
 
-  it('イントロをスキップするとワールドを開く (Issue #64)', () => {
+  it('イントロをスキップするとマッチングを開く', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'イントロをスキップ' }));
 
-    expect(gameSceneProps.at(-1)?.world).toBe(true);
+    expect(screen.getByTestId('matching-screen')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/matching');
+  });
+
+  it('マッチングURLを開くとマッチング画面を表示する', () => {
+    window.history.replaceState({}, '', '/matching');
+    useScreenStore.setState({ screen: 'MATCHING' });
+
+    render(<App />);
+
+    expect(screen.getByTestId('matching-screen')).toBeInTheDocument();
   });
 
   it('画面を選ぶと直接開ける URL に移動する', () => {

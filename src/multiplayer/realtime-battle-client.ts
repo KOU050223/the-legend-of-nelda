@@ -1,7 +1,9 @@
 import type { BattleSnapshot } from '../game/session/boss-battle';
+import type { CharacterId } from '../game/config/phase2-player-balance';
 import type { GameAction } from '../game/types/game-action';
 import type { WasshoiEvent } from '../input/wasshoi/types';
 import type { ClientTransport } from './client-transport';
+import type { LobbyMessage, RosterMessage, RoomFullMessage, RejectedMessage } from './protocol';
 
 function reportClientError(error: unknown): void {
   console.error('Realtime battle client handler failed', error);
@@ -10,13 +12,30 @@ function reportClientError(error: unknown): void {
 export function createRealtimeBattleClient(options: {
   readonly transport: ClientTransport;
   readonly token: string;
+  readonly participantId?: string;
 }): {
   readonly submit: (action: GameAction) => void;
+  readonly selectCharacter: (characterId: CharacterId) => void;
+  readonly requestStart: () => void;
+  readonly onWelcome: (
+    handler: (info: { playerId: string; participantId?: string; epoch: number }) => void,
+  ) => () => void;
   readonly onState: (handler: (battle: BattleSnapshot) => void) => () => void;
+  readonly onRoster: (handler: (roster: RosterMessage) => void) => () => void;
+  readonly onLobby: (handler: (lobby: LobbyMessage) => void) => () => void;
+  readonly onRoomFull: (handler: (message: RoomFullMessage) => void) => () => void;
+  readonly onRejected: (handler: (message: RejectedMessage) => void) => () => void;
   readonly onWasshoi: (handler: (event: WasshoiEvent) => void) => () => void;
 } {
-  const { transport, token } = options;
+  const { transport, token, participantId } = options;
+  const welcomeHandlers = new Set<
+    (info: { playerId: string; participantId?: string; epoch: number }) => void
+  >();
   const stateHandlers = new Set<(battle: BattleSnapshot) => void>();
+  const rosterHandlers = new Set<(roster: RosterMessage) => void>();
+  const lobbyHandlers = new Set<(lobby: LobbyMessage) => void>();
+  const roomFullHandlers = new Set<(message: RoomFullMessage) => void>();
+  const rejectedHandlers = new Set<(message: RejectedMessage) => void>();
   const wasshoiHandlers = new Set<(event: WasshoiEvent) => void>();
   let connected = true;
   let playerId: string | null = null;
@@ -27,9 +46,20 @@ export function createRealtimeBattleClient(options: {
     if (!connected) return;
 
     if (message.type === 'WELCOME') {
-      playerId = message.playerId;
+      playerId = 'participantId' in message ? message.participantId : message.playerId;
       epoch = message.epoch;
       nextSeq = 0;
+      for (const handler of welcomeHandlers) {
+        try {
+          handler({
+            playerId,
+            ...('participantId' in message ? { participantId: message.participantId } : {}),
+            epoch: message.epoch,
+          });
+        } catch (error) {
+          reportClientError(error);
+        }
+      }
       return;
     }
 
@@ -44,11 +74,57 @@ export function createRealtimeBattleClient(options: {
       return;
     }
 
-    for (const handler of wasshoiHandlers) {
-      try {
-        handler(message.event);
-      } catch (error) {
-        reportClientError(error);
+    if (message.type === 'ROSTER') {
+      for (const handler of rosterHandlers) {
+        try {
+          handler(message);
+        } catch (error) {
+          reportClientError(error);
+        }
+      }
+      return;
+    }
+
+    if (message.type === 'LOBBY') {
+      for (const handler of lobbyHandlers) {
+        try {
+          handler(message);
+        } catch (error) {
+          reportClientError(error);
+        }
+      }
+      return;
+    }
+
+    if (message.type === 'ROOM_FULL') {
+      for (const handler of roomFullHandlers) {
+        try {
+          handler(message);
+        } catch (error) {
+          reportClientError(error);
+        }
+      }
+      return;
+    }
+
+    if (message.type === 'REJECTED') {
+      for (const handler of rejectedHandlers) {
+        try {
+          handler(message);
+        } catch (error) {
+          reportClientError(error);
+        }
+      }
+      return;
+    }
+
+    if (message.type === 'WASSHOI') {
+      for (const handler of wasshoiHandlers) {
+        try {
+          handler(message.event);
+        } catch (error) {
+          reportClientError(error);
+        }
       }
     }
   });
@@ -61,7 +137,11 @@ export function createRealtimeBattleClient(options: {
   });
 
   try {
-    transport.sendToAuthority({ type: 'JOIN', token });
+    if (participantId === undefined) {
+      transport.sendToAuthority({ type: 'JOIN', token });
+    } else {
+      transport.sendToAuthority({ type: 'JOIN', token, participantId });
+    }
   } catch (error) {
     reportClientError(error);
   }
@@ -79,10 +159,63 @@ export function createRealtimeBattleClient(options: {
       }
     },
 
+    selectCharacter(characterId) {
+      if (!connected || playerId === null) return;
+      try {
+        transport.sendToAuthority({ type: 'SELECT_CHARACTER', characterId });
+      } catch (error) {
+        reportClientError(error);
+      }
+    },
+
+    requestStart() {
+      if (!connected || playerId === null) return;
+      try {
+        transport.sendToAuthority({ type: 'START' });
+      } catch (error) {
+        reportClientError(error);
+      }
+    },
+
+    onWelcome(handler) {
+      welcomeHandlers.add(handler);
+      return () => {
+        welcomeHandlers.delete(handler);
+      };
+    },
+
     onState(handler) {
       stateHandlers.add(handler);
       return () => {
         stateHandlers.delete(handler);
+      };
+    },
+
+    onRoster(handler) {
+      rosterHandlers.add(handler);
+      return () => {
+        rosterHandlers.delete(handler);
+      };
+    },
+
+    onLobby(handler) {
+      lobbyHandlers.add(handler);
+      return () => {
+        lobbyHandlers.delete(handler);
+      };
+    },
+
+    onRoomFull(handler) {
+      roomFullHandlers.add(handler);
+      return () => {
+        roomFullHandlers.delete(handler);
+      };
+    },
+
+    onRejected(handler) {
+      rejectedHandlers.add(handler);
+      return () => {
+        rejectedHandlers.delete(handler);
       };
     },
 

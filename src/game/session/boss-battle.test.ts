@@ -16,7 +16,7 @@ import { createGameEventBus, type GameEvent } from '../events/game-event';
 import { DEVICE_ANCHORS } from '../arena/arena';
 import { comboStepAt } from '../player/attack-combo';
 import { BARRIER_DEVICE_IDS, type BarrierDeviceId } from '../barrier/barrier-challenge';
-import { createBossBattle, type BossBattle } from './boss-battle';
+import { createBossBattle, outcomeOfSnapshot, type BossBattle } from './boss-battle';
 
 function setup(options: { attack?: HoriAttackId; initialHp?: number } = {}) {
   const pinned = options.attack;
@@ -211,6 +211,26 @@ describe('倒れた仲間の扱い', () => {
 });
 
 describe('勝敗', () => {
+  it('スナップショットのボスHPが0以下なら勝利を返す', () => {
+    expect(outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ASLEEP' }] })).toBe('VICTORY');
+  });
+
+  it('スナップショットのプレイヤーが1人以上かつ全員ASLEEPなら敗北を返す', () => {
+    expect(outcomeOfSnapshot({ boss: { hp: 1000 }, players: [{ status: 'ASLEEP' }] })).toBe(
+      'DEFEAT',
+    );
+  });
+
+  it('ACTIVEまたはFALLING_ASLEEPのプレイヤーがいる場合は継続を返す', () => {
+    expect(
+      outcomeOfSnapshot({
+        boss: { hp: 1000 },
+        players: [{ status: 'ASLEEP' }, { status: 'FALLING_ASLEEP' }],
+      }),
+    ).toBe('ONGOING');
+    expect(outcomeOfSnapshot({ boss: { hp: 1000 }, players: [] })).toBe('ONGOING');
+  });
+
   it('戦闘中は決着しない', () => {
     const { battle } = setup();
     expect(battle.outcome()).toBe('ONGOING');

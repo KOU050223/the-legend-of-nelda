@@ -6,50 +6,40 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { createGameEventBus } from '../src/game/events/game-event';
 import { createBossBattle, type PlayerSeed } from '../src/game/session/boss-battle';
 import type { CharacterId } from '../src/game/config/phase2-player-balance';
+import type { PlanarPosition } from '../src/game/movement/types';
 import { createBattleRoom, type BattleRoom } from '../src/multiplayer/battle-room';
 import { createNodeAuthorityTransport } from './node-authority-transport';
+
+/**
+ * 位置未指定だとcreatePlayerの既定値({x:0,z:0})へ3人とも重なる
+ * (src/game/player/player-state.ts)。ARENA_BOUNDS(arena.ts)のSPAWN_POINTSは
+ * ローカルdev(徒歩でボスへ近づく前提)用で18ユニット離れておりATTACK_REACH(3)
+ * の外になるため、代わりにボス直近の小さいオフセットだけを与える
+ * (spawn systemや動的配置は作らない、最小の重なり回避)。
+ */
+const DEFAULT_SPAWN_OFFSETS: readonly [PlanarPosition, PlanarPosition, PlanarPosition] = [
+  { x: -1, z: 1 },
+  { x: 1, z: 1 },
+  { x: 0, z: -1 },
+];
 
 // いずれも暫定値であり、ベンチマークに基づく値ではない。実測後に見直す。
 const DEFAULT_GAME_UPDATE_INTERVAL_MS = 50;
 const DEFAULT_STATE_BROADCAST_INTERVAL_MS = 100;
 
-const FIXED_ROSTER = [
-  { id: 'odoruno-player', characterId: 'ODORUNO' },
-  { id: 'pay-player', characterId: 'PAY' },
-  { id: 'ora-player', characterId: 'ORA' },
-] as const satisfies readonly PlayerSeed[];
-
 /**
- * 参加用トークンはソースに固定公開しない(誰でもそのplayerを名乗れてしまうため)。
- * `NELDA_TOKEN_ODORUNO` / `NELDA_TOKEN_PAY` / `NELDA_TOKEN_ORA` から読む。
- * テストは `AuthorityServerOptions.tokenToPlayerId` へ直接注入する。
+ * 参加用tokenはソースに固定公開しない。全ブラウザが同じroom tokenを使い、
+ * participantIdは各ブラウザのsessionStorageから別に送る。
+ *
+ * NELDA_ROOM_TOKENは任意。3人固定・デモ用途・認証なしがこのプロダクトの
+ * 前提なので、未設定ならroomは無条件でJOINを受け付ける(battle-room.ts
+ * のauthorizedTokensが空集合になり、token値そのものを検証しなくなる)。
+ * 推測されたくない環境だけ、値を設定して任意で絞ればよい。
  */
-function tokenToPlayerIdFromEnv(env: NodeJS.ProcessEnv): ReadonlyMap<string, string> {
-  const entries: readonly [string, string][] = [
-    ['NELDA_TOKEN_ODORUNO', 'odoruno-player'],
-    ['NELDA_TOKEN_PAY', 'pay-player'],
-    ['NELDA_TOKEN_ORA', 'ora-player'],
-  ];
-  const missing = entries.filter(([name]) => env[name] === undefined || env[name] === '');
-  if (missing.length > 0) {
-    const names = missing.map(([name]) => name).join(', ');
-    throw new Error(`participation tokens are not set: ${names}`);
-  }
-
-  return new Map(
-    entries.map(([name, playerId]) => {
-      const token = env[name];
-      if (token === undefined) throw new Error(`unreachable: ${name} was checked above`);
-      return [token, playerId];
-    }),
-  );
+function roomTokenFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  const token = env.NELDA_ROOM_TOKEN;
+  return token === undefined || token === '' ? undefined : token;
 }
-
-const FIXED_PLAYER_ID_TO_CHARACTER_ID: ReadonlyMap<string, CharacterId> = new Map([
-  ['odoruno-player', 'ODORUNO'],
-  ['pay-player', 'PAY'],
-  ['ora-player', 'ORA'],
-]);
 
 function closeSocket(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
@@ -86,11 +76,22 @@ export interface AuthorityServerOptions {
   /** ms。STATE broadcast。省略時は暫定値を使う。 */
   readonly stateBroadcastIntervalMs?: number;
   /**
-   * 参加用トークン→playerId。ソースに固定公開する値を渡さないこと。
-   * 直接起動時は環境変数から作る({@link tokenToPlayerIdFromEnv})。
-   * テストは固定fixtureを直接ここへ注入する。
+   * #47 互換。新modeではmapのkeyだけを共有room tokenとして認証する。
+   * role/player identityの値は参照しない。
    */
-  readonly tokenToPlayerId: ReadonlyMap<string, string>;
+  readonly tokenToPlayerId?: ReadonlyMap<string, string>;
+  /** 新しい共有room token→room id wiring。省略時はtokenToPlayerIdのkeyを使う。 */
+  readonly tokenToRoomId?: ReadonlyMap<string, string>;
+  /** 直接起動時の共有token。 */
+  readonly roomToken?: string;
+  /** テスト/埋め込み用。START時に凍結role mappingから遅延生成する。 */
+  readonly createBattle?: (
+    roles: ReadonlyMap<string, CharacterId>,
+  ) => ReturnType<typeof createBossBattle>;
+  /** createBattleの別名。既存のfactory wiringと接続するために受け付ける。 */
+  readonly battleFactory?: (
+    roles: ReadonlyMap<string, CharacterId>,
+  ) => ReturnType<typeof createBossBattle>;
 }
 
 export interface AuthorityServer {
@@ -102,16 +103,27 @@ export interface AuthorityServer {
 export function createAuthorityServer(options: AuthorityServerOptions): AuthorityServer {
   const wss = new WebSocketServer({ port: options.port });
   const transport = createNodeAuthorityTransport(wss);
-  const battle = createBossBattle({
-    clock: { now: () => Date.now() },
-    events: createGameEventBus(),
-    roster: FIXED_ROSTER,
-  });
+  const createBattle =
+    options.createBattle ??
+    options.battleFactory ??
+    ((roles: ReadonlyMap<string, CharacterId>) => {
+      const roster: PlayerSeed[] = [...roles].map(([participantId, characterId], index) => ({
+        id: participantId,
+        characterId,
+        position: DEFAULT_SPAWN_OFFSETS[index] ?? DEFAULT_SPAWN_OFFSETS[0],
+      }));
+      return createBossBattle({
+        clock: { now: () => Date.now() },
+        events: createGameEventBus(),
+        roster,
+      });
+    });
   const battleRoom = createBattleRoom({
-    battle,
     transport,
-    tokenToPlayerId: options.tokenToPlayerId,
-    playerIdToCharacterId: FIXED_PLAYER_ID_TO_CHARACTER_ID,
+    ...(options.tokenToRoomId === undefined ? {} : { tokenToRoomId: options.tokenToRoomId }),
+    ...(options.tokenToPlayerId === undefined ? {} : { tokenToPlayerId: options.tokenToPlayerId }),
+    ...(options.roomToken === undefined ? {} : { roomToken: options.roomToken }),
+    createBattle,
   });
 
   const gameUpdateIntervalMs = options.gameUpdateIntervalMs ?? DEFAULT_GAME_UPDATE_INTERVAL_MS;
@@ -189,9 +201,11 @@ function isDirectEntryPoint(): boolean {
 
 if (isDirectEntryPoint()) {
   const port = Number(process.env.PORT ?? 3_000);
+  const roomToken = roomTokenFromEnv(process.env);
   const server = createAuthorityServer({
     port,
-    tokenToPlayerId: tokenToPlayerIdFromEnv(process.env),
+    tokenToPlayerId: new Map(),
+    ...(roomToken === undefined ? {} : { roomToken }),
   });
   const shutdown = (): void => {
     void server.close();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BattleSnapshot } from '../game/session/boss-battle';
 import type { GameAction } from '../game/types/game-action';
-import type { AuthorityToClientMessage, ClientToAuthorityMessage } from './protocol';
+import type { AuthorityToClientMessage, ClientToAuthorityMessage, RosterMessage } from './protocol';
 import { createRealtimeBattleClient } from './realtime-battle-client';
 import type { ClientTransport } from './client-transport';
 
@@ -55,6 +55,25 @@ const battle: BattleSnapshot = {
 const attack: GameAction = { type: 'ATTACK' };
 
 describe('createRealtimeBattleClient', () => {
+  it('JOINへparticipantIdを付け、役割選択とSTARTをidentity無しで送信する', () => {
+    const harness = createClientTransportHarness();
+    const client = createRealtimeBattleClient({
+      transport: harness.transport,
+      token: 'shared-room-token',
+      participantId: 'participant-pay',
+    });
+
+    harness.receive({ type: 'WELCOME', participantId: 'participant-pay', epoch: 1 });
+    (client as typeof client & { selectCharacter: (role: 'PAY') => void }).selectCharacter('PAY');
+    (client as typeof client & { requestStart: () => void }).requestStart();
+
+    expect(harness.sent).toEqual([
+      { type: 'JOIN', token: 'shared-room-token', participantId: 'participant-pay' },
+      { type: 'SELECT_CHARACTER', characterId: 'PAY' },
+      { type: 'START' },
+    ]);
+  });
+
   it('生成時にJOINを送りWELCOME後のACTIONへepochと連番を付ける', () => {
     const harness = createClientTransportHarness();
     const client = createRealtimeBattleClient({ transport: harness.transport, token: 'token-pay' });
@@ -105,5 +124,29 @@ describe('createRealtimeBattleClient', () => {
 
     expect(states).toEqual([battle]);
     expect(events).toEqual([300]);
+  });
+
+  it('WELCOMEとROSTERを購読者へ配送し解除後は配送しない', () => {
+    const harness = createClientTransportHarness();
+    const client = createRealtimeBattleClient({ transport: harness.transport, token: 'token-pay' });
+    const welcomes: Array<{ playerId: string; epoch: number }> = [];
+    const rosters: RosterMessage[] = [];
+    const unsubscribeWelcome = client.onWelcome((welcome) => welcomes.push(welcome));
+    const unsubscribeRoster = client.onRoster((roster) => rosters.push(roster));
+    const roster: RosterMessage = {
+      type: 'ROSTER',
+      slots: [{ playerId: 'pay-player', characterId: 'PAY', connected: true }],
+      started: false,
+    };
+
+    harness.receive({ type: 'WELCOME', playerId: 'pay-player', epoch: 3 });
+    harness.receive(roster);
+    unsubscribeWelcome();
+    unsubscribeRoster();
+    harness.receive({ type: 'WELCOME', playerId: 'pay-player', epoch: 4 });
+    harness.receive({ ...roster, started: true });
+
+    expect(welcomes).toEqual([{ playerId: 'pay-player', epoch: 3 }]);
+    expect(rosters).toEqual([roster]);
   });
 });

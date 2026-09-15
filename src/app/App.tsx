@@ -12,10 +12,11 @@ import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
+import { MatchingScreen } from '@/ui/matching/MatchingScreen';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
 import { useScreenStore } from './screen';
-import { currentRoute, subscribeToRoute } from './route';
+import { currentRoute, subscribeToRoute, type AppRoute } from './route';
 import { createCombatSession } from './combat-session';
 import styles from './App.module.css';
 
@@ -37,13 +38,11 @@ const VoiceDebugPage = lazy(async () => ({
 
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
-  const route = useSyncExternalStore(subscribeToRoute, currentRoute, () => 'TITLE');
+  const route = useSyncExternalStore<AppRoute>(subscribeToRoute, currentRoute, () => 'TITLE');
 
   useEffect(() => {
-    if (route === 'INTRO' || route === 'BATTLE' || route === 'WORLD') {
+    if (route !== 'ORA_DEBUG') {
       useScreenStore.setState({ screen: route });
-    } else if (route === 'TITLE') {
-      useScreenStore.setState({ screen: 'TITLE' });
     }
   }, [route]);
 
@@ -72,7 +71,22 @@ export function App(): React.JSX.Element {
   if (screen === 'TITLE') return <TitleScreen />;
 
   if (screen === 'INTRO') {
-    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('WORLD')} />;
+    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('MATCHING')} />;
+  }
+
+  if (screen === 'MATCHING') {
+    return <MatchingScreen />;
+  }
+
+  // GAME は本番マルチプレイ。Authority権威のBattleSourceだけを使う
+  // (MultiplayerArenaSceneがsession不在時にMATCHINGへ差し戻すので、
+  // ここでローカルBossBattleへフォールバックすることはない)。
+  if (screen === 'GAME') {
+    return (
+      <div className={styles.root}>
+        <GameScene multiplayer />
+      </div>
+    );
   }
 
   // ワールドは Phase 1 の戦闘一式を起動しない。あちらは PlayerAction 前提で、
