@@ -46,6 +46,14 @@ describe('安眠の旋律の判定', () => {
     expect(recognizer.snapshot()).toMatchObject({ progress: 0, missCount: 0 });
   });
 
+  it('自然音だけの曲では、息の揺れで出た半音を入力・ミスとして扱わない', () => {
+    const recognizer = createMelodyRecognizer({ notes: ['C', 'E'], ignoreAccidentals: true });
+
+    expect(recognizer.consume(note('C'))).toBe('CORRECT');
+    expect(recognizer.consume(note('C#'))).toBe('IGNORED');
+    expect(recognizer.snapshot()).toMatchObject({ progress: 1, missCount: 0, expected: 'E' });
+  });
+
   it('ミスが重なるとヒントと救済モードを出す', () => {
     const recognizer = createMelodyRecognizer({ notes: ['C'] });
     for (let index = 0; index < 5; index += 1) recognizer.consume(note('D'));

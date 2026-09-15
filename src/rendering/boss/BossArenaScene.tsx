@@ -198,7 +198,11 @@ export function BossArenaScene(): React.JSX.Element {
   const [melodyMissSequence, setMelodyMissSequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
-  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
+  const melody = useRef(
+    createMelodyRecognizer({
+      notes: ['C', 'E', 'G', 'E', 'C', 'G'],
+    }),
+  );
 
   useEffect(() => {
     publishFinalePresentation({
@@ -258,6 +262,11 @@ export function BossArenaScene(): React.JSX.Element {
       void attachMicrophoneNoteInput(
         (event) => {
           if (event.type === 'note-off') return;
+
+          // 同じ息の途中で自然音から半音へ揺れるのは、実機では音程のブレとして
+          // 起きやすい。これは直前の音と二重に書かない。一方、吹き直した半音は
+          // note-on になるため、ド#などとして正しく楽譜へ出る。
+          if (event.type === 'note-change' && event.note.name.includes('#')) return;
 
           const result = melody.current.consume(event);
           if (result === 'IGNORED') return;

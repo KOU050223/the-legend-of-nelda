@@ -5,6 +5,8 @@ export interface MelodyConfig {
   readonly notes: readonly NoteName[];
   readonly hintAfterMisses?: number;
   readonly easeAfterMisses?: number;
+  /** 対象曲に含まれない半音を、息やピッチの揺れとして無視する。 */
+  readonly ignoreAccidentals?: boolean;
 }
 
 export type MelodyTolerance = 'NORMAL' | 'EASY';
@@ -43,6 +45,7 @@ export function createMelodyRecognizer(config: MelodyConfig): MelodyRecognizer {
 
   const hintAfterMisses = config.hintAfterMisses ?? DEFAULT_HINT_AFTER_MISSES;
   const easeAfterMisses = config.easeAfterMisses ?? DEFAULT_EASE_AFTER_MISSES;
+  const ignoreAccidentals = config.ignoreAccidentals ?? false;
   let progress = 0;
   let missCount = 0;
   let complete = false;
@@ -69,6 +72,11 @@ export function createMelodyRecognizer(config: MelodyConfig): MelodyRecognizer {
       if (event.type === 'note-off' || complete) return 'IGNORED';
 
       const note = event.note.name;
+      // 実機では吹き始め・息の揺れで、意図した自然音の隣の半音が一瞬だけ
+      // 安定判定を通ることがある。安眠の旋律は自然音のみなので、これを
+      // 誤音にも表示音にもせず捨てる。半音を使う曲は opt-in で有効にできる。
+      if (ignoreAccidentals && note.includes('#')) return 'IGNORED';
+
       if (note === expected()) {
         progress += 1;
         if (progress === config.notes.length) {

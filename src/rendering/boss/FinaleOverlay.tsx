@@ -154,24 +154,21 @@ function SheetMusic({
 }
 
 function noteNameLabel(note: NoteName): string {
-  switch (note) {
-    case 'C':
-      return 'ド';
-    case 'D':
-      return 'レ';
-    case 'E':
-      return 'ミ';
-    case 'F':
-      return 'ファ';
-    case 'G':
-      return 'ソ';
-    case 'A':
-      return 'ラ';
-    case 'B':
-      return 'シ';
-    default:
-      return note;
-  }
+  const labels: Record<NoteName, string> = {
+    C: 'ド',
+    'C#': 'ド#',
+    D: 'レ',
+    'D#': 'レ#',
+    E: 'ミ',
+    F: 'ファ',
+    'F#': 'ファ#',
+    G: 'ソ',
+    'G#': 'ソ#',
+    A: 'ラ',
+    'A#': 'ラ#',
+    B: 'シ',
+  };
+  return labels[note];
 }
 
 function noteHeightClass(note: NoteName): string {
