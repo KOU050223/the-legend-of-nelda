@@ -17,10 +17,14 @@
   // https://<version>-<name>.<subdomain>.workers.dev を有効にする（プレビュー URL）。
   "preview_urls": true,
 
-  // Vite のビルド成果物（dist/）をそのまま配信する。
-  // Worker スクリプト（main）は持たず、静的アセットのみの Worker とする。
+  // Static Assetsと同じWorkerでLiveKit Token APIを実行する。
+  "main": "./worker/index.ts",
+
+  // Vite のビルド成果物（dist/）を配信し、/api/*だけWorkerへ先に渡す。
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
   },
 }
