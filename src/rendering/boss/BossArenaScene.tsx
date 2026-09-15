@@ -64,6 +64,12 @@ function pinnedAttackId(): HoriAttackId | null {
   return HORI_ATTACK_IDS.find((id) => id === requested) ?? null;
 }
 
+/** 結界UI・3人操作が未統合の段階で、後半フェーズを確認するための開発限定口。 */
+function shouldSkipBarriers(): boolean {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('skipBarrier') === '1';
+}
+
 function createBattle(): BossBattle {
   const pinned = pinnedAttackId();
   return createBossBattle({
@@ -76,6 +82,7 @@ function createBattle(): BossBattle {
       { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
       { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
+    debugSkipBarriers: shouldSkipBarriers(),
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });

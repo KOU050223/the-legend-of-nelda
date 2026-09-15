@@ -37,6 +37,7 @@ function createBattleSnapshot(): BattleSnapshot {
       },
     ],
     barrier: null,
+    finale: 'NONE',
   };
 }
 
@@ -87,10 +88,14 @@ describe('isAuthorityToClientMessage', () => {
   });
 
   it('STATEの不正なスナップショットを拒否する', () => {
-    const message: unknown = { type: 'STATE', battle: { boss: null, players: [] } };
+    const messages: unknown[] = [
+      { type: 'STATE', battle: { boss: null, players: [], finale: 'NONE' } },
+      { type: 'STATE', battle: { boss: {}, players: [], finale: 'UNKNOWN' } },
+      { type: 'STATE', battle: { boss: {}, players: [] } },
+    ];
 
-    const result = isAuthorityToClientMessage(message);
+    const result = messages.map(isAuthorityToClientMessage);
 
-    expect(result).toBe(false);
+    expect(result).toEqual([false, false, false]);
   });
 });
