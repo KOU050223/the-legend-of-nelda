@@ -53,6 +53,13 @@ export interface DumbbellSlamState {
   readonly dumbbellY: number;
   /** ダンベルの見た目の大きさ倍率。叩きつけた瞬間だけ潰して重みを出す。 */
   readonly dumbbellSquash: number;
+  /**
+   * ダンベルの傾き (rad)。落下中だけ回り、着地時に 0 へ収まる。
+   *
+   * 振り上げ・溜めのあいだは回さない。溜めは「振り上げきった位置で静止する」
+   * 区間なので、そこで回っていると溜めに見えない。
+   */
+  readonly dumbbellRotationZ: number;
   /** 衝撃波リングの現在の半径。判定中だけ 0 より大きくなる。 */
   readonly shockwaveRadius: number;
   /** 衝撃波の不透明度 (0〜1)。強度を掛ける前の値。 */
@@ -64,9 +71,17 @@ const IDLE: DumbbellSlamState = {
   phase: 'NONE',
   dumbbellY: 0,
   dumbbellSquash: 1,
+  dumbbellRotationZ: 0,
   shockwaveRadius: 0,
   shockwaveOpacity: 0,
 };
+
+/**
+ * 落下のあいだに回す角度。着地でちょうど 0 へ戻るよう、この角度から
+ * 減らしていく。半回転にしてあるのは、落下の尺 (予兆の 25%) で回しきれる
+ * 範囲に収めるため。回しすぎると落下ではなく回転が目に付く。
+ */
+const DROP_ROTATION = Math.PI;
 
 /** 0〜1 に丸める。 */
 function clamp01(value: number): number {
@@ -129,6 +144,8 @@ export function dumbbellSlamStateAt(
       ...IDLE,
       phase: 'DROP',
       dumbbellY: DUMBBELL_GROUND_HEIGHT + (1 - accelerate(t)) * DUMBBELL_LIFT_HEIGHT,
+      // 着地の瞬間に 0 になる。判定へ入った時点で傾きが飛ばないようにする。
+      dumbbellRotationZ: (1 - t) * DROP_ROTATION,
     };
   }
 
@@ -137,6 +154,7 @@ export function dumbbellSlamStateAt(
     return {
       phase: 'IMPACT',
       dumbbellY: DUMBBELL_GROUND_HEIGHT,
+      dumbbellRotationZ: 0,
       // 着地の瞬間だけ潰し、すぐ戻す。重い物が落ちた手応えを出す。
       dumbbellSquash: 1 - Math.max(0, 1 - t * 6) * 0.45,
       shockwaveRadius:

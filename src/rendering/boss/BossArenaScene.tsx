@@ -626,6 +626,11 @@ export function BossArenaScene({
   useFrame((_, delta) => {
     // 決着後は戦闘時間を進めず、結果ムービーの経過時間だけを更新する。
     if (outcome !== 'ONGOING') {
+      // 技の演出はここで捨てる。この先で ref を更新しないまま
+      // DumbbellSlam が自分の useFrame で読み続けるため、消さないと
+      // 決着ムービーのあいだ中ダンベルと衝撃波が止まったまま残る。
+      dumbbellSlam.current = null;
+
       const result = useGameStore.getState().result;
       if (result !== null && resultStartedAt.current !== null) {
         const duration =

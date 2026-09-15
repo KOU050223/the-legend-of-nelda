@@ -70,6 +70,7 @@ export function DumbbellSlam({ frame }: DumbbellSlamProps): React.JSX.Element {
             phase: 'NONE' as const,
             dumbbellY: 0,
             dumbbellSquash: 1,
+            dumbbellRotationZ: 0,
             shockwaveRadius: 0,
             shockwaveOpacity: 0,
           }
@@ -84,8 +85,9 @@ export function DumbbellSlam({ frame }: DumbbellSlamProps): React.JSX.Element {
       dumbbell.current.visible = visible;
       if (visible && current !== null) {
         dumbbell.current.position.set(current.origin.x, state.dumbbellY, current.origin.z);
-        // 落ちるあいだに少し回す。まっすぐ降りるだけだと投げた物に見えない。
-        dumbbell.current.rotation.z = state.phase === 'IMPACT' ? 0 : current.elapsedMs * 0.004;
+        // 落ちるあいだだけ回す。傾きは着地で 0 に収まるので、判定へ入る
+        // 瞬間に向きが飛ばない。
+        dumbbell.current.rotation.z = state.dumbbellRotationZ;
         dumbbell.current.scale.set(1, state.dumbbellSquash, 1);
       }
     }
