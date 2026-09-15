@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useScreenStore } from '@/app/screen';
 
@@ -9,8 +9,13 @@ describe('タイトル画面', () => {
   beforeEach(() => {
     useScreenStore.setState({ screen: 'TITLE' });
     window.history.replaceState({}, '', '/');
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it('タイトルと副題が出る (Issue #63)', () => {
     render(<TitleScreen />);
@@ -40,7 +45,9 @@ describe('タイトル画面', () => {
   it('並ぶのは今そこへ行ける画面だけで、押せば必ずその画面へ移る (Issue #63)', () => {
     render(<TitleScreen />);
 
-    const buttons = screen.getAllByRole('button');
+    const buttons = within(screen.getByRole('navigation', { name: 'メニュー' })).getAllByRole(
+      'button',
+    );
     expect(buttons.length).toBeGreaterThan(0);
 
     for (const button of buttons) {
