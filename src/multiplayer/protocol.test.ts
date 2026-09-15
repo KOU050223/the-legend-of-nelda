@@ -36,6 +36,7 @@ function createBattleSnapshot(): BattleSnapshot {
         takenAt: 0,
       },
     ],
+    barrier: null,
   };
 }
 

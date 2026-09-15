@@ -4,6 +4,7 @@ export type AppRoute = Screen | 'ORA_DEBUG';
 
 const routePaths: Record<AppRoute, string> = {
   TITLE: '/',
+  INTRO: '/intro',
   BATTLE: '/battle',
   WORLD: '/world',
   ORA_DEBUG: '/debug/ora',
@@ -14,12 +15,13 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
     return 'ORA_DEBUG';
   }
 
+  // `/world` はイントロ終了後の正式な遷移先。DEV 限定にすると、本番では
+  // URL を更新しても TITLE として解釈され、イントロ完了後にタイトルへ戻ってしまう。
+  if (location.pathname === '/world') return 'WORLD';
+
   if (import.meta.env.DEV) {
     if (location.pathname === '/debug/ora') return 'ORA_DEBUG';
-    if (
-      location.pathname === '/world' ||
-      new URLSearchParams(location.search).get('scene') === 'world'
-    ) {
+    if (new URLSearchParams(location.search).get('scene') === 'world') {
       return 'WORLD';
     }
     if (new URLSearchParams(location.search).get('scene') === 'combat') {
@@ -27,6 +29,7 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
     }
   }
 
+  if (location.pathname === '/intro') return 'INTRO';
   if (location.pathname === '/battle') return 'BATTLE';
   return 'TITLE';
 }

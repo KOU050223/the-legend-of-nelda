@@ -19,12 +19,12 @@ describe('タイトル画面', () => {
     expect(screen.getByText('〜3人の勇者と眠らない男〜')).toBeInTheDocument();
   });
 
-  it('「はじめから」を押すと戦闘へ移る (Issue #63)', () => {
+  it('「はじめから」を押すとイントロへ移る (Issue #64)', () => {
     render(<TitleScreen />);
 
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
-    expect(useScreenStore.getState().screen).toBe('BATTLE');
+    expect(useScreenStore.getState().screen).toBe('INTRO');
   });
 
   it('並ぶのは今そこへ行ける画面だけで、押せば必ずその画面へ移る (Issue #63)', () => {
