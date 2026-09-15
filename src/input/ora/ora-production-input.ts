@@ -75,6 +75,12 @@ export interface OraProductionInputOptions {
   onCalibrationChange?: (state: OraCalibrationState) => void;
   onHandTrackingFrame?: (frame: OraHandTrackingFrame) => void;
   onVoiceCandidate?: (info: OraVoiceCandidateInfo) => void;
+  /**
+   * カメラ/マイク許可待ちなど、初期化の途中でキャラを切り替えたときに
+   * 呼び出し側が中断できるようにする。中断済みなら各awaitの直後で
+   * それまでに確保したリソースを解放し、何もしないアダプタを返す。
+   */
+  signal?: AbortSignal;
   /** テストでブラウザの時間・スケジューラを差し替える。 */
   now?: () => number;
   requestAnimationFrame?: (callback: (timestamp: number) => void) => number;
@@ -112,6 +118,9 @@ const FATAL_SPEECH_RECOGNITION_ERRORS: ReadonlySet<string> = new Set([
   'not-allowed',
   'service-not-allowed',
 ]);
+
+/** signal中断で初期化を打ち切ったときに返す、何もしないアダプタ。 */
+const NOOP_ADAPTER: InputAdapter = { detach() {} };
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -172,7 +181,7 @@ function clampIntensity(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function normalizeOraSpeechIntensity(peakRms: number): number {
+export function normalizeOraSpeechIntensity(peakRms: number): number {
   const threshold = DEFAULT_VOICE_ACTIVITY_CONFIG.threshold;
   if (peakRms <= threshold) return 0;
   return clampIntensity((peakRms - threshold) / (ORA_SPEECH_INTENSITY_CEILING_RMS - threshold));
@@ -298,12 +307,12 @@ export async function attachOraProductionInput(
     notifyStatus(phase);
   };
 
-  const teardown = (): void => {
-    if (stopped) return;
-    stopped = true;
-
-    if (intervalId !== undefined) stopInterval(intervalId);
-    if (frameId !== undefined) cancelFrame(frameId);
+  /**
+   * Calibrationが崩れた瞬間にも呼ぶ。手を見失った直後にまだ予約済みの
+   * 複数hit ATTACKが発火すると、「Calibration未完了ならATTACKを一切
+   * 発火しない」という前提が崩れるため。
+   */
+  const clearPendingAttacks = (): void => {
     for (const timeoutId of pendingAttackTimeoutIds) {
       try {
         stopTimeout(timeoutId);
@@ -312,6 +321,15 @@ export async function attachOraProductionInput(
       }
     }
     pendingAttackTimeoutIds.clear();
+  };
+
+  const teardown = (): void => {
+    if (stopped) return;
+    stopped = true;
+
+    if (intervalId !== undefined) stopInterval(intervalId);
+    if (frameId !== undefined) cancelFrame(frameId);
+    clearPendingAttacks();
 
     if (recognition !== undefined) {
       if (speechResultListener !== undefined) {
@@ -529,14 +547,23 @@ export async function attachOraProductionInput(
       const neutral = handCalibrator.getNeutral();
       notifyHandTrackingFrame({ left: observation.left, neutral });
       const calibration = notifyCalibration();
+
+      // MOVEは手のCalibrationだけに依存させ、Calibration中も含めて毎フレーム
+      // 送る。joystick.update()は手/Neutralが無ければゼロを返すので、手を
+      // 見失った瞬間に確実にNeutralへ戻る (Phase2の「Hand LostでNeutral復帰」)。
+      // ここで送らずにreturnすると、player-state側に残った直前の移動入力が
+      // 更新されず、キャラが走り続けてしまう。
+      emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
+
       if (!calibration.handComplete || !calibration.voiceComplete) {
-        joystick.reset();
         oraActionRecognizer.reset();
         voiceAttackRecognizer.reset();
+        // Calibrationが崩れた後に、崩れる直前の発話から予約済みの複数hit
+        // ATTACKが遅れて発火しないようにする。
+        clearPendingAttacks();
         return;
       }
 
-      emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
       const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
       if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });
     } catch (error) {
@@ -550,12 +577,25 @@ export async function attachOraProductionInput(
     processFrame(timestamp);
   };
 
+  // カメラ/マイクの許可待ち中にキャラを切り替えられても、待っている
+  // Promiseそのものは中断できない (ブラウザのgetUserMedia自体に中断手段が
+  // 無いため)。ただし各awaitの直後でsignalを見れば、許可が下りた直後や
+  // モデル読込完了直後など、その先の初期化を進めずにすぐ解放できる。
+  const bailIfAborted = (): boolean => {
+    if (options.signal?.aborted !== true) return false;
+    teardown();
+    return true;
+  };
+
   notifyCalibration();
   notifyStatus('requesting-permission');
   try {
     webcamStream = await requestWebcam();
+    if (bailIfAborted()) return NOOP_ADAPTER;
     microphoneStream = await createMicrophoneRequest();
+    if (bailIfAborted()) return NOOP_ADAPTER;
     handDetector = await createMediaPipeHandDetector();
+    if (bailIfAborted()) return NOOP_ADAPTER;
 
     video = document.createElement('video');
     video.autoplay = true;
@@ -563,8 +603,10 @@ export async function attachOraProductionInput(
     video.playsInline = true;
     video.srcObject = webcamStream;
     await video.play();
+    if (bailIfAborted()) return NOOP_ADAPTER;
 
     audioSession = await createWebAudioSession(microphoneStream);
+    if (bailIfAborted()) return NOOP_ADAPTER;
     startSpeechRecognition();
     notifyStatus('calibrating');
     intervalId = startInterval(analyzeAudio, ANALYSIS_INTERVAL_MS);

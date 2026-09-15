@@ -559,6 +559,9 @@ export function BossArenaScene({
     // 二重マウントやOra初期化中の切り替えで、古い入力を残さない。
     let disposed = false;
     let currentInput: SceneInput | null = null;
+    // Ora初期化中 (カメラ/マイク許可待ち等) にキャラを切り替えられたとき、
+    // その先の初期化を進めさせず早期に解放させるための合図。
+    let abortController: AbortController | undefined;
 
     const submit = (action: GameAction): void => {
       if (!disposed) activeSource.submit(action);
@@ -586,7 +589,9 @@ export function BossArenaScene({
     } else {
       useOraStatusStore.getState().reset();
       useOraStatusStore.getState().setActive(true);
+      abortController = new AbortController();
       const attachOra = createOraProductionInput({
+        signal: abortController.signal,
         onCalibrationChange: (state) => {
           if (!disposed) useOraStatusStore.getState().setCalibration(state);
         },
@@ -619,6 +624,7 @@ export function BossArenaScene({
 
     return () => {
       disposed = true;
+      abortController?.abort();
       inputRef.current = null;
       currentInput?.adapter.detach();
       if (inputMode === 'ora') useOraStatusStore.getState().reset();

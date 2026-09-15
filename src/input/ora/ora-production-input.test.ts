@@ -140,6 +140,7 @@ function createTestAttach(
     onCalibrationChange?: (state: OraCalibrationState) => void;
     onHandTrackingFrame?: (frame: OraHandTrackingFrame) => void;
     onStatusChange?: (status: OraProductionInputStatus) => void;
+    signal?: AbortSignal;
   } = {},
 ): AttachInputAdapter {
   return createOraProductionInput({
@@ -270,7 +271,7 @@ afterEach(() => {
 });
 
 describe('createOraProductionInput', () => {
-  it('Calibration完了までは発火せず、完了後にMOVE・ATTACK・CHARACTER_ACTIONをGameActionへ変換する', async () => {
+  it('Calibration完了前はMOVEだけゼロで送り続け、完了後にATTACK・CHARACTER_ACTIONもGameActionへ変換する', async () => {
     const actions: GameAction[] = [];
     const calibration: OraCalibrationState[] = [];
     const adapter = await createTestAttach({
@@ -278,7 +279,8 @@ describe('createOraProductionInput', () => {
     })((action) => actions.push(action));
 
     runNextFrame(0);
-    expect(actions).toEqual([]);
+    // Calibration未完了でもMOVEはゼロで送る (Hand LostでNeutral復帰の前提)。
+    expect(actions).toEqual([{ type: 'MOVE', input: { forward: 0, right: 0 } }]);
 
     rms = 0.2;
     runInterval();
@@ -288,7 +290,10 @@ describe('createOraProductionInput', () => {
     runNextFrame(1_000);
 
     expect(calibration.at(-1)).toEqual({ handComplete: true, voiceComplete: true, progress: 1 });
-    expect(actions).toEqual([{ type: 'MOVE', input: { forward: 0, right: 0 } }]);
+    expect(actions).toEqual([
+      { type: 'MOVE', input: { forward: 0, right: 0 } },
+      { type: 'MOVE', input: { forward: 0, right: 0 } },
+    ]);
 
     nowMs = 1_000;
     rms = 0.2;
@@ -330,6 +335,44 @@ describe('createOraProductionInput', () => {
     expect(frames.at(-1)).toEqual({ left: undefined, neutral: undefined });
 
     adapter.detach();
+  });
+
+  it('移動中に手を見失うとMOVEが直ちにゼロへ戻る (Hand LostでNeutral復帰)', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    observedLeft = hand(0.9, 0.9);
+    runNextFrame(1_100);
+    runNextFrame(1_200);
+    const moveActions = () =>
+      actions.filter(
+        (action): action is Extract<GameAction, { type: 'MOVE' }> => action.type === 'MOVE',
+      );
+    expect(moveActions().at(-1)?.input).not.toEqual({ forward: 0, right: 0 });
+
+    observedLeft = undefined;
+    runNextFrame(1_300);
+
+    expect(moveActions().at(-1)?.input).toEqual({ forward: 0, right: 0 });
+
+    adapter.detach();
+  });
+
+  it('手を見失うとCalibration崩れ前に予約済みだったATTACKも発火しない', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    submitUtterance('オラオラ', 0.2);
+    expect(timeoutCallbacks.size).toBe(2);
+
+    observedLeft = undefined;
+    runNextFrame(1_150);
+    expect(timeoutCallbacks.size).toBe(0);
+
+    adapter.detach();
+    expect(attackActions(actions)).toEqual([]);
   });
 
   it('通常発話のRMSはCalibration時の大きい声量に左右されずATTACK閾値を通る', async () => {
@@ -462,6 +505,36 @@ describe('createOraProductionInput', () => {
     expect(FakeSpeechRecognition.instances.at(-1)?.stopped).toBe(true);
     expect(frameCallbacks.size).toBe(0);
     expect(intervalHandler).toBeUndefined();
+  });
+
+  it('初期化の途中でsignalがabortされたら、その先へ進まず取得済みリソースを解放する', async () => {
+    let resolveDetector: ((detector: unknown) => void) | undefined;
+    mocks.createMediaPipeHandDetector.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDetector = resolve;
+        }),
+    );
+    const controller = new AbortController();
+
+    const attachPromise = createTestAttach({ signal: controller.signal })(() => undefined);
+
+    // Webcam・マイクは既に取得済みで、手検出モデルの読込待ちの間にキャラを
+    // 切り替えた状況を再現する。
+    await vi.waitFor(() => expect(resolveDetector).toBeDefined());
+    controller.abort();
+    resolveDetector?.({ detect: vi.fn<() => never>(), close: vi.fn<() => void>() });
+
+    const adapter = await attachPromise;
+
+    expect(mocks.stopWebcam).toHaveBeenCalledWith(cameraStream);
+    expect(cameraTrack.stop).toHaveBeenCalledOnce();
+    expect(audioTrack.stop).toHaveBeenCalledOnce();
+    expect(FakeSpeechRecognition.instances).toHaveLength(0);
+    expect(frameCallbacks.size).toBe(0);
+
+    // 既に解放済みのアダプタを返す。detach()を呼んでも安全 (何もしない)。
+    expect(() => adapter.detach()).not.toThrow();
   });
 
   it('カメラ許可拒否をerrorステータスへ変換し、呼び出し側へ未処理例外を残さない', async () => {
