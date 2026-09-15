@@ -1,10 +1,11 @@
-import { useScreenStore, type Screen } from '@/app/screen';
+import { useScreenStore, type GameMode, type Screen } from '@/app/screen';
 
 import styles from './TitleScreen.module.css';
 
 interface MenuItem {
   label: string;
   screen: Screen;
+  mode?: GameMode;
 }
 
 /**
@@ -15,7 +16,10 @@ interface MenuItem {
  * この行自体を出さない。
  */
 function menuItems(): MenuItem[] {
-  const items: MenuItem[] = [{ label: 'はじめから', screen: 'INTRO' }];
+  const items: MenuItem[] = [
+    { label: 'ひとりで', screen: 'INTRO', mode: 'SINGLE' },
+    { label: 'みんなで', screen: 'INTRO', mode: 'MULTIPLAYER' },
+  ];
   if (import.meta.env.DEV) items.push({ label: 'ワールドへ', screen: 'WORLD' });
   return items;
 }
@@ -41,10 +45,13 @@ export function TitleScreen(): React.JSX.Element {
         <nav className={styles.links} aria-label="メニュー">
           {items.map((item, index) => (
             <button
-              key={item.screen}
+              key={item.mode ?? item.screen}
               type="button"
               className={index === 0 ? styles.primary : styles.link}
-              onClick={() => goTo(item.screen)}
+              onClick={() => {
+                if (item.mode !== undefined) useScreenStore.getState().selectMode(item.mode);
+                goTo(item.screen);
+              }}
             >
               {item.label}
             </button>
