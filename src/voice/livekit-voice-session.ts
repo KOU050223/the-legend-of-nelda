@@ -110,8 +110,6 @@ export function decodeWasshoiEvent(payload: Uint8Array): WasshoiEvent | null {
 
 /**
  * Token is always acquired from a server endpoint. API secret must never reach this browser.
- * `VITE_LIVEKIT_DEV_TOKEN` is deliberately only a short-lived, manually generated development
- * token; it is a fallback for the static-site PoC and is not a credential used to mint tokens.
  */
 export async function requestLiveKitCredentials(
   request: LiveKitTokenRequest,
@@ -119,7 +117,6 @@ export async function requestLiveKitCredentials(
 ): Promise<LiveKitCredentials> {
   const endpoint = import.meta.env.VITE_LIVEKIT_TOKEN_ENDPOINT;
   const configuredUrl = import.meta.env.VITE_LIVEKIT_URL;
-  const developmentToken = import.meta.env.VITE_LIVEKIT_DEV_TOKEN;
 
   if (endpoint !== undefined && endpoint !== '') {
     const response = await fetcher(endpoint, {
@@ -138,10 +135,7 @@ export async function requestLiveKitCredentials(
     };
   }
 
-  if (configuredUrl !== undefined && configuredUrl !== '' && developmentToken !== undefined) {
-    return { url: configuredUrl, token: developmentToken };
-  }
-  throw new Error('LiveKit token endpoint or development token is not configured');
+  throw new Error('LiveKit token endpoint is not configured');
 }
 
 /**

@@ -17,7 +17,7 @@ content-type: application/json
 
 レスポンスは `{ "url": "wss://…", "token": "…" }`。endpoint は認証済みプレイヤーの identity と role をサーバー側で確定し、Pay には `canPublishSources: [DATA]`、Odoruno/Ora には `[MICROPHONE, DATA]` を付与する。クライアントから渡された role を信用してはならない。
 
-静的サイトだけで行う短期 PoC は `.env` に `VITE_LIVEKIT_URL` と、Cloud dashboard が発行した短命・room/identity 固定の `VITE_LIVEKIT_DEV_TOKEN` を置いてよい。これは token を**発行する**秘密ではない。`.env.example` をコピーし、実 token はコミットしない。
+静的サイトだけで行う短期 PoC は、Cloud dashboard が発行した短命・room/identity 固定の token を Voice Debug の `DEV TOKEN` へ入力してよい。token は環境変数・localStorage・Gitへ保存しない。
 
 さらに手早く試す場合は、LiveKit Cloud の Project Settings で **Development Token Server** を有効化し、表示される `token-server-...` ID を Voice Debug の `DEVELOPMENT TOKEN SERVER ID` へ入力する。`開発用 token を発行する` を押すと、入力済みの ROOM / PLAYER ID / ROLE で短命 token を取得する。この機能は誰でも任意の token を発行できる開発用の仕組みなので、本番・発表環境では使わない。
 
