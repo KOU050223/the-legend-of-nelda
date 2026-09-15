@@ -24,6 +24,12 @@ const captions = [
   '人々は眠らなくなり、キレやすく、話を聞かなくなった。',
 ] as const;
 
+const captionSchedule = [
+  { start: DEFEAT_CINEMATIC_TIMING.worldFall, end: 4_700 },
+  { start: 5_000, end: 5_900 },
+  { start: 6_200, end: DEFEAT_CINEMATIC_TIMING.badEnd },
+] as const;
+
 function clamp(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
@@ -38,17 +44,10 @@ function smoothstep(value: number): number {
 }
 
 function captionFor(elapsedMs: number): string | null {
-  if (elapsedMs < DEFEAT_CINEMATIC_TIMING.worldFall || elapsedMs >= DEFEAT_CINEMATIC_TIMING.badEnd)
-    return null;
-  const captionIndex = Math.min(
-    captions.length - 1,
-    Math.floor(
-      ((elapsedMs - DEFEAT_CINEMATIC_TIMING.worldFall) /
-        (DEFEAT_CINEMATIC_TIMING.badEnd - DEFEAT_CINEMATIC_TIMING.worldFall)) *
-        captions.length,
-    ),
+  const captionIndex = captionSchedule.findIndex(
+    ({ start, end }) => elapsedMs >= start && elapsedMs < end,
   );
-  return captions[captionIndex] ?? null;
+  return captionIndex === -1 ? null : (captions[captionIndex] ?? null);
 }
 
 export function getDefeatCinematicState(elapsedMs: number): DefeatCinematicState {

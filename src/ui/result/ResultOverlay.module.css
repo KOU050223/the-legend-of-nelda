@@ -107,11 +107,17 @@
 .defeat .title h1 {
   letter-spacing: 0.18em;
 }
-.restart {
+.actions {
   position: absolute;
   bottom: 11%;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.restart,
+.titleButton {
   min-width: 270px;
   padding: 15px 32px;
   color: inherit;
@@ -126,17 +132,24 @@
   letter-spacing: 0.2em;
   cursor: pointer;
 }
-.restart span {
+.restart span,
+.titleButton span {
   display: block;
   margin-top: 8px;
   font: 11px system-ui;
   letter-spacing: 0.1em;
 }
 .restart:hover,
-.restart:focus-visible {
+.restart:focus-visible,
+.titleButton:hover,
+.titleButton:focus-visible {
   background: #443d50;
   outline: 2px solid #fff2cf;
   outline-offset: 5px;
+}
+.titleButton {
+  min-width: 220px;
+  color: #aaa5c8;
 }
 @keyframes flash {
   from {

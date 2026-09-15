@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createFakeClock } from '@/game/clock';
 import { createGameEventBus } from '@/game/events/game-event';
 import { useGameStore } from '@/store/game-store';
@@ -22,7 +22,7 @@ describe('ResultOverlay', () => {
     const bus = createGameEventBus();
     const presentation = syncResultWithGameEvents(bus, clock);
     dispose = () => presentation.dispose();
-    render(<ResultOverlay onRestart={() => {}} />);
+    render(<ResultOverlay onRestart={() => {}} onTitle={() => {}} />);
 
     act(() => bus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'HIT', to }));
 
@@ -56,7 +56,7 @@ describe('ResultOverlay', () => {
     const bus = createGameEventBus();
     const presentation = syncResultWithGameEvents(bus, clock);
     dispose = () => presentation.dispose();
-    render(<ResultOverlay onRestart={() => {}} />);
+    render(<ResultOverlay onRestart={() => {}} onTitle={() => {}} />);
 
     act(() => bus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'HIT', to: 'PLAYER_LOSE' }));
 
@@ -80,6 +80,17 @@ describe('ResultOverlay', () => {
       presentation.update();
     });
     expect(screen.getByRole('button', { name: /RESTART/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /タイトルへ戻る/ })).toBeInTheDocument();
+  });
+
+  it('BAD END後にタイトルへ戻る操作を表示する', () => {
+    const onTitle = vi.fn<() => void>();
+    useGameStore.setState({ result: { outcome: 'defeat', elapsedMs: 9_000 } });
+
+    render(<ResultOverlay onRestart={() => {}} onTitle={onTitle} />);
+    fireEvent.click(screen.getByRole('button', { name: /タイトルへ戻る/ }));
+
+    expect(onTitle).toHaveBeenCalledOnce();
   });
 
   it('同じ戦いで決着通知が重なっても演出を巻き戻さず、破棄後は更新しない (RESULT-004/005)', () => {
