@@ -2,6 +2,8 @@
 
 Issue #82 の Voice Chat は `?debug=voice` の専用画面で確認する。ゲームの通常画面には常駐させない。開発用には画面の `LIVEKIT PROJECT URL` と `DEV TOKEN` へ直接入力できる。この token は localStorage 等へ保存しないため、同じ開発サーバーを複数PCで共有しても、各PCは別の短命 token を使える。
 
+Vite 開発サーバーは LAN からのマイク確認のため、自己署名証明書で HTTPS を有効にしている。初回だけブラウザの証明書警告で詳細を開き、開発サーバーへの接続を続行する。これはローカル検証限定であり、発表・本番では信頼済みの HTTPS ホストを使う。
+
 ## Token の準備
 
 `LiveKit API Secret` を Vite の `VITE_*` 変数、Git、ブラウザへ入れてはいけない。発表用は token endpoint が API Secret を server-side secret として保持し、次のリクエストを検証して短命 token を返す。
@@ -19,7 +21,7 @@ content-type: application/json
 
 ## 3 Client 確認
 
-1. `pnpm dev --host=0.0.0.0 --port=5173` を起動し、3 台の PC または 3 つのブラウザプロファイルで `http://<開発PCのLAN IP>:5173/?debug=voice` を開く。LAN の HTTP URL ではブラウザのマイクが使えないため、音声まで確認する場合は各PCで `pnpm dev` を起動して `http://localhost:5173/?debug=voice` を開くか、開発サーバーを HTTPS で公開する。1台だけなら `http://localhost:5173/?debug=voice` でよい。
+1. `pnpm dev` を起動し、3 台の PC または 3 つのブラウザプロファイルで `https://<開発PCのLAN IP>:5173/?debug=voice` を開く。初回は自己署名証明書の警告を許可する。1台だけなら `https://localhost:5173/?debug=voice` でよい。
 2. 各画面へ同じ `LIVEKIT PROJECT URL` と、役ごとに異なる Dashboard 発行 token を入力する。`ROOM` は token 作成時の room と同じ値、`PLAYER ID` は token identity と同じ値にする。役割は `ODORUNO`、`ORA`、`PAY` に一人ずつ設定する。
 3. 各 Client で **ROOM に接続する**。参加者数・発話中表示が全 Client で変化することを確認する。
 4. Odoruno/Ora の **マイクを ON** を押して権限を許可し、相互に通常音声が届くこと、OFF で停止することを確認する。
