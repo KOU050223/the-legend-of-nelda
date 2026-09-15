@@ -20,10 +20,16 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
+import type { GameAction, InputAdapter } from '@/game/types/game-action';
 import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
+import {
+  createOraProductionInput,
+  type OraCalibrationState,
+  type OraProductionInputStatus,
+} from '@/input/ora/ora-production-input';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 import type { PlanarPosition } from '@/game/movement/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -238,6 +244,22 @@ function publishLocalPlayerStatuses(snapshot: BattleSnapshot): void {
   if (changed) setStatuses(next);
 }
 
+type InputTargetPlayer = Pick<BattleSnapshot['players'][number], 'id' | 'characterId'>;
+
+/** ローカルのroster IDとリモートのparticipant IDを同じORA判定へ寄せる。 */
+export function isOraInputTarget(
+  localPlayerId: string,
+  isRemote: boolean,
+  players: readonly InputTargetPlayer[] | null,
+): boolean {
+  if (!isRemote) return localPlayerId === 'ora';
+  return players?.find((player) => player.id === localPlayerId)?.characterId === 'ORA';
+}
+
+type SceneInput =
+  | { kind: 'keyboard'; adapter: ReturnType<typeof attachKeyboardGameActions> }
+  | { kind: 'ora'; adapter: InputAdapter };
+
 interface BossArenaSceneProps {
   /**
    * Authority 権威の戦闘を描くときに渡す。省略するとローカル戦闘を作る
@@ -303,9 +325,9 @@ export function BossArenaScene({
   // 中身は actorRoots から引き直す (下の Effect)。
   const localRoot = useRef<Group>(null);
 
-  // 入力は useFrame から毎フレーム引く。requestAnimationFrame を別に
-  // 回すと、r3f の描画ループと二重になって1フレームに2回進む。
-  const inputRef = useRef<ReturnType<typeof attachKeyboardGameActions> | null>(null);
+  // KeyboardはuseFrameから毎フレーム引き、Oraは検出フレームからpushする。
+  // 入力元を判別できる小さな共用体にして、OraへpollMoveしないことを型で保つ。
+  const inputRef = useRef<SceneInput | null>(null);
 
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
@@ -332,6 +354,18 @@ export function BossArenaScene({
 
   // 描画ループが読む最新 snapshot。source から来た値をそのまま置く。
   const snapshotRef = useRef<BattleSnapshot | null>(view?.snapshot ?? null);
+
+  const isOra = isOraInputTarget(
+    localPlayerId,
+    providedSource !== undefined,
+    view?.snapshot.players ?? null,
+  );
+  // リモートは最初のSTATEまでparticipantとcharacterの対応が分からない。
+  // 不明な間は入力を繋がず、STATE到着時だけ選択Effectを進める。
+  const inputMode =
+    providedSource !== undefined && view === null ? 'pending' : isOra ? 'ora' : 'keyboard';
+  const [oraCalibration, setOraCalibration] = useState<OraCalibrationState | null>(null);
+  const [oraStatus, setOraStatus] = useState<OraProductionInputStatus | null>(null);
 
   // finale など「snapshot を見て動く Effect」はこれを読む。view が null の間は
   // 演出を始めない (リモート接続直後の1瞬)。
@@ -526,33 +560,66 @@ export function BossArenaScene({
   }, [battle, finale]);
 
   useEffect(() => {
-    // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
-    // 二重マウントで購読が二重に残らないようにするため。
-    // 自分自身を参照するので、先に入れ物を作ってから繋ぐ。
-    let adapter: ReturnType<typeof attachKeyboardGameActions> | null = null;
+    // 入力はこのEffectの中で繋いで同じEffectで捨てる。StrictModeの
+    // 二重マウントやOra初期化中の切り替えで、古い入力を残さない。
+    let disposed = false;
+    let currentInput: SceneInput | null = null;
 
-    adapter = attachKeyboardGameActions((action) => {
-      // 離散アクションの前に、その瞬間の移動方向を送る。
-      //
-      // 「A を押した直後に Shift」のように、ポーリングの合間に方向と回避が
-      // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
-      // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
-      // 別方向へ転がる。
-      // 送り先は source が決める。ローカルは送るたびにストアから操作キャラを
-      // 読み直すので (createLocalBattleSource)、切り替えてもこの Effect を
-      // 張り直さずに済む。張り直すと押しっぱなしの移動が切れる。
-      if (adapter !== null) activeSource.submit(adapter.pollMove());
-      activeSource.submit(action);
-    });
-    const input = adapter;
+    const submit = (action: GameAction): void => {
+      if (!disposed) activeSource.submit(action);
+    };
 
-    inputRef.current = input;
+    const attachKeyboard = (): void => {
+      let keyboard: ReturnType<typeof attachKeyboardGameActions> | null = null;
+      keyboard = attachKeyboardGameActions((action) => {
+        if (disposed) return;
+
+        // 離散アクションの前に、その瞬間の移動方向を送る。
+        // キーボード同士の切り替えではEffectを張り直さないので、押しっぱなし
+        // の移動状態も途切れない (createLocalBattleSourceが送信ごとにIDを読む)。
+        if (keyboard !== null) submit(keyboard.pollMove());
+        submit(action);
+      });
+      currentInput = { kind: 'keyboard', adapter: keyboard };
+      inputRef.current = currentInput;
+    };
+
+    if (inputMode === 'pending') {
+      inputRef.current = null;
+    } else if (inputMode === 'keyboard') {
+      attachKeyboard();
+    } else {
+      const attachOra = createOraProductionInput({
+        onCalibrationChange: (state) => {
+          if (!disposed) setOraCalibration(state);
+        },
+        onStatusChange: (status) => {
+          if (!disposed) setOraStatus(status);
+        },
+      });
+
+      void Promise.resolve(attachOra(submit))
+        .then((adapter) => {
+          if (disposed) {
+            adapter.detach();
+            return;
+          }
+          currentInput = { kind: 'ora', adapter };
+          inputRef.current = currentInput;
+        })
+        .catch(() => {
+          // Adapter側がstatusを通知済み。DEVだけ既存Keyboardへ退避し、
+          // 本番ビルドではエラー表示のまま入力を開始しない。
+          if (!disposed && import.meta.env.DEV) attachKeyboard();
+        });
+    }
 
     return () => {
+      disposed = true;
       inputRef.current = null;
-      input.detach();
+      currentInput?.adapter.detach();
     };
-  }, [activeSource]);
+  }, [activeSource, inputMode]);
 
   // 決着したら R でやり直す。決着後は戦闘を進めないので、ここだけは
   // キーボードを直接見る (GameAction にやり直しは無い。やり直しは
@@ -617,9 +684,10 @@ export function BossArenaScene({
     // 決めると、切り替え時に新旧どちらが先に走るかで一瞬古い Root を指す。
     localRoot.current = actorRoots.current.get(activePlayerId) ?? null;
 
-    // 移動は押しっぱなしの状態なので毎フレーム取り出す。
+    // Keyboardの移動だけは押しっぱなしの状態を毎フレーム取り出す。
+    // Oraは手検出フレームからMOVEをpush済みなので、ここではpollしない。
     const input = inputRef.current;
-    if (input !== null) activeSource.submit(input.pollMove());
+    if (input?.kind === 'keyboard') activeSource.submit(input.adapter.pollMove());
 
     // ローカルはここで時間が進み、その場で STATE が流れる。リモートは
     // サーバーが進めるので tick() は何もしない。
@@ -694,6 +762,22 @@ export function BossArenaScene({
   return (
     <>
       <World />
+
+      {inputMode === 'ora' && oraCalibration !== null && oraCalibration.progress < 1 && (
+        <Billboard position={[BOSS_ANCHOR.x, 8, BOSS_ANCHOR.z]}>
+          <Text fontSize={0.48} color="#f2f2f7" anchorY="middle">
+            {`両手を自然な位置に構えてください… ${Math.round(oraCalibration.progress * 100)}%`}
+          </Text>
+        </Billboard>
+      )}
+
+      {inputMode === 'ora' && oraStatus?.phase === 'error' && (
+        <Billboard position={[BOSS_ANCHOR.x, 7.2, BOSS_ANCHOR.z]}>
+          <Text fontSize={0.38} color="#ff453a" anchorY="middle">
+            オラ入力を開始できません。カメラ・マイクの状態を確認してください。
+          </Text>
+        </Billboard>
+      )}
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
