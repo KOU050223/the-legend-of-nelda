@@ -20,6 +20,7 @@ import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
+import { isSameMotionContext, motionContextFor } from '../character/motion-context';
 import { syncCharacterRoot } from '../character/character-root';
 import { TutorialFairy } from '../character/TutorialFairy';
 import {
@@ -89,17 +90,34 @@ function createBattle(): BossBattle {
  * 位置と向きは Object3D へ直接入れているので比較に含めない。含めると
  * 毎フレーム「変わった」ことになり、state へ逃がした意味が無くなる。
  */
-function isSameView(a: BattleSnapshot, b: BattleSnapshot): boolean {
-  if (a.boss.hp !== b.boss.hp || a.boss.phase !== b.boss.phase) return false;
-  if (a.players.length !== b.players.length) return false;
+/**
+ * 表示が読む状態のひと組。
+ *
+ * スナップショットに時刻を添える。連撃の局面は経過時間で決まるので、
+ * 「いつ時点のスナップショットか」が無いとモーションを決められない。
+ * 描画と再レンダー判定で同じ時刻を使うために、状態として一緒に持つ。
+ */
+interface View {
+  readonly snapshot: BattleSnapshot;
+  readonly now: number;
+}
 
-  return a.players.every((player, index) => {
-    const other = b.players[index];
+function isSameView(a: View, b: View): boolean {
+  if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
+  if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
+  if (a.snapshot.players.length !== b.snapshot.players.length) return false;
+
+  return a.snapshot.players.every((player, index) => {
+    const other = b.snapshot.players[index];
     return (
       other !== undefined &&
       player.hp === other.hp &&
       player.status === other.status &&
-      player.reviveInputs === other.reviveInputs
+      player.reviveInputs === other.reviveInputs &&
+      // モーションが変わるときは作り直す。`swing` をそのまま比べると、
+      // 同じ振りの最中に時刻が進むだけで毎フレーム「変わった」ことになる。
+      // 解決後の条件で比べると、変わるのは1回の振りにつき2回で済む。
+      isSameMotionContext(motionContextFor(player, a.now), motionContextFor(other, b.now))
     );
   });
 }
@@ -168,7 +186,10 @@ export function BossArenaScene(): React.JSX.Element {
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
-  const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
+  const [view, setView] = useState<View>(() => ({
+    snapshot: battle.snapshot(),
+    now: performance.now(),
+  }));
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -238,8 +259,9 @@ export function BossArenaScene(): React.JSX.Element {
       if (root !== undefined) syncCharacterRoot(root, player);
     }
 
-    // HP や状態が変わったときだけ再レンダーする。
-    setView((previous) => (isSameView(previous, snapshot) ? previous : snapshot));
+    // HP・状態・モーションが変わったときだけ再レンダーする。
+    const next: View = { snapshot, now: performance.now() };
+    setView((previous) => (isSameView(previous, next) ? previous : next));
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
@@ -275,9 +297,14 @@ export function BossArenaScene(): React.JSX.Element {
           Canvas の中身が丸ごと消えて草原ごと真っ暗になる。
         */}
         <Suspense fallback={null}>
-          <HoriDaisukeModel />
+          {/*
+            モーションは状態から決める。ボスの条件 (フェーズ・攻撃の局面) に
+            対応するクリップがまだ無いので、いまは既定の `stand-up` のまま。
+            マニフェストへルールを足せばここを通って反映される。
+          */}
+          <HoriDaisukeModel context={{}} />
         </Suspense>
-        <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
+        <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
       </group>
 
       {/*
@@ -292,7 +319,7 @@ export function BossArenaScene(): React.JSX.Element {
         モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
         Actor Rootへ反映する。
       */}
-      {view.players.map((player) => (
+      {view.snapshot.players.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <CharacterActor
             ref={(node) => {
@@ -305,6 +332,7 @@ export function BossArenaScene(): React.JSX.Element {
               }
             }}
             player={player}
+            now={view.now}
             local={player.id === LOCAL_PLAYER_ID}
           />
         </Suspense>
