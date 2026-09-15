@@ -18,7 +18,8 @@ import {
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 
 import { FollowCamera } from '../camera/FollowCamera';
-import { CharacterActor, syncCharacterRoot } from '../character/character-actor';
+import { CharacterActor } from '../character/character-actor';
+import { syncCharacterRoot } from '../character/character-root';
 import {
   DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
   HoriDaisukeModel,

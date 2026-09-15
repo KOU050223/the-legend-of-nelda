@@ -7,15 +7,6 @@ import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 import { CharacterModel } from './CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from './character-models';
 
-/** バーを含むプレイヤー表示のルートへ、最新のゲーム座標を反映する。 */
-export function syncCharacterRoot(
-  root: Group,
-  player: Pick<PlayerSnapshot, 'position' | 'rotationY'>,
-): void {
-  root.position.set(player.position.x, 0, player.position.z);
-  root.rotation.set(0, player.rotationY, 0);
-}
-
 export interface CharacterActorProps {
   /** 再レンダー対象の表示状態。HPバーとモデル選択がこの値を使う。 */
   player: PlayerSnapshot;

@@ -3,7 +3,7 @@ import { Group } from 'three';
 
 import type { PlayerSnapshot } from '@/game/player/player-state';
 
-import { syncCharacterRoot } from './character-actor';
+import { syncCharacterRoot } from './character-root';
 
 function snapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
   return {
