@@ -44,5 +44,45 @@ describe('OraStatusHud', () => {
     expect(
       screen.getByText('オラ入力を開始できません。カメラ・マイクの状態を確認してください。'),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        '音声認識に対応していないため「オラ」ATTACKは使えません（手の動きでの移動・ORA_ACTIONは引き続き使えます）',
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it('SpeechRecognition非対応でも、他のオラ入力が使えることを画面上に表示する', () => {
+    useOraStatusStore.getState().setActive(true);
+    useOraStatusStore.getState().setStatus({
+      phase: 'active',
+      speechRecognition: 'unavailable',
+      reason: 'unsupported',
+    });
+
+    render(<OraStatusHud />);
+
+    expect(
+      screen.getByText(
+        '音声認識に対応していないため「オラ」ATTACKは使えません（手の動きでの移動・ORA_ACTIONは引き続き使えます）',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('SpeechRecognitionの致命的エラーでも、他のオラ入力が使えることを画面上に表示する', () => {
+    useOraStatusStore.getState().setActive(true);
+    useOraStatusStore.getState().setStatus({
+      phase: 'active',
+      speechRecognition: 'error',
+      reason: 'error',
+      errorMessage: 'not-allowed',
+    });
+
+    render(<OraStatusHud />);
+
+    expect(
+      screen.getByText(
+        '音声認識でエラーが発生したため「オラ」ATTACKは使えません（手の動きでの移動・ORA_ACTIONは引き続き使えます）',
+      ),
+    ).toBeInTheDocument();
   });
 });

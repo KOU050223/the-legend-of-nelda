@@ -20,6 +20,7 @@ import {
   classifyMarkerlessMediaError,
   formatMarkerlessHand,
   labelForMarkerlessMediaStatus,
+  normalizeMarkerlessSpeechIntensity,
   rmsFromSamples,
 } from './markerless-debug-helpers';
 import type { MarkerlessMediaStatus } from './markerless-debug-helpers';
@@ -136,6 +137,7 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
   const voiceStartRef = useRef<number | undefined>(undefined);
   const lastVoiceWindowRef = useRef<VoiceUtteranceWindow | undefined>(undefined);
   const lastRmsRef = useRef(0);
+  const voicePeakRmsRef = useRef(0);
   const voiceHitTimesRef = useRef<number[]>([]);
 
   const [cameraStatus, setCameraStatus] = useState<MarkerlessMediaStatus>('idle');
@@ -237,21 +239,30 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
           return;
         }
 
-        const now = performance.now();
-        const nextHand = detector.detect(videoRef.current, now);
-        if (calibrationActiveRef.current) handCalibrator.sample(nextHand.left, now);
+        try {
+          const now = performance.now();
+          const nextHand = detector.detect(videoRef.current, now);
+          if (calibrationActiveRef.current) handCalibrator.sample(nextHand.left, now);
 
-        const nextNeutral = handCalibrator.getNeutral();
-        const nextMovement = handJoystick.update(nextHand.left, nextNeutral, now);
-        const nextOraAction = oraActionRecognizer.update(nextHand.left, nextHand.right, now);
+          const nextNeutral = handCalibrator.getNeutral();
+          const nextMovement = handJoystick.update(nextHand.left, nextNeutral, now);
+          const nextOraAction = oraActionRecognizer.update(nextHand.left, nextHand.right, now);
 
-        setHandObservation(nextHand);
-        setNeutral(nextNeutral);
-        setHandCalibrationComplete(handCalibrator.isComplete());
-        setMovement(nextMovement);
-        setOraAction(nextOraAction);
-        if (nextOraAction.triggered) setLastOraActionAt(now);
-        cameraFrameRef.current = window.requestAnimationFrame(detectFrame);
+          setHandObservation(nextHand);
+          setNeutral(nextNeutral);
+          setHandCalibrationComplete(handCalibrator.isComplete());
+          setMovement(nextMovement);
+          setOraAction(nextOraAction);
+          if (nextOraAction.triggered) setLastOraActionAt(now);
+          cameraFrameRef.current = window.requestAnimationFrame(detectFrame);
+        } catch (cause) {
+          // rAF内の例外は開始処理のtry/catchへ届かないため、ここで資源も解放する。
+          if (cameraSessionRef.current === session && cameraDetectorRef.current === detector) {
+            stopMarkerlessCamera();
+            setCameraStatus(classifyMarkerlessMediaError(cause));
+            setCameraError(cause instanceof Error ? cause.message : 'カメラの検出に失敗しました。');
+          }
+        }
       };
 
       detectFrame();
@@ -285,6 +296,7 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
     voiceStartRef.current = undefined;
     lastVoiceWindowRef.current = undefined;
     lastRmsRef.current = 0;
+    voicePeakRmsRef.current = 0;
     voiceHitTimesRef.current = [];
     voiceAttack.reset();
     setRms(0);
@@ -379,24 +391,29 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
           const nextRms = rmsFromSamples(samples);
           const wasSpeaking = voiceActivity.getState() === 'speaking';
           const event = voiceActivity.update(nextRms, now);
-          if (!wasSpeaking && voiceActivity.getState() === 'speaking') {
+          const isSpeaking = voiceActivity.getState() === 'speaking';
+          if (!wasSpeaking && isSpeaking) {
             voiceStartRef.current = now;
+            voicePeakRmsRef.current = nextRms;
+          } else if (wasSpeaking) {
+            voicePeakRmsRef.current = Math.max(voicePeakRmsRef.current, nextRms);
           }
 
-          if (voiceActivity.getState() === 'speaking' && voiceStartRef.current !== undefined) {
+          if (isSpeaking && voiceStartRef.current !== undefined) {
             lastVoiceWindowRef.current = {
               startedAt: voiceStartRef.current,
               endedAt: now,
-              intensity: voiceActivity.getIntensity(),
+              intensity: normalizeMarkerlessSpeechIntensity(voicePeakRmsRef.current),
             };
           } else if (event !== null && voiceStartRef.current !== undefined) {
             const startedAt = voiceStartRef.current;
             lastVoiceWindowRef.current = {
               startedAt,
               endedAt: startedAt + event.durationMs,
-              intensity: event.intensity,
+              intensity: normalizeMarkerlessSpeechIntensity(voicePeakRmsRef.current),
             };
             voiceStartRef.current = undefined;
+            voicePeakRmsRef.current = 0;
           }
 
           if (calibrationActiveRef.current) {
@@ -472,7 +489,7 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
           ? {
               startedAt: voiceStartRef.current,
               endedAt: now,
-              intensity: voiceActivity.getIntensity(),
+              intensity: normalizeMarkerlessSpeechIntensity(voicePeakRmsRef.current),
             }
           : activeVoiceWindow;
 
@@ -487,7 +504,8 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
           transcript,
           startedAt: currentWindow?.startedAt ?? now,
           endedAt: currentWindow?.endedAt ?? now,
-          intensity: currentWindow?.intensity ?? Math.min(1, Math.max(0, lastRmsRef.current)),
+          intensity:
+            currentWindow?.intensity ?? normalizeMarkerlessSpeechIntensity(lastRmsRef.current),
         };
         const events = voiceAttack.recognize(candidate);
         setLastTranscript(transcript);
@@ -508,7 +526,7 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
 
       if (receivedFinalResult) lastVoiceWindowRef.current = undefined;
     },
-    [voiceActivity, voiceAttack],
+    [voiceAttack],
   );
 
   const stopSpeechRecognition = useCallback(() => {

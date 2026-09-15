@@ -246,6 +246,23 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 
 - 合掌ジェスチャーでのREVIVE（蘇生）は#113のスコープ外として [#134](https://github.com/KOU050223/the-legend-of-nelda/issues/134) を新規作成した。
 
+## 独立バグレビュー（Claude + Codex）と修正
+
+`speech: error (error)`のまま固まる実機報告をきっかけに、Claude自身の修正（no-speechを致命的エラー扱いしていた不具合）に加えて、Codexへ独立したバグ探しレビューを依頼した。Claudeの発見を伏せた状態でCodexにレビューさせ、7件（Major 5 / Minor 2）+ 要確認1件を検出。全件Claudeが該当コードを読んで独立に再検証し、事実と確認した。
+
+1. **[Major] 手を見失うとMOVEが残り続ける**: Calibration未完了時にMOVE自体を送らずreturnしていたため、`player-state.ts`に残った直前の移動入力が更新されずキャラが走り続けた（Phase2 DoD「Hand LostでNeutral復帰」違反）。MOVEを手のCalibrationだけに依存させ、Calibration中も含め毎フレーム送るよう修正（Claude修正、`c3546c6`）。
+2. **[Major] 手を見失った後も予約済みATTACKが発火する**: 複数hitの遅延emit用タイマーがdetach()でしか解除されず、Calibration崩壊後も発火し得た。Calibration崩壊時に`clearPendingAttacks()`するよう修正（Claude修正、`c3546c6`）。
+3. **[Major] 許可待ち中のキャラ切替・StrictModeで初期化を中断できない**: `AbortController`/`signal`を`ora-production-input.ts`・`BossArenaScene.tsx`へ導入し、各await直後で中断を検知して取得済みリソースを解放するよう修正（Claude修正、`c3546c6`）。**ただしgetUserMediaの許可ダイアログ自体はブラウザ側の制約でページから中断できないため、ダイアログを放置され続けるケースは残存する（保持時間の短縮であり完全な解決ではない）**。
+4. **[Major] SpeechRecognition非対応/致命的エラーが本番HUDで見えなくなる**: Calibration完了で`phase`が`'active'`になり、`status.phase==='error'`だけを見ていたHUDのエラー表示条件から漏れていた。`speechRecognition`が`unavailable`/`error`のときの非DEV限定通知を追加（Codex修正）。
+5. **[Major] 非オラ大輔プレイヤーも音声ダメージ倍率を悪用できる**: `protocol.ts`はキャラ種別を見ずintensityを受理し、`player-state.ts`もcharacterIdを見ず倍率を適用していたため、細工したクライアントで全キャラが最大1.30倍を得られた。`characterId === 'ORA'`のときだけintensityを`startAttack`へ渡すよう修正（Codex修正、`b0023eb`）。
+6. **[Minor] Debug UIの音量スケールが本番と食い違う**: `MarkerlessVoiceDebugPanel.tsx`がわっしょい用の`toIntensity`（RMS 1.0天井）を使っており、本番で通る発話がDebug上ではhits 0に見えていた。`ora-production-input.ts`の`normalizeOraSpeechIntensity`をexportし再利用するよう修正（Codex修正）。
+7. **[Minor] Debug UIの検出ループ例外でカメラ資源が残る**: rAFループ本体にtry/catchが無かった。追加した（Codex修正）。
+
+要確認だった「audio-capture等の持続エラーで無限リトライになりうる」点は、実機のエラーコード依存のため保留（現状は許容範囲と判断）。
+
+- 検証: 全体`pnpm vitest run src`は99ファイル/1042テスト通過、`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`とも全体通過（Claudeが独立再実行して確認済み）。
+- コミット: `c3546c6`（Finding1・2・3、Claude）、`b0023eb`（Finding5、Codex）、Finding4・6・7（Codex、このセクション追記と同じコミットでコミット予定）。
+
 ### 保留
 
 - `main`の取り込み（現在20コミット遅れ、LiveKit統合#124含む）はユーザー指示により今回は実施しない。

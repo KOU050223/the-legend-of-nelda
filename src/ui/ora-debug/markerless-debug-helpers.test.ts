@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { normalizeOraSpeechIntensity } from '@/input/ora/ora-production-input';
+
 import {
   classifyMarkerlessMediaError,
   formatMarkerlessHand,
   labelForMarkerlessMediaStatus,
+  normalizeMarkerlessSpeechIntensity,
   rmsFromSamples,
 } from './markerless-debug-helpers';
 
@@ -37,6 +40,12 @@ describe('Markerless debug の表示用ヘルパー', () => {
 
     expect(rmsFromSamples(samples)).toBeCloseTo(0.353553);
     expect(rmsFromSamples(new Float32Array())).toBe(0);
+  });
+
+  it('本番と同じオラ用の通常発話スケールを使う', () => {
+    expect(normalizeMarkerlessSpeechIntensity).toBe(normalizeOraSpeechIntensity);
+    expect(normalizeMarkerlessSpeechIntensity(0.02)).toBeCloseTo(0.230769, 5);
+    expect(normalizeMarkerlessSpeechIntensity(0.06)).toBe(1);
   });
 
   it('両手の座標、速度、開閉状態を表示用文字列へ変換する', () => {

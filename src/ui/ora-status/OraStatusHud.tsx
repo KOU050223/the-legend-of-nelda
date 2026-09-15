@@ -58,20 +58,31 @@ export function OraStatusHud(): React.JSX.Element | null {
   if (!active || (calibration === null && status === null && voiceCandidate === null)) return null;
 
   const hints = calibrationHints(calibration);
+  const hasInputError = status?.phase === 'error';
+  const showSpeechRecognitionNotice =
+    !hasInputError &&
+    (status?.speechRecognition === 'unavailable' || status?.speechRecognition === 'error');
+  const speechRecognitionNotice =
+    status?.speechRecognition === 'unavailable'
+      ? '音声認識に対応していないため「オラ」ATTACKは使えません（手の動きでの移動・ORA_ACTIONは引き続き使えます）'
+      : '音声認識でエラーが発生したため「オラ」ATTACKは使えません（手の動きでの移動・ORA_ACTIONは引き続き使えます）';
 
   return (
     <section className={styles.hud} aria-live="polite">
-      {(hints.length > 0 || status?.phase === 'error') && (
+      {(hints.length > 0 || hasInputError || showSpeechRecognitionNotice) && (
         <div className={styles.noticeStack}>
           {hints.map((hint) => (
             <div key={hint} className={styles.notice}>
               {hint}
             </div>
           ))}
-          {status?.phase === 'error' && (
+          {hasInputError && (
             <div className={`${styles.notice} ${styles.error}`}>
               オラ入力を開始できません。カメラ・マイクの状態を確認してください。
             </div>
+          )}
+          {showSpeechRecognitionNotice && (
+            <div className={`${styles.notice} ${styles.error}`}>{speechRecognitionNotice}</div>
           )}
         </div>
       )}

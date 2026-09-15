@@ -1,5 +1,7 @@
 import type { HandObservation } from '@/input/ora/types';
 
+export { normalizeOraSpeechIntensity as normalizeMarkerlessSpeechIntensity } from '@/input/ora/ora-production-input';
+
 export type MarkerlessMediaStatus =
   | 'idle'
   | 'requesting-permission'
