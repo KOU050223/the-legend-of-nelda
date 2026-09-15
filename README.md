@@ -47,7 +47,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 起動後、表示された URL（既定 http://localhost:5173 ）を Chrome で開く。
+`pnpm dev` 起動後、表示された URL（既定 <http://localhost:5173> ）を Chrome で開く。
 
 ---
 
@@ -187,4 +187,6 @@ URLの形式・Cloudflare側の設定・失敗時の確認箇所は
 git switch -c feat/issue-13-project-init
 ```
 
-詳細は [`docs/development-workflow.md`](./docs/development-workflow.md) を参照する。
+詳細は [`docs/development-workflow.md`](./docs/=development-workflow.md) を参照する。
+
+ああ〜クイヤ
