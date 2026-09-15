@@ -50,7 +50,12 @@ import {
   isSameMotionContext,
   motionContextFor,
 } from '../character/motion-context';
-import { syncCharacterRoot } from '../character/character-root';
+import {
+  dampCharacterRoot,
+  dampPlanarPosition,
+  syncCharacterRoot,
+  type SmoothingOptions,
+} from '../character/character-root';
 import { TutorialFairy } from '../character/TutorialFairy';
 import {
   DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
@@ -84,6 +89,33 @@ import { isOutcomeRestartAllowed } from './outcome-restart';
  */
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
+
+/**
+ * リモート(#127)でのみ使う位置・向きの指数減衰の設定。
+ *
+ * ローカルは毎フレーム tick() が新しい snapshot を作るので、直接 set
+ * (syncCharacterRoot) のままで既に滑らか。リモートは STATE がサーバーの
+ * stateBroadcastIntervalMs (server/index.ts, 暫定100ms) ごとにしか届かず、
+ * 直接 set だと届いた瞬間だけ飛んで見える。lambda はベンチマークに基づく値
+ * ではなく、その間隔をまたいでも動き続けて見える程度に大きめの値を仮に
+ * 置いている。
+ *
+ * これは表示だけの補正で、当たり判定・危険範囲の予兆 (targets/
+ * DangerZoneMarks, 下の snapshot.players をそのまま使う箇所) は常に真の
+ * snapshot 座標で行われる。移動中はキャラの見た目が真の位置よりわずかに
+ * (概ね 速度/lambda 相当) 遅れうる。通常歩行(秒速 7〜9 程度) では気付かない
+ * 差だが、ボスの高速突進のように秒速数十単位で動く対象では無視できない
+ * 差になり得るため、snapDistance を明らかに移動が意図的な瞬間移動
+ * (回避・突進・新規マウント・再接続) と判定できる大きさに置き、それを
+ * 超えたら滑らせず直接 set して見た目のずれが大きく残らないようにする。
+ * 恒常誤差をゼロにするサーバー時刻ベースのスナップショット補間
+ * (snapshot.players[].takenAt を使える) の方が正確だが、#127 の速度優先の
+ * 対応範囲としてはここでは採用しない。
+ */
+const REMOTE_POSITION_SMOOTHING: Omit<SmoothingOptions, 'deltaSeconds'> = {
+  lambda: 18,
+  snapDistance: 2,
+};
 
 const NEXT_CAMERA_MODE: Readonly<Record<BattleCameraMode, BattleCameraMode>> = {
   'third-person': 'overhead',
@@ -715,11 +747,28 @@ export function BossArenaScene({
 
     // 位置と向きは Object3D へ直接反映する。真実源はロジック側
     // (boss-battle) で、ここは映すだけ。
-    bossRoot.current?.position.set(snapshot.boss.position.x, 0, snapshot.boss.position.z);
+    //
+    // リモートだけ指数減衰で寄せる(#127)。ローカルは tick() が毎フレーム
+    // 新しい snapshot を作るので直接 set のままで滑らかだが、リモートは
+    // STATE が一定間隔でしか届かず、直接 set だと届いた瞬間だけ飛んで
+    // 見える(その間は静止して見える)。
+    if (activeSource.kind === 'REMOTE') {
+      const smoothing: SmoothingOptions = { ...REMOTE_POSITION_SMOOTHING, deltaSeconds: delta };
+      if (bossRoot.current !== null) {
+        dampPlanarPosition(bossRoot.current, snapshot.boss.position, smoothing);
+      }
 
-    for (const player of snapshot.players) {
-      const root = actorRoots.current.get(player.id);
-      if (root !== undefined) syncCharacterRoot(root, player);
+      for (const player of snapshot.players) {
+        const root = actorRoots.current.get(player.id);
+        if (root !== undefined) dampCharacterRoot(root, player, smoothing);
+      }
+    } else {
+      bossRoot.current?.position.set(snapshot.boss.position.x, 0, snapshot.boss.position.z);
+
+      for (const player of snapshot.players) {
+        const root = actorRoots.current.get(player.id);
+        if (root !== undefined) syncCharacterRoot(root, player);
+      }
     }
 
     // view の更新は source.onState 側で行う。ここでは次フレームの
