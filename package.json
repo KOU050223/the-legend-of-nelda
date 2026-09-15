@@ -17,6 +17,7 @@
     "test:server": "vitest run --config vitest.server.config.ts",
     "test:watch": "vitest",
     "dev:server": "tsx --tsconfig server/tsconfig.json server/index.ts",
+    "start:server": "tsx --tsconfig server/tsconfig.json server/index.ts",
     "deploy": "pnpm build && wrangler deploy",
     "deploy:preview": "pnpm build && wrangler versions upload",
     "deps:check": "pnpm outdated",
