@@ -61,6 +61,8 @@ export interface BossBattleOptions {
   readonly createBoss?: (options: HoriBossOptions) => HoriBoss;
   /** 開発用。結界に入った瞬間に解除して、後半フェーズの確認を可能にする。 */
   readonly debugSkipBarriers?: boolean;
+  /** ソロ進行では3人協力を前提にした結界を使わず、そのまま戦闘を続ける。 */
+  readonly solo?: boolean;
 }
 
 export interface PlayerSeed {
@@ -160,7 +162,14 @@ function activeTargets(players: readonly Player[], now: number): BossTarget[] {
 }
 
 export function createBossBattle(options: BossBattleOptions): BossBattle {
-  const { clock, events, roster, createBoss = createHoriBoss, debugSkipBarriers = false } = options;
+  const {
+    clock,
+    events,
+    roster,
+    createBoss = createHoriBoss,
+    debugSkipBarriers = false,
+    solo = false,
+  } = options;
 
   let boss: HoriBoss;
 
@@ -225,7 +234,7 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
 
     // 表示・入力が未統合の単独プレイ画面でも、終盤の調整を止めないための開発口。
     // 呼び出し側は production でこの値を渡さない。通常の結界ルールは変えない。
-    if (debugSkipBarriers) {
+    if (solo || debugSkipBarriers) {
       boss.breakBarrier();
       barrierChallenge = null;
       return;

@@ -1,10 +1,18 @@
-import { useScreenStore, type Screen } from '@/app/screen';
+import { useEffect, useRef, useState } from 'react';
+
+import { useScreenStore, type GameMode, type Screen } from '@/app/screen';
+
+import oraShadow from '../../../assets/character/star-platimun-low-poly/Oradaisuke_black.png';
+import payShadow from '../../../assets/character/paypay-daisuke-v1/pay_black.png';
+import odorunoShadow from '../../../assets/character/dance-daisuke/daisuke_black.png';
 
 import styles from './TitleScreen.module.css';
+import { createTitleVoicePlayer, type TitleVoicePlayer } from './title-voice';
 
 interface MenuItem {
   label: string;
   screen: Screen;
+  mode?: GameMode;
 }
 
 /**
@@ -15,7 +23,10 @@ interface MenuItem {
  * この行自体を出さない。
  */
 function menuItems(): MenuItem[] {
-  const items: MenuItem[] = [{ label: 'はじめから', screen: 'INTRO' }];
+  const items: MenuItem[] = [
+    { label: 'ひとりで', screen: 'INTRO', mode: 'SINGLE' },
+    { label: 'みんなで', screen: 'INTRO', mode: 'MULTIPLAYER' },
+  ];
   if (import.meta.env.DEV) items.push({ label: 'ワールドへ', screen: 'WORLD' });
   return items;
 }
@@ -23,17 +34,44 @@ function menuItems(): MenuItem[] {
 export function TitleScreen(): React.JSX.Element {
   const goTo = useScreenStore((state) => state.goTo);
   const items = menuItems();
+  const voicePlayer = useRef<TitleVoicePlayer | null>(null);
+  const [heroReaction, setHeroReaction] = useState(0);
+
+  useEffect(() => {
+    const player = createTitleVoicePlayer();
+    voicePlayer.current = player;
+    return () => {
+      voicePlayer.current = null;
+      player.dispose();
+    };
+  }, []);
 
   return (
     <div className={styles.title}>
       <img className={styles.background} src="/title/bg.png" alt="" aria-hidden="true" />
-      <img
-        className={styles.hero}
-        src="/title/hero.png"
-        alt="崖の上に立つ勇者"
-        width={58}
-        height={66}
-      />
+      <div className={styles.skyFigures} aria-hidden="true">
+        <img className={`${styles.skyFigure} ${styles.oraShadow}`} src={oraShadow} alt="" />
+        <img className={`${styles.skyFigure} ${styles.payShadow}`} src={payShadow} alt="" />
+        <img className={`${styles.skyFigure} ${styles.odorunoShadow}`} src={odorunoShadow} alt="" />
+      </div>
+      <button
+        className={styles.heroButton}
+        type="button"
+        aria-label="堀大輔に話しかける"
+        title="堀大輔に話しかける"
+        onClick={() => {
+          voicePlayer.current?.playRandom();
+          setHeroReaction((current) => current + 1);
+        }}
+      >
+        <img
+          className={`${styles.hero} ${heroReaction === 0 ? '' : heroReaction % 2 === 0 ? styles.heroReactionA : styles.heroReactionB}`}
+          src="/title/hero.png"
+          alt="崖の上に立つ勇者"
+          width={58}
+          height={66}
+        />
+      </button>
 
       <div className={styles.menu}>
         <h1 className={styles.logo}>寝ルダの伝説</h1>
@@ -41,10 +79,13 @@ export function TitleScreen(): React.JSX.Element {
         <nav className={styles.links} aria-label="メニュー">
           {items.map((item, index) => (
             <button
-              key={item.screen}
+              key={item.mode ?? item.screen}
               type="button"
               className={index === 0 ? styles.primary : styles.link}
-              onClick={() => goTo(item.screen)}
+              onClick={() => {
+                if (item.mode !== undefined) useScreenStore.getState().selectMode(item.mode);
+                goTo(item.screen);
+              }}
             >
               {item.label}
             </button>

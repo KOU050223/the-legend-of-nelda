@@ -49,6 +49,20 @@ export function soundForEvent(event: GameEvent): SoundId | null {
       if (event.to === 'BOSS_DOWN') return 'boss-down';
       return null;
 
+    // ボス技が実際にプレイヤーへ通った通知。targetId はゲーム内の固定キャラIDで、
+    // ソロ／協力いずれも同じなので、ここだけで個別の被弾ボイスを選べる。
+    case 'BOSS_ATTACK_HIT':
+      switch (event.targetId) {
+        case 'odoruno':
+          return 'odoruno-damage';
+        case 'pay':
+          return 'pay-damage';
+        case 'ora':
+          return 'ora-damage';
+        default:
+          return null;
+      }
+
     // 大ダウン中の追撃も反撃成立と同じ手応えを鳴らす。State は BOSS_DOWN の
     // ままなので COMBAT_STATE_CHANGED は流れないが、実際にHPが削れている以上
     // 無音のままにはできない。

@@ -47,27 +47,28 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 起動後、表示された URL（既定 http://localhost:5173 ）を Chrome で開く。
+`pnpm dev` 起動後、表示された URL（既定 <http://localhost:5173> ）を Chrome で開く。
 
 ---
 
 ## コマンド
 
-| コマンド              | 内容                                              |
-| --------------------- | ------------------------------------------------- |
-| `pnpm dev`            | 開発サーバーを起動する                            |
-| `pnpm build`          | 型チェックと本番ビルドを実行する                  |
-| `pnpm preview`        | ビルド結果をローカルで確認する                    |
-| `pnpm lint`           | oxlint で静的解析する（型情報を使うルールを含む） |
-| `pnpm lint:fix`       | 自動修正できる指摘を修正する                      |
-| `pnpm format`         | oxfmt で整形する                                  |
-| `pnpm format:check`   | 整形済みかを確認する                              |
-| `pnpm typecheck`      | TypeScript の型チェックのみ実行する               |
-| `pnpm test`           | Vitest を1回実行する                              |
-| `pnpm test:watch`     | Vitest を watch モードで実行する                  |
-| `pnpm deploy`         | ビルドしてCloudflare Workersへデプロイする        |
-| `pnpm deploy:preview` | ビルドしてプレビュー版をアップロードする          |
-| `pnpm deps:check`     | 依存の更新有無を確認する                          |
+| コマンド              | 内容                                                |
+| --------------------- | --------------------------------------------------- |
+| `pnpm dev`            | 開発サーバーを起動する                              |
+| `pnpm build`          | 型チェックと本番ビルドを実行する                    |
+| `pnpm preview`        | ビルド結果をローカルで確認する                      |
+| `pnpm lint`           | oxlint で静的解析する（型情報を使うルールを含む）   |
+| `pnpm lint:fix`       | 自動修正できる指摘を修正する                        |
+| `pnpm format`         | oxfmt で整形する                                    |
+| `pnpm format:check`   | 整形済みかを確認する                                |
+| `pnpm typecheck`      | TypeScript の型チェックのみ実行する                 |
+| `pnpm test`           | Vitest を1回実行する                                |
+| `pnpm test:coverage`  | Vitest を実行し、`coverage/` にカバレッジを出力する |
+| `pnpm test:watch`     | Vitest を watch モードで実行する                    |
+| `pnpm deploy`         | ビルドしてCloudflare Workersへデプロイする          |
+| `pnpm deploy:preview` | ビルドしてプレビュー版をアップロードする            |
+| `pnpm deps:check`     | 依存の更新有無を確認する                            |
 
 ---
 
@@ -127,8 +128,11 @@ Rendering / Audio / UI はそれを購読する。この分離により、Phase 
 
 ```bash
 pnpm test          # 1回実行する
+pnpm test:coverage # カバレッジを計測する
 pnpm test:watch    # watch モードで実行する
 ```
+
+Pull RequestではCIがカバレッジを計測し、結果をPRコメントとActionsのSummaryへ自動で掲載する。
 
 テストは対象と同じディレクトリへ `*.test.ts` として置く（例: `src/game/combat/judge.ts`
 に対して `src/game/combat/judge.test.ts`）。書き方・時間依存処理の扱い・境界値の
@@ -149,7 +153,7 @@ install → lint → format:check → typecheck → test → build
 push 前にローカルで同じ順に流しておくとよい。
 
 ```bash
-pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
+pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:coverage && pnpm build
 ```
 
 ---
@@ -183,4 +187,6 @@ URLの形式・Cloudflare側の設定・失敗時の確認箇所は
 git switch -c feat/issue-13-project-init
 ```
 
-詳細は [`docs/development-workflow.md`](./docs/development-workflow.md) を参照する。
+詳細は [`docs/development-workflow.md`](./docs/=development-workflow.md) を参照する。
+
+ああ〜クイヤ

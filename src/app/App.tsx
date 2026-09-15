@@ -4,6 +4,7 @@ import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
+import { FirstPersonHealthHud } from '@/rendering/camera/FirstPersonHealthHud';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
@@ -15,6 +16,8 @@ import { OraStatusHud } from '@/ui/ora-status/OraStatusHud';
 import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
+import { MultiplayerVoiceSessionProvider } from '@/ui/voice/MultiplayerVoiceSessionProvider';
+import { VoiceHud } from '@/ui/voice/VoiceHud';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
@@ -90,15 +93,29 @@ export function App(): React.JSX.Element {
     );
   }
 
+  return (
+    <MultiplayerVoiceSessionProvider>
+      <AppScreen screen={screen} />
+    </MultiplayerVoiceSessionProvider>
+  );
+}
+
+function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getState>['screen'] }) {
   if (screen === 'TITLE') return <TitleScreen />;
 
   if (screen === 'INTRO') {
-    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('MATCHING')} />;
+    return (
+      <IntroCutscene
+        onComplete={() =>
+          useScreenStore
+            .getState()
+            .goTo(useScreenStore.getState().mode === 'SINGLE' ? 'WORLD' : 'MATCHING')
+        }
+      />
+    );
   }
 
-  if (screen === 'MATCHING') {
-    return <MatchingScreen />;
-  }
+  if (screen === 'MATCHING') return <MatchingScreen />;
 
   // GAME は本番マルチプレイ。Authority権威のBattleSourceだけを使う
   // (MultiplayerArenaSceneがsession不在時にMATCHINGへ差し戻すので、
@@ -107,6 +124,8 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene multiplayer />
+        <FirstPersonHealthHud />
+        <VoiceHud />
         <OraStatusHud />
       </div>
     );
@@ -119,15 +138,16 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene world />
+        <FirstPersonHealthHud />
         <FinalePresentation />
         <WorldTutorialGuide />
-        {/*
-          操作キャラの切り替え (Issue #106)。DEV ガードは付けない。
-          一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
-        */}
         <PlayerSwitch />
         <OraStatusHud />
         <MicrophoneDebugPanel />
+        <ResultOverlay
+          onRestart={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }))}
+          onTitle={returnToTitle}
+        />
       </div>
     );
   }
@@ -162,6 +182,11 @@ function MicrophoneDebugPanel(): React.JSX.Element | null {
       <MicrophoneDebug />
     </Suspense>
   );
+}
+
+function returnToTitle(): void {
+  useGameStore.getState().reset();
+  useScreenStore.getState().goTo('TITLE');
 }
 
 function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
@@ -201,7 +226,7 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
           <EffectSettings />
         </>
       )}
-      <ResultOverlay onRestart={onRestart} />
+      <ResultOverlay onRestart={onRestart} onTitle={returnToTitle} />
     </div>
   );
 }
