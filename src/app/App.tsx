@@ -141,6 +141,10 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
         <WorldTutorialGuide />
         <PlayerSwitch />
         <MicrophoneDebugPanel />
+        <ResultOverlay
+          onRestart={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }))}
+          onTitle={returnToTitle}
+        />
       </div>
     );
   }
@@ -175,6 +179,11 @@ function MicrophoneDebugPanel(): React.JSX.Element | null {
       <MicrophoneDebug />
     </Suspense>
   );
+}
+
+function returnToTitle(): void {
+  useGameStore.getState().reset();
+  useScreenStore.getState().goTo('TITLE');
 }
 
 function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
@@ -214,7 +223,7 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
           <EffectSettings />
         </>
       )}
-      <ResultOverlay onRestart={onRestart} />
+      <ResultOverlay onRestart={onRestart} onTitle={returnToTitle} />
     </div>
   );
 }

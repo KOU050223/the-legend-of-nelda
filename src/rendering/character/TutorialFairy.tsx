@@ -9,6 +9,9 @@ import { NavieFairy } from './NavieFairy';
 
 const DEFAULT_FALLBACK_POSITION: [number, number, number] = [0, 0, 0];
 
+/** 画面を覆いすぎないよう、ナビ妖精はモデル本来の半分の大きさで漂わせる。 */
+const FAIRY_SCALE = 0.5;
+
 /** プレイヤーの周りを漂う、チュートリアル専用のナビ妖精。 */
 export interface TutorialFairyProps {
   /** 指定した場合、妖精はこの Object3D を中心に漂う。 */
@@ -56,7 +59,9 @@ export function TutorialFairy({
 
   return (
     <group ref={root} position={fallbackPosition} visible={false}>
-      <NavieFairy />
+      <group scale={FAIRY_SCALE}>
+        <NavieFairy />
+      </group>
     </group>
   );
 }

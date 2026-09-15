@@ -23,10 +23,10 @@ describe('WorldTutorialGuide', () => {
     expect(screen.getByRole('status')).toHaveTextContent('E：調べる');
   });
 
-  it('表示開始から30秒後に案内を消す', async () => {
+  it('表示開始から15秒後に案内を消す', async () => {
     render(<WorldTutorialGuide />);
 
-    await act(() => vi.advanceTimersByTime(29_999));
+    await act(() => vi.advanceTimersByTime(14_999));
     expect(screen.getByRole('status')).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTime(1));

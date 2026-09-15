@@ -39,6 +39,8 @@ import {
 } from '@/store/local-player-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 import { useFirstPersonHealthHudStore } from '@/ui/hud/first-person-health-hud-store';
+import { useGameStore } from '@/store/game-store';
+import { DEFEAT_RESULT_TIMING, RESULT_TIMING } from '@/ui/result/result-presentation';
 
 import { BattleThirdPersonCamera, type BattleCameraMode } from '../camera/BattleThirdPersonCamera';
 import { FirstPersonCamera } from '../camera/FirstPersonCamera';
@@ -63,6 +65,7 @@ import {
   type PlayedMelodyNote,
 } from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
+import { isOutcomeRestartAllowed } from './outcome-restart';
 
 /**
  * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
@@ -293,6 +296,22 @@ export function BossArenaScene({
   // `outcomeOfSnapshot` は全プレイヤーが寝たら敗北と判定する。ソロでは
   // プレイヤーが1人だけなので、そのまま「自分が倒れたら敗北」となる。
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
+  const resultStartedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (outcome === 'ONGOING') {
+      resultStartedAt.current = null;
+      useGameStore.setState({ result: null });
+      return;
+    }
+
+    resultStartedAt.current = performance.now();
+    useGameStore.setState({
+      result: { outcome: outcome === 'VICTORY' ? 'victory' : 'defeat', elapsedMs: 0 },
+      eventFeedback: null,
+      assistVisible: false,
+    });
+  }, [outcome]);
 
   // 通常戦闘は3人称で始める。俯瞰・一人称はそれぞれ広域確認・没入プレイ用に選べる。
   const [cameraMode, setCameraMode] = useState<BattleCameraMode>('third-person');
@@ -582,17 +601,17 @@ export function BossArenaScene({
     };
   }, [activeSource]);
 
-  // 決着したら R でやり直す。決着後は戦闘を進めないので、ここだけは
-  // キーボードを直接見る (GameAction にやり直しは無い。やり直しは
-  // 戦闘の操作ではなく画面の操作なので、入力契約へ足さない)。
+  // 結果ムービーが終わった後だけ R でやり直す。決着直後から受け付けると、
+  // GAMEOVER画面が表示される前に戦闘が再生成されてしまう。
   useEffect(() => {
-    if (outcome === 'ONGOING') return undefined;
+    if (outcome === 'ONGOING' || providedSource !== undefined) return undefined;
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
       // やり直せるのはローカル戦闘だけ。リモートは Authority が持つ進行なので、
       // クライアントが勝手に戦闘を作り直すことはできない。
-      if (providedSource !== undefined) return;
+      const result = useGameStore.getState().result;
+      if (result === null || !isOutcomeRestartAllowed(result)) return;
       previousPositions.current.clear();
       previousBossPosition.current = undefined;
       setLocalBattle(createBattle());
@@ -611,6 +630,7 @@ export function BossArenaScene({
       setMelodyActivitySequence(0);
       melodyNoteSequence.current = 0;
       melody.current.reset();
+      useGameStore.setState({ result: null });
     }
 
     window.addEventListener('keydown', onRestart);
@@ -632,9 +652,19 @@ export function BossArenaScene({
   }, [battle, localPlayerId]);
 
   useFrame((_, delta) => {
-    // 決着後は時間を進めない。倒れたまま技を撃たれ続けると、
-    // 何が起きて負けたのかが画面に残らない。
+    // 決着後は戦闘時間を進めず、結果ムービーの経過時間だけを更新する。
     if (outcome !== 'ONGOING') {
+      const result = useGameStore.getState().result;
+      if (result !== null && resultStartedAt.current !== null) {
+        const duration =
+          result.outcome === 'defeat' ? DEFEAT_RESULT_TIMING.restart : RESULT_TIMING.restart;
+        useGameStore.setState({
+          result: {
+            ...result,
+            elapsedMs: Math.min(duration, performance.now() - resultStartedAt.current),
+          },
+        });
+      }
       return;
     }
 

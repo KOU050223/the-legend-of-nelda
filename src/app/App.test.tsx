@@ -130,7 +130,7 @@ describe('戦闘画面', () => {
       act(() => {
         vi.advanceTimersByTime(120000);
       });
-      expect(screen.getByRole('heading', { name: 'HORI FELL ASLEEP' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'BAD END' })).toBeInTheDocument();
       const ended = useGameStore.getState();
       fireEvent.keyDown(window, { code: 'KeyJ' });
       act(() => {
