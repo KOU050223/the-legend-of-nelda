@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
 import type { RefObject } from 'react';
 
+import type { CharacterId } from '@/game/config/phase2-player-balance';
 import { facingRotationY, moveCharacter } from '@/game/movement/movement';
 import type { CircularBounds, MovementInput, PlanarPosition } from '@/game/movement/types';
 
@@ -20,8 +21,8 @@ export interface PlayerCharacterProps {
   spawn: PlanarPosition;
   /** 移動できる範囲。アリーナの外へ出られないようにする。 */
   bounds: CircularBounds;
-  /** 見た目の色。 */
-  color: string;
+  /** どの大輔を描くか。 */
+  characterId: CharacterId;
   speed?: number;
 }
 
@@ -40,7 +41,7 @@ export function PlayerCharacter({
   getInput,
   spawn,
   bounds,
-  color,
+  characterId,
   speed = DEFAULT_SPEED,
 }: PlayerCharacterProps): React.JSX.Element {
   const spawned = useRef(false);
@@ -80,7 +81,7 @@ export function PlayerCharacter({
 
   return (
     <group ref={root}>
-      <CharacterModel color={color} />
+      <CharacterModel characterId={characterId} />
     </group>
   );
 }

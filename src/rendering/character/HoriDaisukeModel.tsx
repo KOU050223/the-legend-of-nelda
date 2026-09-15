@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Clone, useAnimations, useGLTF } from '@react-three/drei';
+import { useEffect, useMemo, useRef } from 'react';
+import { useAnimations, useGLTF } from '@react-three/drei';
 import { LoopOnce, LoopRepeat, type AnimationAction, type Group } from 'three';
 
 import {
@@ -8,6 +8,7 @@ import {
   MOTION_FADE_SECONDS,
   type HoriDaisukeMotion,
 } from './horiDaisukeMotions';
+import { cloneModelForScene, prepareClonedModel } from './cloned-model';
 
 /** FBX群から合成したGLB。`scripts/build-hori-daisuke-glb.py` で生成する。 */
 const MODEL_URL = '/models/hori-daisuke.glb';
@@ -19,7 +20,7 @@ const MODEL_URL = '/models/hori-daisuke.glb';
 const MODEL_STANDING_HEIGHT = 0.762;
 
 /** 既存のグレーボックスBossに合わせた表示上の高さ。 */
-const DISPLAY_HEIGHT = 2.4;
+export const DISPLAY_HEIGHT = 2.4;
 
 type Props = {
   /** 再生するクリップ。既定は登場演出の `stand-up`。 */
@@ -58,6 +59,9 @@ export function HoriDaisukeModel({ motion = DEFAULT_MOTION }: Props = {}): React
   const { scene, animations } = useGLTF(MODEL_URL);
   const root = useRef<Group>(null);
   const { actions } = useAnimations(animations, root);
+  // drei の <Clone> はボーンをシーングラフから外すため使わない。
+  // <primitive> で複製を丸ごと入れる (cloned-model.ts の説明)。
+  const model = useMemo(() => cloneModelForScene(scene), [scene]);
 
   /** 前のクリップを止めるタイマー。次の再生が始まったら取り消す。 */
   const stopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -85,7 +89,7 @@ export function HoriDaisukeModel({ motion = DEFAULT_MOTION }: Props = {}): React
 
   return (
     <group ref={root} scale={DISPLAY_HEIGHT / MODEL_STANDING_HEIGHT}>
-      <Clone object={scene} castShadow />
+      <primitive object={model} ref={prepareClonedModel} />
     </group>
   );
 }
