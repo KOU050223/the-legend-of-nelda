@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  attachWasshoiInput,
+  type WasshoiInputController,
+  type WasshoiInputStatus,
+} from '@/input/wasshoi/wasshoi-input';
+import { playSystemWasshoi } from '@/input/wasshoi/system-wasshoi-engine';
 import type { LobbyMessage } from '@/multiplayer/protocol';
 import {
   liveKitTokenRequestFor,
@@ -35,6 +41,8 @@ export interface MultiplayerVoiceSession {
   readonly snapshot: VoiceSessionSnapshot;
   readonly busy: boolean;
   readonly enabled: boolean;
+  readonly payInputActive: boolean;
+  readonly payInputStatus: WasshoiInputStatus;
   enable(): Promise<void>;
   disable(): Promise<void>;
   toggleMicrophone(): Promise<void>;
@@ -42,7 +50,7 @@ export interface MultiplayerVoiceSession {
 
 /**
  * MATCHING中の明示的なユーザー操作からVoice接続を始める。
- * Phase 3でこの所有者をApp/Multiplayer Sessionへ上げるまで、画面を離れるとcleanupする。
+ * PAYは生音声Trackをpublishせず、ローカルVADのWasshoiEventだけを送る。
  */
 export function useMultiplayerVoiceSession({
   participantId,
@@ -62,17 +70,29 @@ export function useMultiplayerVoiceSession({
   const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(DISCONNECTED_SNAPSHOT);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(false);
+  const [payInputStatus, setPayInputStatus] = useState<WasshoiInputStatus>('idle');
+  const [payInputActive, setPayInputActive] = useState(false);
   const sessionRef = useRef<LiveKitVoiceSession | null>(null);
+  const payInputRef = useRef<WasshoiInputController | null>(null);
   const activeContextKeyRef = useRef<string | null>(null);
+  const wasshoiVariantRef = useRef(0);
+
+  const stopPayInput = useCallback((): void => {
+    payInputRef.current?.stop();
+    payInputRef.current = null;
+    setPayInputActive(false);
+    setPayInputStatus('idle');
+  }, []);
 
   const disconnect = useCallback(async (): Promise<void> => {
+    stopPayInput();
     const session = sessionRef.current;
     sessionRef.current = null;
     activeContextKeyRef.current = null;
     setEnabled(false);
     await session?.disconnect().catch(() => undefined);
     setSnapshot(DISCONNECTED_SNAPSHOT);
-  }, []);
+  }, [stopPayInput]);
 
   useEffect(() => {
     const contextChanged = activeContextKeyRef.current !== currentKey;
@@ -93,8 +113,13 @@ export function useMultiplayerVoiceSession({
     const session = createLiveKitVoiceSession({
       role: context.role,
       onSnapshot: setSnapshot,
-      // PAYのWasshoi再生・入力はPhase 4で本番導線へ接続する。
-      onWasshoi: () => undefined,
+      onWasshoi: (event) => {
+        // PAYが自分で生成音を再生すると、スピーカー出力を再びVADが拾う経路ができる。
+        // 送信者PAYでは再生せず、受信する他Roleだけがシステム音声を鳴らす。
+        if (context.role === 'PAY') return;
+        playSystemWasshoi(event, wasshoiVariantRef.current);
+        wasshoiVariantRef.current += 1;
+      },
     });
     sessionRef.current = session;
     activeContextKeyRef.current = currentKey;
@@ -102,13 +127,33 @@ export function useMultiplayerVoiceSession({
     try {
       const credentials = await requestLiveKitCredentials(liveKitTokenRequestFor(context));
       await session.connect(credentials);
-      // PAYはpublish禁止を接続直後にも明示する。VAD入力はPhase 4で追加する。
-      await session.setMicrophoneEnabled(context.role !== 'PAY');
-      setEnabled(true);
     } catch (error) {
       await disconnect();
       setSnapshot((current) => ({ ...current, error: messageOf(error) }));
+      setBusy(false);
+      return;
+    }
+
+    try {
+      // PAYはこの呼び出しでもAudio Trackを作らず、WASSHOI MODEを明示する。
+      await session.setMicrophoneEnabled(context.role !== 'PAY');
+      if (context.role === 'PAY') {
+        const input = await attachWasshoiInput((event) => void session.sendWasshoi(event), {
+          onStatusChange: setPayInputStatus,
+        });
+        // Role変更やTITLE復帰と競合した入力は即座に破棄する。
+        if (sessionRef.current !== session || activeContextKeyRef.current !== currentKey) {
+          input.stop();
+        } else {
+          payInputRef.current = input;
+          setPayInputActive(true);
+        }
+      }
+    } catch (error) {
+      // Mic/VADの許可失敗はRoom接続を壊さず、UIだけへエラーを渡す。
+      setSnapshot((current) => ({ ...current, error: messageOf(error) }));
     } finally {
+      if (sessionRef.current === session) setEnabled(true);
       setBusy(false);
     }
   }, [busy, context, currentKey, disconnect]);
@@ -128,6 +173,8 @@ export function useMultiplayerVoiceSession({
     snapshot,
     busy,
     enabled,
+    payInputActive,
+    payInputStatus,
     enable,
     disable: disconnect,
     toggleMicrophone,

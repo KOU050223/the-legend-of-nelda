@@ -219,6 +219,13 @@
   font-weight: 900;
 }
 
+.voiceInput {
+  margin: 3px 0 0;
+  color: #fef08a;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
 .voiceTitle {
   color: #7dd3fc;
   font-size: 0.75rem;

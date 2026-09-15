@@ -228,6 +228,11 @@ function VoiceChatPanel({
       <p className={styles.voiceMode}>
         {payMode ? 'MIC: WASSHOI MODE' : `MIC: ${voice.snapshot.microphone}`}
       </p>
+      {payMode && voice.enabled && (
+        <p className={styles.voiceInput}>
+          WASSHOI INPUT: {voice.payInputActive ? 'ACTIVE' : voice.payInputStatus.toUpperCase()}
+        </p>
+      )}
       {!voice.enabled ? (
         <button
           className={styles.voiceButton}

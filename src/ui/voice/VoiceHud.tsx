@@ -12,6 +12,11 @@ export function VoiceHud(): React.JSX.Element | null {
       <span className={styles.mode}>
         {voice.context.role === 'PAY' ? 'MIC: WASSHOI MODE' : `MIC: ${voice.snapshot.microphone}`}
       </span>
+      {voice.context.role === 'PAY' && (
+        <span className={styles.mode}>
+          WASSHOI: {voice.payInputActive ? 'ACTIVE' : voice.payInputStatus.toUpperCase()}
+        </span>
+      )}
       {voice.snapshot.participants.map((participant) => (
         <span
           key={participant.identity}
