@@ -30,6 +30,32 @@ describe('createLocalBattleSource', () => {
     expect(received).toEqual([getSnapshot.mock.results[0]?.value]);
   });
 
+  it('localPlayerIdを関数で渡すと、送るたびに読み直して操作キャラへ追従する', () => {
+    // 操作キャラの切り替え (Issue #106) を source を作り直さずに効かせる。
+    // 固定IDを閉じ込めると、切り替えても前のキャラへ入力が飛び続ける。
+    const battle = createBossBattle({
+      clock: createFakeClock(0),
+      events: createGameEventBus(),
+      roster: [
+        { id: 'odoruno', characterId: 'ODORUNO' },
+        { id: 'pay', characterId: 'PAY' },
+      ],
+    });
+    const submit = vi.spyOn(battle, 'submit');
+    let active = 'odoruno';
+    const source = createLocalBattleSource(battle, () => active);
+
+    source.submit({ type: 'ATTACK' });
+    expect(submit).toHaveBeenLastCalledWith('odoruno', { type: 'ATTACK' });
+    expect(source.localPlayerId).toBe('odoruno');
+
+    active = 'pay';
+
+    source.submit({ type: 'ATTACK' });
+    expect(submit).toHaveBeenLastCalledWith('pay', { type: 'ATTACK' });
+    expect(source.localPlayerId).toBe('pay');
+  });
+
   it('解除したonState購読者には以後通知しない', () => {
     const battle = createBossBattle({
       clock: createFakeClock(0),

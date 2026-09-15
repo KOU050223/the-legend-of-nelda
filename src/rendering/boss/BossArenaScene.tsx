@@ -665,7 +665,9 @@ export function BossArenaScene({
     previousBossPosition.current = snapshot.boss.position;
 
     // 切り替えパネルへ各人の状態を渡す。寝ているキャラは選べないようにする。
-    publishLocalPlayerStatuses(snapshot);
+    // ローカルだけ。リモートの roster を切り替えストアへ流すと、別経路である
+    // はずの Authority 側の状態が混ざる (local-player-store の但し書き)。
+    if (providedSource === undefined) publishLocalPlayerStatuses(snapshot);
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
