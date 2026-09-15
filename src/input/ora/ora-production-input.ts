@@ -472,7 +472,7 @@ export async function attachOraProductionInput(
       return;
     }
 
-    speechRecognitionStatus = 'available';
+    setSpeechRecognitionStatus('available');
     recognition = new Recognition();
     recognition.continuous = true;
     recognition.interimResults = false;
