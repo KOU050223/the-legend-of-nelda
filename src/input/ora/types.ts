@@ -17,9 +17,10 @@ export interface MarkerObservation {
   right?: MarkerPosition;
 }
 
-/** MediaPipeなどの手追跡器が渡す、右手首の正規化済み観測値。 */
+/** MediaPipeなどの手追跡器が渡す、左右手首の正規化済み観測値。 */
 export interface HandObservation {
   capturedAt: number;
+  left?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'>;
   right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'>;
 }
 

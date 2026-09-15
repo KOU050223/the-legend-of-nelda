@@ -11,6 +11,35 @@ export interface HandDetector {
   close(): void;
 }
 
+type HandSide = 'Left' | 'Right';
+type WristLandmark = { x: number; y: number };
+type HandPosition = NonNullable<HandObservation['left']>;
+
+function findWrist(
+  result: ReturnType<HandLandmarker['detectForVideo']>,
+  side: HandSide,
+): WristLandmark | undefined {
+  const handIndex = result.handedness.findIndex(
+    (categories) => categories[0]?.categoryName === side,
+  );
+  return handIndex === -1 ? undefined : result.landmarks[handIndex]?.[0];
+}
+
+function createHandPosition(
+  wrist: WristLandmark | undefined,
+  before: HandPosition | undefined,
+  seconds: number,
+): HandPosition | undefined {
+  if (!wrist) return undefined;
+
+  return {
+    x: wrist.x,
+    y: wrist.y,
+    velocityX: before && seconds > 0 ? (wrist.x - before.x) / seconds : 0,
+    velocityY: before && seconds > 0 ? (wrist.y - before.y) / seconds : 0,
+  };
+}
+
 /** MediaPipeの手首ランドマークを、認識器に依存しない観測値に変換する。 */
 export async function createMediaPipeHandDetector(): Promise<HandDetector> {
   const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
@@ -26,23 +55,12 @@ export async function createMediaPipeHandDetector(): Promise<HandDetector> {
   return {
     detect(video, capturedAt) {
       const result = landmarker.detectForVideo(video, capturedAt);
-      const rightIndex = result.handedness.findIndex(
-        (categories) => categories[0]?.categoryName === 'Right',
-      );
-      const wrist = rightIndex === -1 ? undefined : result.landmarks[rightIndex]?.[0];
-      const before = previous?.right;
       const seconds = previous ? (capturedAt - previous.capturedAt) / 1000 : 0;
-      const next: HandObservation = wrist
-        ? {
-            capturedAt,
-            right: {
-              x: wrist.x,
-              y: wrist.y,
-              velocityX: before && seconds > 0 ? (wrist.x - before.x) / seconds : 0,
-              velocityY: before && seconds > 0 ? (wrist.y - before.y) / seconds : 0,
-            },
-          }
-        : { capturedAt };
+      const next: HandObservation = { capturedAt };
+      const left = createHandPosition(findWrist(result, 'Left'), previous?.left, seconds);
+      const right = createHandPosition(findWrist(result, 'Right'), previous?.right, seconds);
+      if (left) next.left = left;
+      if (right) next.right = right;
       previous = next;
       return next;
     },
