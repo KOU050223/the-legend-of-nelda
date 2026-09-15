@@ -43,6 +43,7 @@ import {
 } from './ora-production-input';
 
 type FrameCallback = (timestamp: number) => void;
+type TimeoutCallback = { handler: () => void; milliseconds: number };
 
 let cameraTrack: FakeTrack;
 let audioTrack: FakeTrack;
@@ -52,6 +53,8 @@ let audioSession: FakeAudioSession;
 let frameCallbacks: Map<number, FrameCallback>;
 let nextFrameId: number;
 let intervalHandler: (() => void) | undefined;
+let timeoutCallbacks: Map<number, TimeoutCallback>;
+let nextTimeoutId: number;
 let nowMs: number;
 let rms: number;
 
@@ -109,6 +112,17 @@ function runInterval(): void {
   intervalHandler?.();
 }
 
+function runNextTimeout(): void {
+  let next: [number, TimeoutCallback] | undefined;
+  for (const entry of timeoutCallbacks) {
+    if (next === undefined || entry[1].milliseconds < next[1].milliseconds) next = entry;
+  }
+  expect(next).toBeDefined();
+  if (next === undefined) return;
+  timeoutCallbacks.delete(next[0]);
+  next[1].handler();
+}
+
 function createTestAttach(
   options: {
     onCalibrationChange?: (state: OraCalibrationState) => void;
@@ -134,7 +148,40 @@ function createTestAttach(
     clearInterval: () => {
       intervalHandler = undefined;
     },
+    setTimeout: (handler, milliseconds) => {
+      const id = nextTimeoutId;
+      nextTimeoutId += 1;
+      timeoutCallbacks.set(id, { handler, milliseconds });
+      return id;
+    },
+    clearTimeout: (id) => {
+      timeoutCallbacks.delete(id);
+    },
   });
+}
+
+function completeCalibration(): void {
+  nowMs = 0;
+  rms = 0.2;
+  runInterval();
+  nowMs = 350;
+  rms = 0;
+  runInterval();
+  runNextFrame(0);
+  runNextFrame(1_000);
+}
+
+function submitUtterance(transcript: string, speechRms: number): void {
+  nowMs = 1_000;
+  rms = speechRms;
+  runInterval();
+  nowMs = 1_100;
+  runInterval();
+  FakeSpeechRecognition.instances.at(-1)?.emitFinal(transcript);
+}
+
+function attackActions(actions: readonly GameAction[]): GameAction[] {
+  return actions.filter((action) => action.type === 'ATTACK');
 }
 
 function setupSuccessfulResources(): void {
@@ -145,6 +192,8 @@ function setupSuccessfulResources(): void {
   frameCallbacks = new Map();
   nextFrameId = 1;
   intervalHandler = undefined;
+  timeoutCallbacks = new Map();
+  nextTimeoutId = 1;
   nowMs = 0;
   rms = 0;
   FakeSpeechRecognition.instances.length = 0;
@@ -231,12 +280,62 @@ describe('createOraProductionInput', () => {
     nowMs = 1_100;
     runInterval();
     FakeSpeechRecognition.instances.at(-1)?.emitFinal('オラ');
+    runNextTimeout();
     runNextFrame(1_700);
 
     expect(actions.some((action) => action.type === 'ATTACK')).toBe(true);
     expect(actions.some((action) => action.type === 'CHARACTER_ACTION')).toBe(true);
 
     adapter.detach();
+  });
+
+  it('通常発話のRMSはCalibration時の大きい声量に左右されずATTACK閾値を通る', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    submitUtterance('オラ', 0.02);
+    runNextTimeout();
+
+    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }]);
+
+    adapter.detach();
+  });
+
+  it('1発話の複数hitを140ms間隔で予約し、同一フレームではATTACKを一括送信しない', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    submitUtterance('オラオラ', 0.2);
+
+    expect(attackActions(actions)).toEqual([]);
+    expect([...timeoutCallbacks.values()].map((callback) => callback.milliseconds)).toEqual([
+      0, 140,
+    ]);
+
+    runNextTimeout();
+    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }]);
+    runNextTimeout();
+    expect(attackActions(actions)).toEqual([{ type: 'ATTACK' }, { type: 'ATTACK' }]);
+
+    adapter.detach();
+  });
+
+  it('detach()は予約済みATTACKを解除し、後からタイマーが走っても送信しない', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    submitUtterance('オラオラ', 0.2);
+    const queuedCallbacks = [...timeoutCallbacks.values()].map((callback) => callback.handler);
+
+    expect(timeoutCallbacks.size).toBe(2);
+    adapter.detach();
+    expect(timeoutCallbacks.size).toBe(0);
+
+    queuedCallbacks.forEach((callback) => callback());
+    expect(attackActions(actions)).toEqual([]);
   });
 
   it('SpeechRecognition非対応でも手入力のMOVEとCHARACTER_ACTIONは継続する', async () => {

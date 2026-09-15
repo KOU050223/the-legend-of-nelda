@@ -366,6 +366,13 @@ export function BossArenaScene({
     providedSource !== undefined && view === null ? 'pending' : isOra ? 'ora' : 'keyboard';
   const [oraCalibration, setOraCalibration] = useState<OraCalibrationState | null>(null);
   const [oraStatus, setOraStatus] = useState<OraProductionInputStatus | null>(null);
+  const oraCalibrationHints =
+    oraCalibration === null
+      ? []
+      : [
+          ...(oraCalibration.handComplete ? [] : ['両手を画面下寄りの自然な位置に構えてください']),
+          ...(oraCalibration.voiceComplete ? [] : ['「オラ！」と一度声に出してください']),
+        ];
 
   // finale など「snapshot を見て動く Effect」はこれを読む。view が null の間は
   // 演出を始めない (リモート接続直後の1瞬)。
@@ -763,10 +770,10 @@ export function BossArenaScene({
     <>
       <World />
 
-      {inputMode === 'ora' && oraCalibration !== null && oraCalibration.progress < 1 && (
+      {inputMode === 'ora' && oraCalibrationHints.length > 0 && (
         <Billboard position={[BOSS_ANCHOR.x, 8, BOSS_ANCHOR.z]}>
           <Text fontSize={0.48} color="#f2f2f7" anchorY="middle">
-            {`両手を自然な位置に構えてください… ${Math.round(oraCalibration.progress * 100)}%`}
+            {oraCalibrationHints.join('\n')}
           </Text>
         </Billboard>
       )}

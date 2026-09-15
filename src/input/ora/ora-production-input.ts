@@ -9,7 +9,6 @@ import {
   type AudioAnalysisSession,
 } from '@/input/microphone/microphone-adapter';
 import { DEFAULT_VOICE_ACTIVITY_CONFIG } from '@/input/wasshoi/types';
-import { toIntensity } from '@/input/wasshoi/voice-activity-detector';
 
 import { createHandNeutralCalibrator } from './hand-calibration';
 import { createMediaPipeHandDetector, type HandDetector } from './hand-detector';
@@ -24,6 +23,9 @@ import { createVoiceBaselineCalibrator } from './voice-calibration';
 
 const ANALYSIS_INTERVAL_MS = 50;
 const RMS_HISTORY_MS = 15_000;
+// わっしょい用の大声前提スケールでは、通常発話がATTACKの下限へ届かない。
+const ORA_SPEECH_INTENSITY_CEILING_RMS = 0.06;
+const VOICE_ATTACK_HIT_SPACING_MS = 140;
 const AUDIO_CONSTRAINTS: MediaStreamConstraints = {
   audio: {
     autoGainControl: true,
@@ -64,6 +66,8 @@ export interface OraProductionInputOptions {
   cancelAnimationFrame?: (id: number) => void;
   setInterval?: (handler: () => void, milliseconds: number) => number;
   clearInterval?: (id: number) => void;
+  setTimeout?: (handler: () => void, milliseconds: number) => number;
+  clearTimeout?: (id: number) => void;
 }
 
 interface SpeechResult {
@@ -140,6 +144,12 @@ function clampIntensity(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+function normalizeOraSpeechIntensity(peakRms: number): number {
+  const threshold = DEFAULT_VOICE_ACTIVITY_CONFIG.threshold;
+  if (peakRms <= threshold) return 0;
+  return clampIntensity((peakRms - threshold) / (ORA_SPEECH_INTENSITY_CEILING_RMS - threshold));
+}
+
 /**
  * カメラ・マイクをGameActionへ変換する本番入力境界。
  * 生のMediaStream、PCM、SpeechRecognition結果はこの関数の外へ出さない。
@@ -158,6 +168,10 @@ export async function attachOraProductionInput(
     options.setInterval ??
     ((handler: () => void, milliseconds: number) => window.setInterval(handler, milliseconds));
   const stopInterval = options.clearInterval ?? ((id: number) => window.clearInterval(id));
+  const startTimeout =
+    options.setTimeout ??
+    ((handler: () => void, milliseconds: number) => window.setTimeout(handler, milliseconds));
+  const stopTimeout = options.clearTimeout ?? ((id: number) => window.clearTimeout(id));
 
   const handCalibrator = createHandNeutralCalibrator();
   const voiceCalibrator = createVoiceBaselineCalibrator();
@@ -184,6 +198,7 @@ export async function attachOraProductionInput(
   let frameId: number | undefined;
   let intervalId: number | undefined;
   let stopped = false;
+  const pendingAttackTimeoutIds = new Set<number>();
 
   const rmsHistory: Array<{ at: number; rms: number }> = [];
   let speechStartedAt: number | null = null;
@@ -245,6 +260,14 @@ export async function attachOraProductionInput(
 
     if (intervalId !== undefined) stopInterval(intervalId);
     if (frameId !== undefined) cancelFrame(frameId);
+    for (const timeoutId of pendingAttackTimeoutIds) {
+      try {
+        stopTimeout(timeoutId);
+      } catch {
+        // 1つのタイマー取消し失敗で、他の予約ATTACKを残さない。
+      }
+    }
+    pendingAttackTimeoutIds.clear();
 
     if (recognition !== undefined) {
       if (speechResultListener !== undefined) {
@@ -301,6 +324,20 @@ export async function attachOraProductionInput(
     }
   };
 
+  const scheduleAttack = (delayMs: number): void => {
+    if (stopped) return;
+    let timeoutId: number | undefined;
+    try {
+      timeoutId = startTimeout(() => {
+        if (timeoutId !== undefined) pendingAttackTimeoutIds.delete(timeoutId);
+        emit({ type: 'ATTACK' });
+      }, delayMs);
+      pendingAttackTimeoutIds.add(timeoutId);
+    } catch (error) {
+      reportError(error);
+    }
+  };
+
   const recordRms = (rms: number, timestamp: number): void => {
     rmsHistory.push({ at: timestamp, rms });
     const oldestAllowed = timestamp - RMS_HISTORY_MS;
@@ -332,13 +369,11 @@ export async function attachOraProductionInput(
     for (const sample of rmsHistory) {
       if (sample.at >= startedAt && sample.at <= endedAt) peakRms = Math.max(peakRms, sample.rms);
     }
-    const rawIntensity = toIntensity(peakRms, DEFAULT_VOICE_ACTIVITY_CONFIG.threshold);
-    const baseline = voiceCalibrator.getBaselineIntensity();
-    if (baseline === undefined || baseline <= 0) return clampIntensity(rawIntensity);
-    return clampIntensity(rawIntensity / baseline);
+    return normalizeOraSpeechIntensity(peakRms);
   };
 
   const handleSpeechResult = (event: SpeechRecognitionResultEvent): void => {
+    if (stopped) return;
     const endedAt = now();
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
@@ -360,7 +395,7 @@ export async function attachOraProductionInput(
 
       const attacks = voiceAttackRecognizer.recognize(candidate);
       for (let attackIndex = 0; attackIndex < attacks.length; attackIndex += 1) {
-        emit({ type: 'ATTACK' });
+        scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS);
       }
     }
   };
