@@ -18,6 +18,10 @@ export interface FinalePresentationSnapshot {
   readonly playedMelodyNotes: readonly PlayedMelodyNote[];
   /** 同じミス演出を連続して再生するための連番。 */
   readonly melodyMissSequence: number;
+  /** 救済表示用。現在プレイヤーに求めている次の音。 */
+  readonly melodyExpected: NoteName | null;
+  /** 複数ミス、または一定時間無入力時にだけ次音を見せる。 */
+  readonly showMelodyHint: boolean;
 }
 
 const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
@@ -27,6 +31,8 @@ const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
   microphoneStatus: 'idle',
   playedMelodyNotes: [],
   melodyMissSequence: 0,
+  melodyExpected: null,
+  showMelodyHint: false,
 };
 
 let snapshot = INITIAL_SNAPSHOT;
@@ -48,7 +54,9 @@ export function publishFinalePresentation(next: FinalePresentationSnapshot): voi
     snapshot.zeroDamageSequence === next.zeroDamageSequence &&
     snapshot.microphoneStatus === next.microphoneStatus &&
     snapshot.playedMelodyNotes === next.playedMelodyNotes &&
-    snapshot.melodyMissSequence === next.melodyMissSequence
+    snapshot.melodyMissSequence === next.melodyMissSequence &&
+    snapshot.melodyExpected === next.melodyExpected &&
+    snapshot.showMelodyHint === next.showMelodyHint
   )
     return;
   snapshot = next;

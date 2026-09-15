@@ -17,7 +17,7 @@ import {
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
-import type { MicrophoneInputStatus } from '@/input/microphone/types';
+import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 
 import { FollowCamera } from '../camera/FollowCamera';
@@ -197,6 +197,9 @@ export function BossArenaScene(): React.JSX.Element {
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
   const [playedMelodyNotes, setPlayedMelodyNotes] = useState<readonly PlayedMelodyNote[]>([]);
   const [melodyMissSequence, setMelodyMissSequence] = useState(0);
+  const [melodyExpected, setMelodyExpected] = useState<NoteName | null>(null);
+  const [showMelodyHint, setShowMelodyHint] = useState(false);
+  const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
   const melody = useRef(
@@ -213,6 +216,8 @@ export function BossArenaScene(): React.JSX.Element {
       microphoneStatus,
       playedMelodyNotes,
       melodyMissSequence,
+      melodyExpected,
+      showMelodyHint,
     });
   }, [
     view.boss.phase,
@@ -221,6 +226,8 @@ export function BossArenaScene(): React.JSX.Element {
     microphoneStatus,
     playedMelodyNotes,
     melodyMissSequence,
+    melodyExpected,
+    showMelodyHint,
   ]);
 
   useEffect(() => resetFinalePresentation, []);
@@ -271,6 +278,8 @@ export function BossArenaScene(): React.JSX.Element {
       if (microphoneStop.current !== null || view.finale !== 'WAITING_FOR_MELODY') return;
       setMelodyStarted(true);
       setMicrophoneStatus('requesting-permission');
+      setMelodyExpected(melody.current.snapshot().expected);
+      setShowMelodyHint(false);
       void attachMicrophoneNoteInput(
         (event) => {
           if (event.type === 'note-off') return;
@@ -282,6 +291,10 @@ export function BossArenaScene(): React.JSX.Element {
 
           const result = melody.current.consume(event);
           if (result === 'IGNORED') return;
+          const melodySnapshot = melody.current.snapshot();
+          setMelodyExpected(melodySnapshot.expected);
+          setShowMelodyHint(melodySnapshot.showHint);
+          setMelodyActivitySequence((current) => current + 1);
 
           const note: PlayedMelodyNote = {
             id: melodyNoteSequence.current++,
@@ -318,6 +331,17 @@ export function BossArenaScene(): React.JSX.Element {
       microphoneStop.current = null;
     };
   }, [battle, view.finale]);
+
+  useEffect(() => {
+    if (!melodyStarted || view.finale !== 'WAITING_FOR_MELODY') return undefined;
+
+    // 演奏の手が止まってもクライマックスを無言で詰まらせない。正誤を問わず
+    // 安定した1音を受け取るたびにタイマーを張り直す。開始直後よりも、途中で
+    // 止まったときは少し早く次音を出す。
+    const hintDelayMs = melodyActivitySequence === 0 ? 9_000 : 7_000;
+    const timer = window.setTimeout(() => setShowMelodyHint(true), hintDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [melodyActivitySequence, melodyStarted, view.finale]);
 
   useEffect(() => {
     function completeEnding(): void {

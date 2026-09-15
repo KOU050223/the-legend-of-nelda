@@ -22,6 +22,8 @@ export interface FinaleOverlayProps {
   readonly microphoneStatus: MicrophoneInputStatus;
   readonly playedMelodyNotes: readonly PlayedMelodyNote[];
   readonly melodyMissSequence: number;
+  readonly melodyExpected: NoteName | null;
+  readonly showMelodyHint: boolean;
 }
 
 /** 最終局面のDOM演出。Canvas上の3D表示とは分け、文字の可読性を優先する。 */
@@ -32,6 +34,8 @@ export function FinaleOverlay({
   microphoneStatus,
   playedMelodyNotes,
   melodyMissSequence,
+  melodyExpected,
+  showMelodyHint,
 }: FinaleOverlayProps): React.JSX.Element | null {
   const [performing, setPerforming] = useState(false);
   const noSleepMode = phase === 'NO_SLEEP_MODE';
@@ -109,6 +113,8 @@ export function FinaleOverlay({
                   microphoneStatus={microphoneStatus}
                   playedNotes={playedMelodyNotes}
                   missSequence={melodyMissSequence}
+                  expectedNote={melodyExpected}
+                  showNextHint={showMelodyHint}
                 />
               ) : (
                 <>
@@ -329,10 +335,14 @@ function SheetMusic({
   microphoneStatus,
   playedNotes,
   missSequence,
+  expectedNote,
+  showNextHint,
 }: {
   microphoneStatus: MicrophoneInputStatus;
   playedNotes: readonly PlayedMelodyNote[];
   missSequence: number;
+  expectedNote: NoteName | null;
+  showNextHint: boolean;
 }): React.JSX.Element {
   return (
     <section className={styles.sheet} aria-label="安眠の旋律の楽譜">
@@ -354,6 +364,9 @@ function SheetMusic({
         <p className={styles.miss} key={missSequence}>
           ♪ その音じゃない！ もう一度！
         </p>
+      )}
+      {showNextHint && expectedNote !== null && (
+        <p className={styles.melodyNext}>次：{noteNameLabel(expectedNote)}</p>
       )}
       <p className={styles.sheetHint}>{microphoneMessage(microphoneStatus)}</p>
     </section>

@@ -175,6 +175,7 @@
 .noteWrong { background: #b52024; box-shadow: 0 0 0 4px #f7c16d, 0 5px 0 #661013; animation: wrongNote .6s ease-out both; }
 .noteC { --note-y: 36px; }.noteD { --note-y: 18px; }.noteE { --note-y: 0px; }.noteF { --note-y: -18px; }.noteG { --note-y: -36px; }.noteA { --note-y: -54px; }.noteB { --note-y: -72px; }.noteSharp { --note-y: -9px; }
 .miss { margin: 20px 0 0; color: #b52024; font: 800 clamp(18px, 2.4vw, 30px)/1.2 system-ui; text-shadow: 1px 1px #f7dca2; animation: missText .5s ease-out both; }
+.melodyNext { display: inline-block; margin: 18px 0 0; padding: 6px 15px; color: #fff0b6; background: #582c16; border: 2px solid #b4261d; box-shadow: 3px 3px 0 #8d5a32; font: 800 clamp(18px, 2.5vw, 32px)/1 system-ui; text-shadow: none; animation: noteAppear .32s cubic-bezier(.18,.9,.34,1.32) both; }
 .sheetHint { margin: 20px 0 0; font-size: clamp(17px, 2.2vw, 27px); text-shadow: none; }
 
 .melodyAccepted { display: grid; place-content: center; background: #090411e8; isolation: isolate; }
