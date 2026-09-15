@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { Vector3, type Group } from 'three';
+import { MathUtils, Vector3, type Group } from 'three';
 
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
@@ -185,6 +185,7 @@ export function BossArenaScene(): React.JSX.Element {
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
   const bossRoot = useRef<Group>(null);
+  const bossVisual = useRef<Group>(null);
   const actorRoots = useRef(new Map<string, Group>());
   // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
   // set しても再レンダーが走るので、中身を比べてから入れる。
@@ -252,7 +253,11 @@ export function BossArenaScene(): React.JSX.Element {
           : // 旋律完成の余韻を置いてから、回想へ暗転する。
             view.finale === 'MELODY_ACCEPTED'
             ? 2_700
-            : null;
+            : view.finale === 'MEMORY'
+              ? 14_500
+              : view.finale === 'HORI_FALLING_ASLEEP'
+                ? 5_000
+                : null;
     if (delayMs === null) return undefined;
 
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
@@ -312,6 +317,15 @@ export function BossArenaScene(): React.JSX.Element {
       microphoneStop.current?.();
       microphoneStop.current = null;
     };
+  }, [battle, view.finale]);
+
+  useEffect(() => {
+    function completeEnding(): void {
+      if (view.finale === 'ENDING') battle.advanceFinale();
+    }
+
+    window.addEventListener('finale:ending-complete', completeEnding);
+    return () => window.removeEventListener('finale:ending-complete', completeEnding);
   }, [battle, view.finale]);
 
   useEffect(() => {
@@ -402,6 +416,27 @@ export function BossArenaScene(): React.JSX.Element {
 
     const snapshot = battle.snapshot();
 
+    // 就寝用モーションはまだGLBへ統合されていないため、モデルを倒して布団へ
+    // 入る姿勢を作る。ゲーム判定は既にFinale Stateで止まっているので表示専用。
+    const sleeping =
+      snapshot.finale === 'HORI_FALLING_ASLEEP' ||
+      snapshot.finale === 'ENDING' ||
+      snapshot.finale === 'COMPLETE';
+    if (bossVisual.current !== null) {
+      bossVisual.current.rotation.z = MathUtils.damp(
+        bossVisual.current.rotation.z,
+        sleeping ? Math.PI / 2 : 0,
+        3.4,
+        delta,
+      );
+      bossVisual.current.position.y = MathUtils.damp(
+        bossVisual.current.position.y,
+        sleeping ? 0.32 : 0,
+        3.4,
+        delta,
+      );
+    }
+
     // 位置と向きは Object3D へ直接反映する。真実源はロジック側
     // (boss-battle) で、ここは映すだけ。
     bossRoot.current?.position.set(snapshot.boss.position.x, 0, snapshot.boss.position.z);
@@ -447,9 +482,12 @@ export function BossArenaScene(): React.JSX.Element {
           GLB の読み込みは suspend する。ここで受け止めないと、読み込みの間
           Canvas の中身が丸ごと消えて草原ごと真っ暗になる。
         */}
-        <Suspense fallback={null}>
-          <HoriDaisukeModel />
-        </Suspense>
+        <group ref={bossVisual}>
+          <Suspense fallback={null}>
+            <HoriDaisukeModel />
+          </Suspense>
+        </group>
+        {(view.finale === 'HORI_FALLING_ASLEEP' || view.finale === 'ENDING') && <FinaleFuton />}
         {view.finale === 'NONE' && <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />}
       </group>
 
@@ -500,6 +538,26 @@ export function BossArenaScene(): React.JSX.Element {
       />
       <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.finale} />
     </>
+  );
+}
+
+/** 就寝演出専用の簡易3D布団。物理判定は持たず、突然のPop-inを安全に再現する。 */
+function FinaleFuton(): React.JSX.Element {
+  return (
+    <group position={[0, 0.18, 0.15]} rotation={[0, 0.12, 0]}>
+      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.9, 0.35, 1.55]} />
+        <meshStandardMaterial color="#bd344a" roughness={0.9} />
+      </mesh>
+      <mesh position={[-0.88, 0.48, 0]} castShadow>
+        <boxGeometry args={[0.85, 0.2, 1.22]} />
+        <meshStandardMaterial color="#fff1c6" roughness={0.96} />
+      </mesh>
+      <mesh position={[0.22, 0.53, 0]} castShadow>
+        <boxGeometry args={[1.85, 0.2, 1.34]} />
+        <meshStandardMaterial color="#e65764" roughness={0.88} />
+      </mesh>
+    </group>
   );
 }
 

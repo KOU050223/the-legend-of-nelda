@@ -8,6 +8,8 @@ import horiMemory1 from '../../../assets/character/hori-daisuke-v1/source/daisuk
 import horiMemory2 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori2.png';
 import horiMemory3 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori3.png';
 import horiMemory4 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori4.png';
+import horiSleepingMovie from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori_SleepingMovie.mov';
+import { useScreenStore } from '@/app/screen';
 
 import type { PlayedMelodyNote } from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
@@ -84,6 +86,14 @@ export function FinaleOverlay({
 
   if (finale === 'MEMORY') {
     return <MemoryReel />;
+  }
+
+  if (finale === 'HORI_FALLING_ASLEEP') {
+    return <HoriFallingAsleep />;
+  }
+
+  if (finale === 'ENDING') {
+    return <Ending />;
   }
 
   if (finale === 'OCARINA_APPEARING' || finale === 'WAITING_FOR_MELODY') {
@@ -213,6 +223,72 @@ function MemoryReel(): React.JSX.Element {
           「俺は……眠ることを、忘れていたのか。」
         </p>
       )}
+    </section>
+  );
+}
+
+function HoriFallingAsleep(): React.JSX.Element {
+  return (
+    <section className={`${styles.overlay} ${styles.sleeping}`} aria-live="assertive">
+      <p className={styles.sleepingLine}>「……眠い。」</p>
+      <div className={styles.futonPop}>
+        <p>緊 急 布 団 配 送</p>
+        <div className={styles.futon} aria-label="突然出現した布団">
+          <span className={styles.futonPillow} />
+          <span className={styles.futonQuilt}>GOOD NIGHT</span>
+        </div>
+        <strong>Zzz...</strong>
+      </div>
+    </section>
+  );
+}
+
+function Ending(): React.JSX.Element {
+  const goTo = useScreenStore((state) => state.goTo);
+
+  return (
+    <section className={`${styles.overlay} ${styles.ending}`} aria-live="polite">
+      <video
+        className={styles.endingMovie}
+        src={horiSleepingMovie}
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
+      <div className={styles.endingShade} />
+      <div className={styles.endingIntro}>
+        <p className={styles.endingPrologue}>こうして世界に――</p>
+        <p className={styles.endingLine}>安眠が戻った。</p>
+      </div>
+      <div className={styles.credits}>
+        <p>CAST</p>
+        <strong>堀大輔　as　眠りを思い出した男</strong>
+        <p>DEVELOPED BY</p>
+        <strong>THE LEGEND OF NELDA 開発チーム</strong>
+        <p>SPECIAL THANKS</p>
+        <strong>すべての眠い人たち</strong>
+      </div>
+      <div className={styles.endingFinal}>
+        <div className={styles.endingTitle}>
+          <p>THE LEGEND OF NELDA</p>
+          <h1>THE END</h1>
+        </div>
+        <div className={styles.sleepResult}>
+          <span>堀大輔</span>
+          <strong>本日の睡眠時間　8時間00分</strong>
+        </div>
+        <button
+          className={styles.returnTitle}
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new Event('finale:ending-complete'));
+            goTo('TITLE');
+          }}
+        >
+          タイトルに戻る
+        </button>
+      </div>
     </section>
   );
 }
