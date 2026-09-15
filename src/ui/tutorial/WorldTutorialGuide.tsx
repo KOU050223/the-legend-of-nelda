@@ -34,6 +34,7 @@ export function WorldTutorialGuide(): React.JSX.Element | null {
       <span>SPACE / J：攻撃</span>
       <span>SHIFT：回避</span>
       <span>E：調べる</span>
+      <span>C：カメラ切替（3人称 / 俯瞰）</span>
     </output>
   );
 }

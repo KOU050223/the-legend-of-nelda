@@ -22,6 +22,8 @@ import {
 import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
 import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import { toCameraRelativeMovement } from '@/input/keyboard/camera-relative-movement';
+import { isFromInteractiveElement } from '@/input/keyboard/interactive-element';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
@@ -37,7 +39,7 @@ import {
 } from '@/store/local-player-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
-import { FollowCamera } from '../camera/FollowCamera';
+import { BattleThirdPersonCamera, type BattleCameraMode } from '../camera/BattleThirdPersonCamera';
 import { CharacterActor } from '../character/character-actor';
 import {
   bossMotionContextFor,
@@ -77,17 +79,6 @@ import { LegendaryOcarina } from './LegendaryOcarina';
  */
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
-
-/**
- * ボス戦の追従カメラ。探索用より高く・遠くする。
- *
- * 近い視点のままだと、絶対起床アラームの全方位リング (外径18) や
- * 突進の軌道 (長さ30) が視界へ収まらず、予兆を見て回避できない。
- */
-const BATTLE_CAMERA_OFFSET = new Vector3(0, 16, 18);
-
-/** 注視点はキャラの足元より少し先。ボスとの間を画面へ収める。 */
-const BATTLE_LOOK_AT_HEIGHT = 2;
 
 /** `?attack=WAKE_UP_ALARM` のように技を固定する。動作確認用の口。 */
 function pinnedAttackId(): HoriAttackId | null {
@@ -295,6 +286,9 @@ export function BossArenaScene({
   // プレイヤーが1人だけなので、そのまま「自分が倒れたら敗北」となる。
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
+  // 通常戦闘は3人称で始める。俯瞰は広域攻撃を確認したいときにユーザー自身が選ぶ。
+  const [cameraMode, setCameraMode] = useState<BattleCameraMode>('third-person');
+
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
   // 中身は actorRoots から引き直す (下の Effect)。
   const localRoot = useRef<Group>(null);
@@ -302,6 +296,7 @@ export function BossArenaScene({
   // 入力は useFrame から毎フレーム引く。requestAnimationFrame を別に
   // 回すと、r3f の描画ループと二重になって1フレームに2回進む。
   const inputRef = useRef<ReturnType<typeof attachKeyboardGameActions> | null>(null);
+  const cameraInputYawRef = useRef(0);
 
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
@@ -432,6 +427,17 @@ export function BossArenaScene({
   }, [battle, finale]);
 
   useEffect(() => {
+    function toggleCameraMode(event: KeyboardEvent): void {
+      if (event.code !== 'KeyC' || event.repeat || isFromInteractiveElement(event)) return;
+      event.preventDefault();
+      setCameraMode((current) => (current === 'third-person' ? 'overhead' : 'third-person'));
+    }
+
+    window.addEventListener('keydown', toggleCameraMode);
+    return () => window.removeEventListener('keydown', toggleCameraMode);
+  }, []);
+
+  useEffect(() => {
     if (battle === null) return undefined;
     // コールバックの中から読むので、narrow 済みの参照を掴んでおく。
     const localBattleForMelody = battle;
@@ -537,7 +543,13 @@ export function BossArenaScene({
       // 送り先は source が決める。ローカルは送るたびにストアから操作キャラを
       // 読み直すので (createLocalBattleSource)、切り替えてもこの Effect を
       // 張り直さずに済む。張り直すと押しっぱなしの移動が切れる。
-      if (adapter !== null) activeSource.submit(adapter.pollMove());
+      if (adapter !== null) {
+        const move = adapter.pollMove();
+        activeSource.submit({
+          ...move,
+          input: toCameraRelativeMovement(move.input, cameraInputYawRef.current),
+        });
+      }
       activeSource.submit(action);
     });
     const input = adapter;
@@ -615,7 +627,13 @@ export function BossArenaScene({
 
     // 移動は押しっぱなしの状態なので毎フレーム取り出す。
     const input = inputRef.current;
-    if (input !== null) activeSource.submit(input.pollMove());
+    if (input !== null) {
+      const move = input.pollMove();
+      activeSource.submit({
+        ...move,
+        input: toCameraRelativeMovement(move.input, cameraInputYawRef.current),
+      });
+    }
 
     // ローカルはここで時間が進み、その場で STATE が流れる。リモートは
     // サーバーが進めるので tick() は何もしない。
@@ -722,7 +740,7 @@ export function BossArenaScene({
         ボスと同じ理由で、GLBの読み込みは Suspense で受け止める。境界は
         1人ずつ分ける。3人を1つの境界でまとめると、誰か1人のGLBが読み込み
         中の間ずっと3人とも unmount され、その間 localRoot が null になって
-        FollowCamera が追従先を見失う (カメラがキャラを映さなくなる)。各Actorは
+        戦闘Camera が追従先を見失う (カメラがキャラを映さなくなる)。各Actorは
         モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
         Actor Rootへ反映する。
       */}
@@ -764,10 +782,12 @@ export function BossArenaScene({
         </Suspense>
       )}
 
-      <FollowCamera
-        target={localRoot}
-        offset={BATTLE_CAMERA_OFFSET}
-        lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
+      <BattleThirdPersonCamera
+        mode={cameraMode}
+        player={localRoot}
+        boss={bossRoot}
+        inputYawRef={cameraInputYawRef}
+        active={finale !== 'HORI_FALLING_ASLEEP'}
       />
       <SleepCamera target={bossRoot} active={finale === 'HORI_FALLING_ASLEEP'} />
       <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} />
