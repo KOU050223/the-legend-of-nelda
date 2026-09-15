@@ -29,7 +29,11 @@ import {
 } from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
-import { publishFinalePresentation, resetFinalePresentation } from './finale-presentation-store';
+import {
+  publishFinalePresentation,
+  resetFinalePresentation,
+  type PlayedMelodyNote,
+} from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
 
 /**
@@ -190,7 +194,10 @@ export function BossArenaScene(): React.JSX.Element {
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
   const [melodyStarted, setMelodyStarted] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
+  const [playedMelodyNotes, setPlayedMelodyNotes] = useState<readonly PlayedMelodyNote[]>([]);
+  const [melodyMissSequence, setMelodyMissSequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
+  const melodyNoteSequence = useRef(0);
   const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
 
   useEffect(() => {
@@ -199,8 +206,17 @@ export function BossArenaScene(): React.JSX.Element {
       finale: view.finale,
       zeroDamageSequence,
       microphoneStatus,
+      playedMelodyNotes,
+      melodyMissSequence,
     });
-  }, [view.boss.phase, view.finale, zeroDamageSequence, microphoneStatus]);
+  }, [
+    view.boss.phase,
+    view.finale,
+    zeroDamageSequence,
+    microphoneStatus,
+    playedMelodyNotes,
+    melodyMissSequence,
+  ]);
 
   useEffect(() => resetFinalePresentation, []);
 
@@ -238,9 +254,24 @@ export function BossArenaScene(): React.JSX.Element {
     function startMelody(): void {
       if (microphoneStop.current !== null || view.finale !== 'WAITING_FOR_MELODY') return;
       setMelodyStarted(true);
+      setMicrophoneStatus('requesting-permission');
       void attachMicrophoneNoteInput(
         (event) => {
-          if (melody.current.consume(event) === 'COMPLETE') {
+          if (event.type === 'note-off') return;
+
+          const result = melody.current.consume(event);
+          if (result === 'IGNORED') return;
+
+          const note: PlayedMelodyNote = {
+            id: melodyNoteSequence.current++,
+            name: event.note.name,
+            correct: result === 'CORRECT' || result === 'COMPLETE',
+          };
+          setPlayedMelodyNotes((current) => [...current.slice(-5), note]);
+
+          if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
+
+          if (result === 'COMPLETE') {
             microphoneStop.current?.();
             microphoneStop.current = null;
             battle.advanceFinale();
@@ -319,6 +350,10 @@ export function BossArenaScene(): React.JSX.Element {
       setImminent(false);
       setZeroDamageSequence(0);
       setMelodyStarted(false);
+      setMicrophoneStatus('idle');
+      setPlayedMelodyNotes([]);
+      setMelodyMissSequence(0);
+      melodyNoteSequence.current = 0;
       melody.current.reset();
     }
 

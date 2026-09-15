@@ -140,9 +140,9 @@
   position: absolute;
   inset: 0;
   display: grid;
-  align-content: end;
+  align-content: center;
   justify-items: center;
-  padding-bottom: 12vh;
+  padding: 0 4vw;
   background: radial-gradient(circle at 50% 56%, #f5c74844, transparent 42%);
   animation: cinematicIn 0.45s ease-out both;
 }
@@ -164,14 +164,18 @@
 }
 
 .startMelody { margin-top: 26px; padding: 12px 32px; color: #fff4c7; background: #32120ddd; border: 1px solid #ffe781; box-shadow: 0 4px 0 #160704; font: 800 18px system-ui; cursor: pointer; pointer-events: auto; }
-.sheet { width: min(680px, 76vw); margin: 28px auto 0; padding: 18px 32px; color: #4a2615; background: #ebd39a; box-shadow: inset 0 0 0 3px #9a7138, inset 0 0 24px #805a2c99, 0 8px 30px #0008; font-family: Georgia, serif; transform: rotate(-1deg); }
-.sheetTitle { margin: 0 0 6px; color: #b4261d; font-size: clamp(17px, 2vw, 26px); text-shadow: none; }
-.staff { display: flex; align-items: center; justify-content: center; gap: clamp(10px, 2vw, 28px); min-height: 78px; background: repeating-linear-gradient(to bottom, transparent 0 12px, #72533499 12px 14px, transparent 14px 24px); }
-.clef { font-size: 72px; line-height: 1; text-shadow: none; }
-.note { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #382416; color: #f8e5ae; font: 700 11px system-ui; text-shadow: none; transform: translateY(var(--note-y, 0)); }
-.note:nth-of-type(3), .note:nth-of-type(6) { --note-y: -17px; }
-.note:nth-of-type(4) { --note-y: 13px; }
-.sheetHint { margin: 10px 0 0; font-size: 14px; text-shadow: none; }
+.sheet { width: min(1000px, 92vw); margin: 0 auto; padding: clamp(24px, 4vw, 48px) clamp(30px, 6vw, 76px); color: #4a2615; background: #ebd39a; box-shadow: inset 0 0 0 4px #9a7138, inset 0 0 32px #805a2c99, 0 12px 42px #0009; font-family: Georgia, serif; transform: rotate(-.6deg); }
+.sheetTitle { margin: 0 0 18px; color: #b4261d; font-size: clamp(28px, 4.2vw, 58px); text-shadow: none; }
+.staff { display: flex; align-items: center; justify-content: center; min-height: clamp(126px, 18vw, 188px); padding: 0 clamp(14px, 3vw, 42px); background: repeating-linear-gradient(to bottom, transparent 0 20px, #72533499 20px 23px, transparent 23px 40px); }
+.staffMiss { animation: sheetMiss .38s ease-out; }
+.clef { margin-right: clamp(20px, 4vw, 56px); font-size: clamp(92px, 13vw, 142px); line-height: 1; text-shadow: none; }
+.noteTrack { display: flex; align-items: center; justify-content: center; gap: clamp(18px, 4vw, 58px); min-width: min(620px, 58vw); }
+.note { display: grid; place-items: center; width: clamp(36px, 4vw, 52px); height: clamp(36px, 4vw, 52px); border-radius: 50%; color: #f8e5ae; font: 800 clamp(12px, 1.5vw, 18px) system-ui; text-shadow: none; transform: translateY(var(--note-y)); animation: noteAppear .28s cubic-bezier(.18,.9,.34,1.32) both; }
+.noteCorrect { background: #382416; box-shadow: 0 4px 0 #211508; }
+.noteWrong { background: #b52024; box-shadow: 0 0 0 4px #f7c16d, 0 5px 0 #661013; animation: wrongNote .6s ease-out both; }
+.noteC { --note-y: 36px; }.noteD { --note-y: 18px; }.noteE { --note-y: 0px; }.noteF { --note-y: -18px; }.noteG { --note-y: -36px; }.noteA { --note-y: -54px; }.noteB { --note-y: -72px; }.noteSharp { --note-y: -9px; }
+.miss { margin: 20px 0 0; color: #b52024; font: 800 clamp(18px, 2.4vw, 30px)/1.2 system-ui; text-shadow: 1px 1px #f7dca2; animation: missText .5s ease-out both; }
+.sheetHint { margin: 20px 0 0; font-size: clamp(17px, 2.2vw, 27px); text-shadow: none; }
 
 @keyframes warningIn {
   from { opacity: 0; scale: 1.05; filter: saturate(0); }
@@ -207,6 +211,29 @@
 @keyframes cinematicIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes noteAppear {
+  from { opacity: 0; transform: translateY(calc(var(--note-y) - 42px)) scale(.4); }
+  to { opacity: 1; transform: translateY(var(--note-y)) scale(1); }
+}
+
+@keyframes wrongNote {
+  0%, 100% { transform: translateY(var(--note-y)) rotate(0); }
+  25% { transform: translateY(var(--note-y)) rotate(-14deg) scale(1.22); }
+  55% { transform: translateY(var(--note-y)) rotate(12deg) scale(1.12); }
+}
+
+@keyframes sheetMiss {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-16px); }
+  55% { transform: translateX(13px); }
+}
+
+@keyframes missText {
+  from { opacity: 0; transform: translateY(12px) scale(1.2); }
+  20%, 72% { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(.96); }
 }
 
 @media (prefers-reduced-motion: reduce) {

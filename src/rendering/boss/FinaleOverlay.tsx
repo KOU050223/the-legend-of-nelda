@@ -1,11 +1,11 @@
 import type { BossPhase } from '@/game/boss/boss-phase';
 import type { FinaleState } from '@/game/finale/finale-state';
 import type { MicrophoneInputStatus } from '@/input/microphone/types';
+import type { NoteName } from '@/input/microphone/types';
 import { useState } from 'react';
 
+import type { PlayedMelodyNote } from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
-
-const SHEET_NOTES = ['ド-1', 'ミ-1', 'ソ', 'ミ-2', 'ド-2', 'ソ-2'] as const;
 
 export interface FinaleOverlayProps {
   readonly phase: BossPhase;
@@ -13,6 +13,8 @@ export interface FinaleOverlayProps {
   /** 同じ文言を再生し直すための連番。0なら表示しない。 */
   readonly zeroDamageSequence: number;
   readonly microphoneStatus: MicrophoneInputStatus;
+  readonly playedMelodyNotes: readonly PlayedMelodyNote[];
+  readonly melodyMissSequence: number;
 }
 
 /** 最終局面のDOM演出。Canvas上の3D表示とは分け、文字の可読性を優先する。 */
@@ -21,6 +23,8 @@ export function FinaleOverlay({
   finale,
   zeroDamageSequence,
   microphoneStatus,
+  playedMelodyNotes,
+  melodyMissSequence,
 }: FinaleOverlayProps): React.JSX.Element | null {
   const [performing, setPerforming] = useState(false);
   const noSleepMode = phase === 'NO_SLEEP_MODE';
@@ -78,7 +82,11 @@ export function FinaleOverlay({
           ) : (
             <>
               {performing ? (
-                <SheetMusic microphoneStatus={microphoneStatus} />
+                <SheetMusic
+                  microphoneStatus={microphoneStatus}
+                  playedNotes={playedMelodyNotes}
+                  missSequence={melodyMissSequence}
+                />
               ) : (
                 <>
                   <p>
@@ -112,23 +120,79 @@ export function FinaleOverlay({
 
 function SheetMusic({
   microphoneStatus,
+  playedNotes,
+  missSequence,
 }: {
   microphoneStatus: MicrophoneInputStatus;
+  playedNotes: readonly PlayedMelodyNote[];
+  missSequence: number;
 }): React.JSX.Element {
   return (
     <section className={styles.sheet} aria-label="安眠の旋律の楽譜">
       <p className={styles.sheetTitle}>安眠の旋律を吹け！</p>
-      <div className={styles.staff}>
+      <div className={`${styles.staff} ${missSequence > 0 ? styles.staffMiss : ''}`}>
         <span className={styles.clef}>𝄞</span>
-        {SHEET_NOTES.map((entry) => (
-          <span className={styles.note} key={entry}>
-            {entry.split('-')[0]}
-          </span>
-        ))}
+        <div className={styles.noteTrack} aria-label="認識した音">
+          {playedNotes.map((note) => (
+            <span
+              className={`${styles.note} ${note.correct ? styles.noteCorrect : styles.noteWrong} ${noteHeightClass(note.name)}`}
+              key={note.id}
+            >
+              {noteNameLabel(note.name)}
+            </span>
+          ))}
+        </div>
       </div>
+      {missSequence > 0 && (
+        <p className={styles.miss} key={missSequence}>
+          ♪ その音じゃない！ もう一度！
+        </p>
+      )}
       <p className={styles.sheetHint}>{microphoneMessage(microphoneStatus)}</p>
     </section>
   );
+}
+
+function noteNameLabel(note: NoteName): string {
+  switch (note) {
+    case 'C':
+      return 'ド';
+    case 'D':
+      return 'レ';
+    case 'E':
+      return 'ミ';
+    case 'F':
+      return 'ファ';
+    case 'G':
+      return 'ソ';
+    case 'A':
+      return 'ラ';
+    case 'B':
+      return 'シ';
+    default:
+      return note;
+  }
+}
+
+function noteHeightClass(note: NoteName): string {
+  switch (note) {
+    case 'C':
+      return styles.noteC ?? '';
+    case 'D':
+      return styles.noteD ?? '';
+    case 'E':
+      return styles.noteE ?? '';
+    case 'F':
+      return styles.noteF ?? '';
+    case 'G':
+      return styles.noteG ?? '';
+    case 'A':
+      return styles.noteA ?? '';
+    case 'B':
+      return styles.noteB ?? '';
+    default:
+      return styles.noteSharp ?? '';
+  }
 }
 
 function microphoneMessage(status: MicrophoneInputStatus): string {

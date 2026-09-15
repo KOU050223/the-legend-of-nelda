@@ -1,12 +1,23 @@
 import type { BossPhase } from '@/game/boss/boss-phase';
 import type { FinaleState } from '@/game/finale/finale-state';
 import type { MicrophoneInputStatus } from '@/input/microphone/types';
+import type { NoteName } from '@/input/microphone/types';
+
+export interface PlayedMelodyNote {
+  readonly id: number;
+  readonly name: NoteName;
+  readonly correct: boolean;
+}
 
 export interface FinalePresentationSnapshot {
   readonly phase: BossPhase;
   readonly finale: FinaleState;
   readonly zeroDamageSequence: number;
   readonly microphoneStatus: MicrophoneInputStatus;
+  /** 実際にマイクから確定した音だけを、五線譜へ表示する。 */
+  readonly playedMelodyNotes: readonly PlayedMelodyNote[];
+  /** 同じミス演出を連続して再生するための連番。 */
+  readonly melodyMissSequence: number;
 }
 
 const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
@@ -14,6 +25,8 @@ const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
   finale: 'NONE',
   zeroDamageSequence: 0,
   microphoneStatus: 'idle',
+  playedMelodyNotes: [],
+  melodyMissSequence: 0,
 };
 
 let snapshot = INITIAL_SNAPSHOT;
@@ -33,7 +46,9 @@ export function publishFinalePresentation(next: FinalePresentationSnapshot): voi
     snapshot.phase === next.phase &&
     snapshot.finale === next.finale &&
     snapshot.zeroDamageSequence === next.zeroDamageSequence &&
-    snapshot.microphoneStatus === next.microphoneStatus
+    snapshot.microphoneStatus === next.microphoneStatus &&
+    snapshot.playedMelodyNotes === next.playedMelodyNotes &&
+    snapshot.melodyMissSequence === next.melodyMissSequence
   )
     return;
   snapshot = next;
