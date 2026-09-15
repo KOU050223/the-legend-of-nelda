@@ -26,6 +26,14 @@ vi.mock('@/ui/hori-debug/HoriDebugPage', () => ({
   HoriDebugPage: () => <div data-testid="hori-debug" />,
 }));
 
+vi.mock('@/intro/IntroCutscene', () => ({
+  IntroCutscene: ({ onComplete }: { onComplete: () => void }) => (
+    <button type="button" onClick={onComplete}>
+      イントロをスキップ
+    </button>
+  ),
+}));
+
 describe('ルートの画面遷移', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
@@ -55,13 +63,12 @@ describe('ルートの画面遷移', () => {
     expect(screen.queryByRole('region', { name: '演出設定' })).not.toBeInTheDocument();
   });
 
-  it('タイトルから「はじめから」を押すと戦闘画面が出る (Issue #63)', () => {
+  it('タイトルから「はじめから」を押すとイントロ画面が出る (Issue #64)', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
-    expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '演出設定' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'イントロをスキップ' })).toBeInTheDocument();
   });
 
   it('「ワールドへ」で出るのは戦闘ではなくワールドの中身 (Issue #63)', () => {
@@ -74,12 +81,14 @@ describe('ルートの画面遷移', () => {
     expect(gameSceneProps.at(-1)?.world).toBe(true);
   });
 
-  it('戦闘画面はワールドとして描かない (Issue #63)', () => {
+  it('イントロをスキップするとワールドを開く (Issue #64)', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
-    expect(gameSceneProps.at(-1)?.world).toBeFalsy();
+    fireEvent.click(screen.getByRole('button', { name: 'イントロをスキップ' }));
+
+    expect(gameSceneProps.at(-1)?.world).toBe(true);
   });
 
   it('画面を選ぶと直接開ける URL に移動する', () => {
@@ -87,7 +96,7 @@ describe('ルートの画面遷移', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'はじめから' }));
 
-    expect(window.location.pathname).toBe('/battle');
+    expect(window.location.pathname).toBe('/intro');
   });
 
   it('ブラウザの戻る操作で画面もタイトルへ戻る', () => {
