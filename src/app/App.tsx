@@ -11,8 +11,9 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
-import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
+import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
 import { useScreenStore } from './screen';
@@ -29,6 +30,19 @@ import styles from './App.module.css';
  */
 const MicrophoneDebug = import.meta.env.DEV
   ? lazy(async () => ({ default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug }))
+  : null;
+
+/**
+ * モーション確認と割り当ての画面。(`?debug=motion`)
+ *
+ * マニフェストの保存は開発サーバーの口を叩くので、本番では動かない。
+ * MicrophoneDebug と同じく lazy() の呼び出しごと DEV ガードの内側へ置き、
+ * 本番バンドルへ出力されないようにする。
+ */
+const MotionDebugPage = import.meta.env.DEV
+  ? lazy(async () => ({
+      default: (await import('@/ui/motion-debug/MotionDebugPage')).MotionDebugPage,
+    }))
   : null;
 
 // LiveKit SDK は通常のゲーム体験には不要なので、明示的な検証画面を開いた時だけ読む。
@@ -48,15 +62,21 @@ export function App(): React.JSX.Element {
     }
   }, [route]);
 
-  // `?debug=ora` `?debug=hori` はタイトルより先に見る。URLで直接開く動作確認用の
+  // `?debug=ora` `?debug=motion` はタイトルより先に見る。URLで直接開く動作確認用の
   // 入口なので、タイトルを経由させると既存の手順が変わってしまう
   // (`?scene=world` と同じ扱い)。
   const debug = new URLSearchParams(window.location.search).get('debug');
   if (route === 'ORA_DEBUG') {
     return <OraDebugPage />;
   }
-  if (debug === 'hori') {
-    return <HoriDebugPage />;
+  // `?debug=hori` は旧称。モーション確認画面がボス専用だった頃の入口で、
+  // 手順書やブックマークに残っているため受け続ける。
+  if (MotionDebugPage !== null && (debug === 'motion' || debug === 'hori')) {
+    return (
+      <Suspense fallback={null}>
+        <MotionDebugPage />
+      </Suspense>
+    );
   }
 
   if (new URLSearchParams(window.location.search).get('debug') === 'wasshoi') {
@@ -84,6 +104,12 @@ export function App(): React.JSX.Element {
       <div className={styles.root}>
         <GameScene world />
         <FinalePresentation />
+        <WorldTutorialGuide />
+        {/*
+          操作キャラの切り替え (Issue #106)。DEV ガードは付けない。
+          一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
+        */}
+        <PlayerSwitch />
         <MicrophoneDebugPanel />
       </div>
     );

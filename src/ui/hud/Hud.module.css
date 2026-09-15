@@ -82,18 +82,3 @@
 .lastAction {
   flex-basis: 100%;
 }
-
-/* チュートリアルの操作補助。イベント文言 (画面中央) とキー凡例 (最下部) の
-   どちらとも重ならないよう、凡例のすぐ上へ置く。 */
-.tutorialAssist {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 5rem;
-  margin: 0;
-  text-align: center;
-  color: #bfe2ff;
-  font-size: clamp(1rem, 2.5vw, 1.5rem);
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-shadow: 0 2px 10px rgb(0 0 0 / 70%);
-}

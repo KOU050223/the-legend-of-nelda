@@ -6,6 +6,7 @@ import { requestedScene } from '@/app/scene-mode';
 
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
+import { TutorialFairy } from '../character/TutorialFairy';
 import { VfxScene } from '../vfx/VfxScene';
 import { Ground } from '../world/Ground';
 import { WorldScene } from './WorldScene';
@@ -58,6 +59,7 @@ export function GameScene({ world }: GameSceneProps = {}): React.JSX.Element {
           <VfxScene getSettings={readPresentationSettings}>
             <BossMesh />
             <PlayerMesh />
+            <TutorialFairy />
             <Ground size={COMBAT_GROUND_SIZE} />
           </VfxScene>
 

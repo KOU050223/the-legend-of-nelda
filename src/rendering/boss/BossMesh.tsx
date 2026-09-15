@@ -2,6 +2,7 @@ import { Suspense, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
 import { useGameStore } from '@/store/game-store';
+import type { CombatState } from '@/game/types/combat-state';
 import { RESULT_TIMING } from '@/ui/result/result-presentation';
 
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -10,6 +11,11 @@ import { visualScale } from '@/presentation/presentation-settings';
 import { hitStopDelta } from '../vfx/hit-stop';
 import { useVfxStore } from '../vfx/vfx-store';
 import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
+import type { MotionContext } from '../character/motion-manifest';
+
+export function motionContextForCombatState(state: CombatState): MotionContext {
+  return { attacking: state === 'ATTACK' };
+}
 
 /**
  * Boss「堀大輔」。GLBモデルとモーションは HoriDaisukeModel が担当し、
@@ -18,6 +24,7 @@ import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
  * GLBの読み込み中は Graybox First の箱を出す (docs/technical-design.md §12)。
  */
 export function BossMesh(): React.JSX.Element {
+  const combatState = useGameStore((state) => state.combatState);
   const root = useRef<Group>(null);
   const idlePhase = useRef(0);
   const defeatRotation = useRef<number | null>(null);
@@ -54,7 +61,7 @@ export function BossMesh(): React.JSX.Element {
   return (
     <group ref={root}>
       <Suspense fallback={<BossPlaceholder />}>
-        <HoriDaisukeModel />
+        <HoriDaisukeModel context={motionContextForCombatState(combatState)} />
       </Suspense>
     </group>
   );

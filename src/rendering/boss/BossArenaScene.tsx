@@ -1,8 +1,11 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
+
 import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { MathUtils, Vector3, type Group } from 'three';
 
+import { createAudioManager } from '@/audio/audio-manager';
+import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
@@ -19,14 +22,32 @@ import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter'
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
+import type { PlanarPosition } from '@/game/movement/types';
+import { readPresentationSettings } from '@/presentation/presentation-store';
+import type { PlayerStatus } from '@/game/player/player-state';
+import {
+  isLocalPlayerId,
+  LOCAL_PLAYER_IDS,
+  readLocalPlayerId,
+  useLocalPlayerStore,
+  type LocalPlayerId,
+} from '@/store/local-player-store';
+import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
+import {
+  bossMotionContextFor,
+  isSameMotionContext,
+  motionContextFor,
+} from '../character/motion-context';
 import { syncCharacterRoot } from '../character/character-root';
+import { TutorialFairy } from '../character/TutorialFairy';
 import {
   DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
   HoriDaisukeModel,
 } from '../character/HoriDaisukeModel';
+import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 import {
@@ -47,11 +68,10 @@ import { LegendaryOcarina } from './LegendaryOcarina';
  * 危険範囲は判定に使う `DangerZone` をそのまま描く。表示用に別の形を
  * 作らないことが「危険範囲が視覚的に読める」(#58) の前提。
  *
- * 操作するのは1人 (オドルノ) だけ。3人分の同時操作は #52 P6。
+ * 操作するのは同時に1人だけで、3人分の同時操作は #52 P6。ただし「その1人が
+ * 誰か」は画面から切り替えられる (Issue #106)。roster には最初から3人居るので、
+ * キーボードとカメラの接続先を差し替えるだけで切り替わる。
  */
-
-/** 操作するプレイヤー。 */
-const LOCAL_PLAYER_ID = 'odoruno';
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
@@ -73,18 +93,18 @@ function pinnedAttackId(): HoriAttackId | null {
   return HORI_ATTACK_IDS.find((id) => id === requested) ?? null;
 }
 
-/** 結界UI・3人操作が未統合の段階で、後半フェーズを確認するための開発限定口。 */
-function shouldSkipBarriers(): boolean {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('skipBarrier') === '1';
-}
-
-interface BattleRuntime {
+/**
+ * 戦闘と、そのイベントバス。
+ *
+ * バスを戦闘の中へ閉じ込めると購読者を足せない (`BossBattle` はバスを
+ * 公開していない)。SE を鳴らすには購読が要るので、作った側が持っておく。
+ */
+interface Battle {
   readonly battle: BossBattle;
   readonly events: GameEventBus;
 }
 
-function createBattleRuntime(): BattleRuntime {
+function createBattle(): Battle {
   const pinned = pinnedAttackId();
   const events = createGameEventBus();
   const battle = createBossBattle({
@@ -93,14 +113,14 @@ function createBattleRuntime(): BattleRuntime {
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
-      { id: LOCAL_PLAYER_ID, characterId: 'ODORUNO', position: PLAYER_SPAWN },
+      { id: 'odoruno', characterId: 'ODORUNO', position: PLAYER_SPAWN },
       { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
       { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
-    debugSkipBarriers: shouldSkipBarriers(),
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
+
   return { battle, events };
 }
 
@@ -110,19 +130,52 @@ function createBattleRuntime(): BattleRuntime {
  * 位置と向きは Object3D へ直接入れているので比較に含めない。含めると
  * 毎フレーム「変わった」ことになり、state へ逃がした意味が無くなる。
  */
-function isSameView(a: BattleSnapshot, b: BattleSnapshot): boolean {
-  if (a.boss.hp !== b.boss.hp || a.boss.phase !== b.boss.phase || a.finale !== b.finale) {
-    return false;
-  }
-  if (a.players.length !== b.players.length) return false;
+/**
+ * 表示が読む状態のひと組。
+ *
+ * スナップショットに時刻を添える。連撃の局面は経過時間で決まるので、
+ * 「いつ時点のスナップショットか」が無いとモーションを決められない。
+ * 描画と再レンダー判定で同じ時刻を使うために、状態として一緒に持つ。
+ */
+interface View {
+  readonly snapshot: BattleSnapshot;
+  readonly now: number;
+  readonly playerMotionContexts: readonly MotionContext[];
+  readonly bossMotionContext: MotionContext;
+}
 
-  return a.players.every((player, index) => {
-    const other = b.players[index];
+function motionContextsFor(
+  snapshot: BattleSnapshot,
+  now: number,
+  previousPositions: ReadonlyMap<string, PlanarPosition>,
+  previousBossPosition: PlanarPosition | undefined,
+): Pick<View, 'playerMotionContexts' | 'bossMotionContext'> {
+  return {
+    playerMotionContexts: snapshot.players.map((player) =>
+      motionContextFor(player, now, previousPositions.get(player.id)),
+    ),
+    bossMotionContext: bossMotionContextFor(snapshot.boss, now, previousBossPosition),
+  };
+}
+
+function isSameView(a: View, b: View): boolean {
+  if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
+  if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
+  if (a.snapshot.finale !== b.snapshot.finale) return false;
+  if (a.snapshot.players.length !== b.snapshot.players.length) return false;
+  if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
+
+  return a.snapshot.players.every((player, index) => {
+    const other = b.snapshot.players[index];
     return (
       other !== undefined &&
       player.hp === other.hp &&
       player.status === other.status &&
-      player.reviveInputs === other.reviveInputs
+      player.reviveInputs === other.reviveInputs &&
+      // モーションが変わるときは作り直す。`swing` をそのまま比べると、
+      // 同じ振りの最中に時刻が進むだけで毎フレーム「変わった」ことになる。
+      // 解決後の条件で比べると、変わるのは1回の振りにつき2回で済む。
+      isSameMotionContext(a.playerMotionContexts[index] ?? {}, b.playerMotionContexts[index] ?? {})
     );
   });
 }
@@ -147,21 +200,53 @@ function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolea
  */
 type SceneOutcome = BattleOutcome | 'LOCAL_DOWN';
 
-function sceneOutcome(battle: BossBattle): SceneOutcome {
+function sceneOutcome(battle: BossBattle, localPlayerId: LocalPlayerId): SceneOutcome {
   const settled = battle.outcome();
   if (settled !== 'ONGOING') return settled;
 
-  const local = battle.players.find((player) => player.snapshot().id === LOCAL_PLAYER_ID);
+  const local = battle.players.find((player) => player.snapshot().id === localPlayerId);
   // 倒れて寝落ちのカウントが始まっている間も、操作は戻らない。
   return local !== undefined && local.snapshot().status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
 }
 
+/**
+ * 各プレイヤーの状態を切り替えパネルへ渡す。
+ *
+ * 変わったときだけ書く。毎フレーム同じ値を set すると、購読している
+ * パネルが毎フレーム再レンダーされる (view / zones と同じ規律)。
+ */
+function publishLocalPlayerStatuses(snapshot: BattleSnapshot): void {
+  const { statuses, setStatuses } = useLocalPlayerStore.getState();
+
+  const next: Partial<Record<LocalPlayerId, PlayerStatus>> = {};
+  for (const player of snapshot.players) {
+    if (isLocalPlayerId(player.id)) next[player.id] = player.status;
+  }
+
+  const changed =
+    Object.keys(next).length !== Object.keys(statuses).length ||
+    LOCAL_PLAYER_IDS.some((id) => next[id] !== statuses[id]);
+  if (changed) setStatuses(next);
+}
+
 export function BossArenaScene(): React.JSX.Element {
+  const worldTutorialVisible = useWorldTutorialStore((state) => state.visible);
+  const localPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
+
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [runtime, setRuntime] = useState<BattleRuntime>(createBattleRuntime);
-  const { battle } = runtime;
+  const [{ battle, events }, setBattle] = useState<Battle>(createBattle);
+
+  // SE。戦闘が流すイベントを購読して鳴らす。戦闘を作り直したら (やり直し)
+  // 前の購読と音源を捨てて繋ぎ直す。
+  //
+  // ここで購読していなければ、戦闘がイベントを流しても誰も聞いていない
+  // 状態になる。単騎PoC 側は combat-session.ts が同じ形で繋いでいる。
+  useEffect(() => {
+    const output = createHtmlAudioOutput();
+    return createAudioManager({ eventBus: events, output, getSettings: readPresentationSettings });
+  }, [events]);
 
   // 画面に出す決着。
   //
@@ -176,6 +261,7 @@ export function BossArenaScene(): React.JSX.Element {
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
+  // 中身は actorRoots から引き直す (下の Effect)。
   const localRoot = useRef<Group>(null);
 
   // 入力は useFrame から毎フレーム引く。requestAnimationFrame を別に
@@ -187,11 +273,18 @@ export function BossArenaScene(): React.JSX.Element {
   const bossRoot = useRef<Group>(null);
   const bossVisual = useRef<Group>(null);
   const actorRoots = useRef(new Map<string, Group>());
+  const previousPositions = useRef(new Map<string, PlanarPosition>());
+  const previousBossPosition = useRef<PlanarPosition | undefined>(undefined);
   // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
-  const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
+  const [view, setView] = useState<View>(() => ({
+    snapshot: battle.snapshot(),
+    now: performance.now(),
+    playerMotionContexts: [],
+    bossMotionContext: {},
+  }));
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
   const [melodyStarted, setMelodyStarted] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
@@ -202,16 +295,12 @@ export function BossArenaScene(): React.JSX.Element {
   const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
-  const melody = useRef(
-    createMelodyRecognizer({
-      notes: ['C', 'E', 'G', 'E', 'C', 'G'],
-    }),
-  );
+  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
 
   useEffect(() => {
     publishFinalePresentation({
-      phase: view.boss.phase,
-      finale: view.finale,
+      phase: view.snapshot.boss.phase,
+      finale: view.snapshot.finale,
       zeroDamageSequence,
       microphoneStatus,
       playedMelodyNotes,
@@ -219,110 +308,64 @@ export function BossArenaScene(): React.JSX.Element {
       melodyExpected,
       showMelodyHint,
     });
-  }, [
-    view.boss.phase,
-    view.finale,
-    zeroDamageSequence,
-    microphoneStatus,
-    playedMelodyNotes,
-    melodyMissSequence,
-    melodyExpected,
-    showMelodyHint,
-  ]);
+  }, [view.snapshot.boss.phase, view.snapshot.finale, zeroDamageSequence, microphoneStatus, playedMelodyNotes, melodyMissSequence, melodyExpected, showMelodyHint]);
 
   useEffect(() => resetFinalePresentation, []);
 
-  useEffect(
-    () =>
-      runtime.events.subscribe((event) => {
-        if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
-          setZeroDamageSequence((current) => current + 1);
-        }
-      }),
-    [runtime.events],
-  );
+  useEffect(() => events.subscribe((event) => {
+    if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
+      setZeroDamageSequence((current) => current + 1);
+    }
+  }), [events]);
 
   useEffect(() => {
     if (zeroDamageSequence === 0) return undefined;
-
     const timer = window.setTimeout(() => setZeroDamageSequence(0), 900);
     return () => window.clearTimeout(timer);
   }, [zeroDamageSequence]);
 
   useEffect(() => {
-    const delayMs =
-      // 台詞を読ませる間と、オカリナが空から降りる間を別々に確保する。
-      // 最終局面の急な切り替えに見せず、後続の旋律入力へ気持ちを向けさせるため。
-      view.finale === 'FINAL_STANDOFF'
-        ? 7_500
-        : view.finale === 'OCARINA_APPEARING'
-          ? 5_200
-          : // 旋律完成の余韻を置いてから、回想へ暗転する。
-            view.finale === 'MELODY_ACCEPTED'
-            ? 2_700
-            : view.finale === 'MEMORY'
-              ? 14_500
-              : view.finale === 'HORI_FALLING_ASLEEP'
-                ? 5_000
-                : null;
+    const finale = view.snapshot.finale;
+    const delayMs = finale === 'FINAL_STANDOFF' ? 7_500
+      : finale === 'OCARINA_APPEARING' ? 5_200
+        : finale === 'MELODY_ACCEPTED' ? 2_700
+          : finale === 'MEMORY' ? 14_500
+            : finale === 'HORI_FALLING_ASLEEP' ? 5_000 : null;
     if (delayMs === null) return undefined;
-
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
-  }, [battle, view.finale]);
+  }, [battle, view.snapshot.finale]);
 
   useEffect(() => {
     let disposed = false;
-
     function startMelody(): void {
-      if (microphoneStop.current !== null || view.finale !== 'WAITING_FOR_MELODY') return;
+      if (microphoneStop.current !== null || view.snapshot.finale !== 'WAITING_FOR_MELODY') return;
       setMelodyStarted(true);
       setMicrophoneStatus('requesting-permission');
       setMelodyExpected(melody.current.snapshot().expected);
       setShowMelodyHint(false);
-      void attachMicrophoneNoteInput(
-        (event) => {
-          if (event.type === 'note-off') return;
-
-          // 同じ息の途中で自然音から半音へ揺れるのは、実機では音程のブレとして
-          // 起きやすい。これは直前の音と二重に書かない。一方、吹き直した半音は
-          // note-on になるため、ド#などとして正しく楽譜へ出る。
-          if (event.type === 'note-change' && event.note.name.includes('#')) return;
-
-          const result = melody.current.consume(event);
-          if (result === 'IGNORED') return;
-          const melodySnapshot = melody.current.snapshot();
-          setMelodyExpected(melodySnapshot.expected);
-          setShowMelodyHint(melodySnapshot.showHint);
-          setMelodyActivitySequence((current) => current + 1);
-
-          const note: PlayedMelodyNote = {
-            id: melodyNoteSequence.current++,
-            name: event.note.name,
-            correct: result === 'CORRECT' || result === 'COMPLETE',
-          };
-          setPlayedMelodyNotes((current) => [...current.slice(-5), note]);
-
-          if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
-
-          if (result === 'COMPLETE') {
-            microphoneStop.current?.();
-            microphoneStop.current = null;
-            battle.advanceFinale();
-          }
-        },
-        { onStatusChange: setMicrophoneStatus },
-      )
-        .then((stop) => {
-          if (disposed) {
-            stop();
-            return;
-          }
-          microphoneStop.current = stop;
-        })
-        .catch(() => undefined);
+      void attachMicrophoneNoteInput((event) => {
+        if (event.type === 'note-off' || (event.type === 'note-change' && event.note.name.includes('#'))) return;
+        const result = melody.current.consume(event);
+        if (result === 'IGNORED') return;
+        const snapshot = melody.current.snapshot();
+        setMelodyExpected(snapshot.expected);
+        setShowMelodyHint(snapshot.showHint);
+        setMelodyActivitySequence((current) => current + 1);
+        setPlayedMelodyNotes((current) => [...current.slice(-5), {
+          id: melodyNoteSequence.current++, name: event.note.name,
+          correct: result === 'CORRECT' || result === 'COMPLETE',
+        }]);
+        if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
+        if (result === 'COMPLETE') {
+          microphoneStop.current?.();
+          microphoneStop.current = null;
+          battle.advanceFinale();
+        }
+      }, { onStatusChange: setMicrophoneStatus }).then((stop) => {
+        if (disposed) stop(); else microphoneStop.current = stop;
+      }).catch(() => undefined);
     }
-
     window.addEventListener('finale:melody-start', startMelody);
     return () => {
       disposed = true;
@@ -330,49 +373,37 @@ export function BossArenaScene(): React.JSX.Element {
       microphoneStop.current?.();
       microphoneStop.current = null;
     };
-  }, [battle, view.finale]);
+  }, [battle, view.snapshot.finale]);
 
   useEffect(() => {
-    if (!melodyStarted || view.finale !== 'WAITING_FOR_MELODY') return undefined;
-
-    // 演奏の手が止まってもクライマックスを無言で詰まらせない。正誤を問わず
-    // 安定した1音を受け取るたびにタイマーを張り直す。開始直後よりも、途中で
-    // 止まったときは少し早く次音を出す。
-    const hintDelayMs = melodyActivitySequence === 0 ? 9_000 : 7_000;
-    const timer = window.setTimeout(() => setShowMelodyHint(true), hintDelayMs);
+    if (!melodyStarted || view.snapshot.finale !== 'WAITING_FOR_MELODY') return undefined;
+    const timer = window.setTimeout(() => setShowMelodyHint(true), melodyActivitySequence === 0 ? 9_000 : 7_000);
     return () => window.clearTimeout(timer);
-  }, [melodyActivitySequence, melodyStarted, view.finale]);
+  }, [melodyActivitySequence, melodyStarted, view.snapshot.finale]);
 
   useEffect(() => {
-    function completeEnding(): void {
-      if (view.finale === 'ENDING') battle.advanceFinale();
-    }
-
+    const completeEnding = () => {
+      if (view.snapshot.finale === 'ENDING') battle.advanceFinale();
+    };
     window.addEventListener('finale:ending-complete', completeEnding);
     return () => window.removeEventListener('finale:ending-complete', completeEnding);
-  }, [battle, view.finale]);
+  }, [battle, view.snapshot.finale]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined;
-
-    function onDebugFinale(event: KeyboardEvent): void {
+    const onDebugFinale = (event: KeyboardEvent) => {
       if (event.repeat) return;
-      if (event.code === 'KeyZ') {
-        battle.debugEnterNoSleepMode();
-        return;
-      }
-      // 発表・回想演出の確認用。通常ビルドではリスナー自体を登録しない。
-      if (event.code === 'KeyM' && view.finale === 'WAITING_FOR_MELODY') {
+      if (event.code === 'KeyZ') battle.debugEnterNoSleepMode();
+      if (event.code === 'KeyM' && view.snapshot.finale === 'WAITING_FOR_MELODY') {
         melody.current.forceComplete();
         microphoneStop.current?.();
         microphoneStop.current = null;
         battle.advanceFinale();
       }
-    }
-
+    };
     window.addEventListener('keydown', onDebugFinale);
     return () => window.removeEventListener('keydown', onDebugFinale);
-  }, [battle, view.finale]);
+  }, [battle, view.snapshot.finale]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -387,8 +418,11 @@ export function BossArenaScene(): React.JSX.Element {
       // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
       // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
       // 別方向へ転がる。
-      if (adapter !== null) battle.submit(LOCAL_PLAYER_ID, adapter.pollMove());
-      battle.submit(LOCAL_PLAYER_ID, action);
+      // 操作対象は毎回ストアから読む。フックの戻り値を掴んで deps へ入れると
+      // 切り替えのたびにこの Effect が張り直され、押しっぱなしの移動が切れる。
+      const activePlayerId = readLocalPlayerId();
+      if (adapter !== null) battle.submit(activePlayerId, adapter.pollMove());
+      battle.submit(activePlayerId, action);
     });
     const input = adapter;
 
@@ -408,7 +442,9 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
-      setRuntime(createBattleRuntime());
+      previousPositions.current.clear();
+      previousBossPosition.current = undefined;
+      setBattle(createBattle());
       setOutcome('ONGOING');
       setZones([]);
       setImminent(false);
@@ -417,6 +453,9 @@ export function BossArenaScene(): React.JSX.Element {
       setMicrophoneStatus('idle');
       setPlayedMelodyNotes([]);
       setMelodyMissSequence(0);
+      setMelodyExpected(null);
+      setShowMelodyHint(false);
+      setMelodyActivitySequence(0);
       melodyNoteSequence.current = 0;
       melody.current.reset();
     }
@@ -424,6 +463,20 @@ export function BossArenaScene(): React.JSX.Element {
     window.addEventListener('keydown', onRestart);
     return () => window.removeEventListener('keydown', onRestart);
   }, [outcome]);
+
+  // 操作対象が変わったら、離れたキャラへ移動停止を送る。
+  //
+  // 入力アダプタは1つで、submit 先のIDを差し替えているだけなので、
+  // 直前のキャラの player-state には最後に送った移動入力が残る。
+  // 放っておくと、切り替えた瞬間に前のキャラが押しっぱなしのまま走り出す。
+  const previousLocalPlayerId = useRef(localPlayerId);
+  useEffect(() => {
+    const left = previousLocalPlayerId.current;
+    previousLocalPlayerId.current = localPlayerId;
+    if (left === localPlayerId) return;
+
+    battle.submit(left, { type: 'MOVE', input: { forward: 0, right: 0 } });
+  }, [battle, localPlayerId]);
 
   useFrame((_, delta) => {
     // 決着後は時間を進めない。倒れたまま技を撃たれ続けると、
@@ -433,15 +486,20 @@ export function BossArenaScene(): React.JSX.Element {
     }
 
     // 移動は押しっぱなしの状態なので毎フレーム取り出す。
+    // 操作対象は毎フレーム読む。切り替えても Effect を張り直さずに追従できる。
+    const activePlayerId = readLocalPlayerId();
+
+    // 追従カメラの見る Root を選択中のキャラへ合わせる。ref コールバックで
+    // 決めると、切り替え時に新旧どちらが先に走るかで一瞬古い Root を指す。
+    localRoot.current = actorRoots.current.get(activePlayerId) ?? null;
+
     const input = inputRef.current;
-    if (input !== null) battle.submit(LOCAL_PLAYER_ID, input.pollMove());
+    if (input !== null) battle.submit(activePlayerId, input.pollMove());
 
     battle.update(delta);
 
     const snapshot = battle.snapshot();
 
-    // 就寝用モーションはまだGLBへ統合されていないため、モデルを倒して布団へ
-    // 入る姿勢を作る。ゲーム判定は既にFinale Stateで止まっているので表示専用。
     const sleeping =
       snapshot.finale === 'HORI_FALLING_ASLEEP' ||
       snapshot.finale === 'ENDING' ||
@@ -470,8 +528,23 @@ export function BossArenaScene(): React.JSX.Element {
       if (root !== undefined) syncCharacterRoot(root, player);
     }
 
-    // HP や状態が変わったときだけ再レンダーする。
-    setView((previous) => (isSameView(previous, snapshot) ? previous : snapshot));
+    // HP・状態・モーションが変わったときだけ再レンダーする。位置差分は
+    // 条件の計算にだけ使い、毎フレームReactを再レンダーする理由にはしない。
+    const now = performance.now();
+    const contexts = motionContextsFor(
+      snapshot,
+      now,
+      previousPositions.current,
+      previousBossPosition.current,
+    );
+    const next: View = { snapshot, now, ...contexts };
+    for (const player of snapshot.players)
+      previousPositions.current.set(player.id, player.position);
+    previousBossPosition.current = snapshot.boss.position;
+    setView((previous) => (isSameView(previous, next) ? previous : next));
+
+    // 切り替えパネルへ各人の状態を渡す。寝ているキャラは選べないようにする。
+    publishLocalPlayerStatuses(snapshot);
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
@@ -486,7 +559,7 @@ export function BossArenaScene(): React.JSX.Element {
       active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
     );
 
-    const nextOutcome = sceneOutcome(battle);
+    const nextOutcome = sceneOutcome(battle, activePlayerId);
     setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
 
@@ -508,11 +581,11 @@ export function BossArenaScene(): React.JSX.Element {
         */}
         <group ref={bossVisual}>
           <Suspense fallback={null}>
-            <HoriDaisukeModel />
+            <HoriDaisukeModel context={view.bossMotionContext} />
           </Suspense>
         </group>
-        {(view.finale === 'HORI_FALLING_ASLEEP' || view.finale === 'ENDING') && <FinaleFuton />}
-        {view.finale === 'NONE' && <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />}
+        {(view.snapshot.finale === 'HORI_FALLING_ASLEEP' || view.snapshot.finale === 'ENDING') && <FinaleFuton />}
+        {view.snapshot.finale === 'NONE' && <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />}
       </group>
 
       {/*
@@ -527,23 +600,33 @@ export function BossArenaScene(): React.JSX.Element {
         モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
         Actor Rootへ反映する。
       */}
-      {view.players.map((player) => (
+      {view.snapshot.players.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <CharacterActor
             ref={(node) => {
               if (node === null) {
                 actorRoots.current.delete(player.id);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = null;
               } else {
                 actorRoots.current.set(player.id, node);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = node;
               }
+              // localRoot はここで決めない。操作キャラを切り替えると新旧2つの
+              // ref コールバックが走り、どちらが後かで一瞬古い Root を指す。
+              // 選択中の Root は下の Effect でまとめて引き直す。
             }}
             player={player}
-            local={player.id === LOCAL_PLAYER_ID}
+            now={view.now}
+            context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
+            local={player.id === localPlayerId}
           />
         </Suspense>
       ))}
+
+      {/* ワールド探索中も操作キャラの周囲をナビ妖精が案内する。 */}
+      <TutorialFairy
+        anchor={localRoot}
+        fallbackPosition={[PLAYER_SPAWN.x, 0, PLAYER_SPAWN.z]}
+        visible={worldTutorialVisible}
+      />
 
       {/*
         drei の Text はフォント読み込み中に suspend する。境界を挟まないと
@@ -560,13 +643,13 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
-      <SleepCamera target={bossRoot} active={view.finale === 'HORI_FALLING_ASLEEP'} />
-      <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.finale} />
+      <SleepCamera target={bossRoot} active={view.snapshot.finale === 'HORI_FALLING_ASLEEP'} />
+      <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.snapshot.finale} />
     </>
   );
 }
 
-/** 就寝演出専用の簡易3D布団。物理判定は持たず、突然のPop-inを安全に再現する。 */
+/** 就寝演出専用の簡易3D布団。物理判定を持たず、安全にPop-inさせる。 */
 function FinaleFuton(): React.JSX.Element {
   const quilt = useRef<Group>(null);
   const appearedAt = useRef<number | null>(null);
@@ -574,9 +657,7 @@ function FinaleFuton(): React.JSX.Element {
   useFrame(({ clock }, delta) => {
     appearedAt.current ??= clock.getElapsedTime();
     const elapsed = clock.getElapsedTime() - appearedAt.current;
-    // 前半で掛け布団をめくり、後半で倒れ込んだ堀大輔へ被せる。
-    const lift =
-      elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
+    const lift = elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
     if (quilt.current !== null) {
       quilt.current.position.y = MathUtils.damp(quilt.current.position.y, 0.53 + lift, 8, delta);
       quilt.current.rotation.z = MathUtils.damp(quilt.current.rotation.z, -lift * 0.52, 8, delta);
@@ -606,18 +687,10 @@ function FinaleFuton(): React.JSX.Element {
 const SLEEP_CAMERA_OFFSET = new Vector3(0, 3.1, 5.1);
 const sleepCameraDesired = new Vector3();
 
-/** 就寝だけは、操作キャラ追従を上書きして堀大輔へ寄る。 */
-function SleepCamera({
-  target,
-  active,
-}: {
-  target: React.RefObject<Group | null>;
-  active: boolean;
-}): null {
+function SleepCamera({ target, active }: { target: React.RefObject<Group | null>; active: boolean }): null {
   useFrame(({ camera }, delta) => {
     const boss = target.current;
     if (!active || boss === null) return;
-
     sleepCameraDesired.copy(boss.position).add(SLEEP_CAMERA_OFFSET);
     camera.position.lerp(sleepCameraDesired, 1 - Math.exp(-4.4 * delta));
     camera.lookAt(boss.position.x, boss.position.y + 0.75, boss.position.z);

@@ -213,13 +213,13 @@ describe('Hud', () => {
     expect(screen.queryByText('READY')).not.toBeInTheDocument();
   });
 
-  it('チュートリアルの手では技に応じた操作補助を出す', () => {
+  it('チュートリアルの手では技に応じたナビ妖精の操作説明を出す', () => {
     // SEQ-003。
     useGameStore.setState({ assistVisible: true, lastAttackId: 'YAWN_WAVE' });
 
     render(<Hud />);
 
-    expect(screen.getByText('GUARD')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('↓ / S でガードしてね');
   });
 
   it('本戦の手では操作補助を出さない', () => {
@@ -228,22 +228,22 @@ describe('Hud', () => {
 
     render(<Hud />);
 
-    expect(screen.queryByText('GUARD')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('補助表示は枕では回避、布団では回避と攻撃の2段階を示す', () => {
+  it('ナビ妖精は枕では回避、布団では回避と攻撃の2段階を示す', () => {
     useGameStore.setState({ assistVisible: true, lastAttackId: 'PILLOW_SWEEP' });
 
     const { rerender } = render(<Hud />);
 
-    expect(screen.getByText('\u2190 / \u2192 DODGE')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('左右キーで攻撃をかわしてね');
 
     act(() => {
       useGameStore.setState({ lastAttackId: 'FLUFFY_FUTON' });
     });
     rerender(<Hud />);
 
-    expect(screen.getByText('\u2190 / \u2192 DODGE \u2192 ATTACK')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('回避したら SPACE / J で攻撃！');
   });
 
   it('TUTORIAL_UIレイヤーを切ると補助表示だけを消せる', () => {
@@ -252,7 +252,7 @@ describe('Hud', () => {
 
     render(<Hud layers={{ TUTORIAL_UI: false } satisfies Partial<Record<HudLayer, boolean>>} />);
 
-    expect(screen.queryByText('GUARD')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByText('42')).toBeInTheDocument();
   });
 });
