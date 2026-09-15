@@ -17,11 +17,11 @@ export interface MarkerObservation {
   right?: MarkerPosition;
 }
 
-/** MediaPipeなどの手追跡器が渡す、左右手首の正規化済み観測値。 */
+/** MediaPipeなどの手追跡器が渡す、左右手首と指の開閉状態の正規化済み観測値。 */
 export interface HandObservation {
   capturedAt: number;
-  left?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'>;
-  right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'>;
+  left?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & { isOpen?: boolean };
+  right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & { isOpen?: boolean };
 }
 
 export const ORA_GAME_ACTIONS = [
