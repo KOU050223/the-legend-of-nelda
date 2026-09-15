@@ -16,6 +16,9 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
+import type { MicrophoneInputStatus } from '@/input/microphone/types';
+import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
@@ -185,14 +188,19 @@ export function BossArenaScene(): React.JSX.Element {
   const [imminent, setImminent] = useState(false);
   const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
+  const [melodyStarted, setMelodyStarted] = useState(false);
+  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
+  const microphoneStop = useRef<(() => void) | null>(null);
+  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
 
   useEffect(() => {
     publishFinalePresentation({
       phase: view.boss.phase,
       finale: view.finale,
       zeroDamageSequence,
+      microphoneStatus,
     });
-  }, [view.boss.phase, view.finale, zeroDamageSequence]);
+  }, [view.boss.phase, view.finale, zeroDamageSequence, microphoneStatus]);
 
   useEffect(() => resetFinalePresentation, []);
 
@@ -222,6 +230,41 @@ export function BossArenaScene(): React.JSX.Element {
 
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
+  }, [battle, view.finale]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    function startMelody(): void {
+      if (microphoneStop.current !== null || view.finale !== 'WAITING_FOR_MELODY') return;
+      setMelodyStarted(true);
+      void attachMicrophoneNoteInput(
+        (event) => {
+          if (melody.current.consume(event) === 'COMPLETE') {
+            microphoneStop.current?.();
+            microphoneStop.current = null;
+            battle.advanceFinale();
+          }
+        },
+        { onStatusChange: setMicrophoneStatus },
+      )
+        .then((stop) => {
+          if (disposed) {
+            stop();
+            return;
+          }
+          microphoneStop.current = stop;
+        })
+        .catch(() => undefined);
+    }
+
+    window.addEventListener('finale:melody-start', startMelody);
+    return () => {
+      disposed = true;
+      window.removeEventListener('finale:melody-start', startMelody);
+      microphoneStop.current?.();
+      microphoneStop.current = null;
+    };
   }, [battle, view.finale]);
 
   useEffect(() => {
@@ -275,6 +318,8 @@ export function BossArenaScene(): React.JSX.Element {
       setZones([]);
       setImminent(false);
       setZeroDamageSequence(0);
+      setMelodyStarted(false);
+      melody.current.reset();
     }
 
     window.addEventListener('keydown', onRestart);
@@ -392,7 +437,7 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
-      <LegendaryOcarina phase={view.finale} />
+      <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.finale} />
     </>
   );
 }
