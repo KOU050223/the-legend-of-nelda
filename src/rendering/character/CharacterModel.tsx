@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react';
-import { Clone, useAnimations, useGLTF } from '@react-three/drei';
+import { useEffect, useMemo, useRef } from 'react';
+import { useAnimations, useGLTF } from '@react-three/drei';
 import type { Group } from 'three';
 
 import type { CharacterId } from '@/game/config/phase2-player-balance';
 
 import { CHARACTER_DISPLAY_HEIGHT, CHARACTER_MODELS } from './character-models';
-import { disableSkinnedCulling } from './disableSkinnedCulling';
+import { cloneModelForScene, prepareClonedModel } from './cloned-model';
 
 export interface CharacterModelProps {
   /** どの大輔を描くか。GLBとスケールは CHARACTER_MODELS が持つ。 */
@@ -27,6 +27,9 @@ export function CharacterModel({ characterId }: CharacterModelProps): React.JSX.
   const { scene, animations } = useGLTF(url);
   const root = useRef<Group>(null);
   const { actions } = useAnimations(animations, root);
+  // drei の <Clone> はボーンをシーングラフから外すため使わない。
+  // <primitive> で複製を丸ごと入れる (cloned-model.ts の説明)。
+  const model = useMemo(() => cloneModelForScene(scene), [scene]);
 
   useEffect(() => {
     // クリップは添字ではなく名前で引く。GLB内の並び順はエクスポータ依存で、
@@ -54,7 +57,7 @@ export function CharacterModel({ characterId }: CharacterModelProps): React.JSX.
     // 3体に同じ値が当たる。モデルが増えても補正は散らばらない。
     // (ボスは入力で向きを変えないため、この補正を持たない)
     <group ref={root} rotation={[0, Math.PI, 0]} scale={CHARACTER_DISPLAY_HEIGHT / standingHeight}>
-      <Clone object={scene} castShadow ref={disableSkinnedCulling} />
+      <primitive object={model} ref={prepareClonedModel} />
     </group>
   );
 }
