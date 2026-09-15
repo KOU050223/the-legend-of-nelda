@@ -46,8 +46,7 @@ export function FinaleOverlay({
       <section className={styles.overlay} aria-live="polite">
         <div className={styles.noSleep}>
           <div className={styles.scanlines} />
-          <p className={styles.warning}>⚠ WARNING ⚠ ﾃﾞｰｰｰﾝ!!! ⚠ WARNING ⚠</p>
-          <p className={styles.boot}>SLEEP SYSTEM / EMERGENCY OVERRIDE / EXECUTING...</p>
+          <p className={styles.warning}>⚠ WARNING　絶対に寝ないモード発動 ⚠</p>
           <div className={styles.titleCard}>
             <p className={styles.katakana}>アルティメットスリーピングキャンセルモード</p>
             <h1 className={styles.absolute}>絶対に寝ない</h1>
