@@ -11,6 +11,7 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { OraStatusHud } from '@/ui/ora-status/OraStatusHud';
 import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
@@ -106,6 +107,7 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene multiplayer />
+        <OraStatusHud />
       </div>
     );
   }
@@ -124,6 +126,7 @@ export function App(): React.JSX.Element {
           一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
         */}
         <PlayerSwitch />
+        <OraStatusHud />
         <MicrophoneDebugPanel />
       </div>
     );

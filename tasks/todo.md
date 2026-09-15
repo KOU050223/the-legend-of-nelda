@@ -218,3 +218,35 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - 新規`src/ui/ora-debug/markerless-debug-helpers.ts`（表示用フォーマット・エラー分類・RMS計算の純粋関数）とそのテスト。
 - 検証結果: `pnpm vitest run src/input/ora src/ui/ora-debug` は11ファイル/65テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/ui/ora-debug` 通過（Claudeが独立再実行して確認済み）。
 - `BossArenaScene.tsx`・`ora-production-input.ts`（Phase5側）には触れていない。
+
+## Phase5 HUD配置修正 + Phase3B（音量→ダメージ倍率）
+
+実機フィードバック2件（HUDがCanvasスクロールに引っ張られてズレる、カメラの左右が反転している）と、ユーザー承認済みの選択肢1・2に対応した。並列で2タスクをCodexへ委譲。
+
+### HUD配置修正（Codex実装）
+
+- 原因: `BossArenaScene.tsx`（Canvas内）の`<Html fullscreen>`がCanvasのDOM座標に追従する実装だったため、既存の`PlayerSwitch`/`MicrophoneDebug`（Canvas外、素のCSS `position: absolute`）と挙動が異なりズレていた。
+- 新規`src/store/ora-status-store.ts`（Zustand + `subscribeWithSelector`）で`active`/`calibration`/`status`/`voiceCandidate`/`handTrackingFrame`を保持。`BossArenaScene.tsx`は各コールバックでこのストアのsetterを呼ぶだけになり、`<Html>`・ローカルstate・`airJoystickDot`ref一式を削除した。
+- 新規`src/ui/ora-status/OraStatusHud.tsx`（Canvas外、`PlayerSwitch`と同じ配置パターン）。高頻度更新の`handTrackingFrame`だけは`useOraStatusStore.subscribe(selector, callback)`のtransient updatesパターンでDOM直接更新し、React再レンダーを起こさない。他の低頻度項目は通常の`useStore(selector)`。
+- `src/app/App.tsx`の`WORLD`・`GAME`（本番マルチプレイ）両画面へ`<OraStatusHud />`を追加。
+- 検証: 全体`pnpm vitest run src`は98ファイル/1032テスト通過、`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`とも全体通過（Claudeが独立再実行して確認済み）。
+
+### 選択肢1・2（Codex実装）
+
+- Gate1: `voice-attack-recognizer.ts`の`minIntensity`既定値を`0.2`→`0.05`へ。キーワード一致（オラ/おらが発話の主要部分）を主な誤発火防止とし、音量ゲートは無音・環境ノイズの除外だけに役割を絞った。
+- Gate2 (Phase3B): `GameAction`の`ATTACK`だけに任意の`intensity?: number`を追加（他の離散アクションは不変）。`protocol.ts`の`isGameAction`をATTACK用に拡張（`isWasshoiEvent`と同型パターン）。`attack-combo.ts`に`damageMultiplierForIntensity()`を追加し、`phase2-player-balance.ts`の`ORA_VOICE_DAMAGE_MULTIPLIER_MIN/MAX`（0.85/1.30）へ線形マッピング、**受信値を`Math.min/Math.max`でクランプ**（Authority側でネットワーク越しの値を信用しない設計、コメントで明記）。`ComboSwing`へ`damageMultiplier?`を追加し、`player-state.ts`の`startAttack(intensity)`→`swing`→ダメージ計算（`damageScale * (damageMultiplier ?? 1)`）まで通した。`ora-production-input.ts`は`{type:'ATTACK', intensity: attack.intensity}`を送るよう変更。
+- VFX/SE/カメラシェイクは今回もスコープ外のまま（インフラ未整備、指示どおり）。
+- 検証: 上記HUD修正と合わせて全体テストスイートで確認済み。
+
+### Claude側の追加修正（レビュー中に発見）
+
+- **カメラの左右反転**: `hand-detector.ts`の`createHandPosition`で、フロントカメラの生フレームxをそのまま使っていたため、鏡を見る感覚と逆方向に手を動かした扱いになっていた（プレイヤーが自分の左へ手を動かすと`right > 0`になり、キャラが右へ動く逆転現象）。`mirroredX = 1 - wrist.x`を導入して修正。`hand-detector.test.ts`の期待値をミラー後の値へ更新。ORA_ACTIONの`abs(left.x - right.x)`は両手とも同じミラーを受けるため symmetric、影響なし。
+
+### 別Issue切り出し
+
+- 合掌ジェスチャーでのREVIVE（蘇生）は#113のスコープ外として [#134](https://github.com/KOU050223/the-legend-of-nelda/issues/134) を新規作成した。
+
+### 保留
+
+- `main`の取り込み（現在20コミット遅れ、LiveKit統合#124含む）はユーザー指示により今回は実施しない。
+- コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
