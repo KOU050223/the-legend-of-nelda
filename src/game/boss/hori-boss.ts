@@ -420,6 +420,12 @@ export function createHoriBoss(options: HoriBossOptions): HoriBoss {
         const skippedWholeWindow = over && !activeAttack.resolvedDuringActive;
 
         if (reachedActive && (!over || skippedWholeWindow)) {
+          // 判定が出た瞬間の通知。`resolvedDuringActive` は判定を一度でも
+          // 通したかを持つので、2フレーム目以降はここへ入らない。専用の
+          // フラグを足すと、判定と通知で「1回だけ」の基準が2つに割れる。
+          if (!activeAttack.resolvedDuringActive) {
+            events.emit({ type: 'BOSS_ATTACK_ACTIVE', attackId: activeAttack.attackId });
+          }
           advanceDash();
           resolveHits(targets);
           activeAttack = { ...activeAttack, resolvedDuringActive: true };

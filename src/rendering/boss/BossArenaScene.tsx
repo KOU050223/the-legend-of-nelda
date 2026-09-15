@@ -1,14 +1,17 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
+
 import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { Vector3, type Group } from 'three';
 
+import { createAudioManager } from '@/audio/audio-manager';
+import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
-import { createGameEventBus } from '@/game/events/game-event';
+import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
 import {
   createBossBattle,
   type BattleOutcome,
@@ -16,6 +19,7 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import { readPresentationSettings } from '@/presentation/presentation-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
@@ -67,11 +71,23 @@ function pinnedAttackId(): HoriAttackId | null {
   return HORI_ATTACK_IDS.find((id) => id === requested) ?? null;
 }
 
-function createBattle(): BossBattle {
+/**
+ * 戦闘と、そのイベントバス。
+ *
+ * バスを戦闘の中へ閉じ込めると購読者を足せない (`BossBattle` はバスを
+ * 公開していない)。SE を鳴らすには購読が要るので、作った側が持っておく。
+ */
+interface Battle {
+  readonly battle: BossBattle;
+  readonly events: GameEventBus;
+}
+
+function createBattle(): Battle {
   const pinned = pinnedAttackId();
-  return createBossBattle({
+  const events = createGameEventBus();
+  const battle = createBossBattle({
     clock: createRealClock(),
-    events: createGameEventBus(),
+    events,
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
@@ -82,6 +98,8 @@ function createBattle(): BossBattle {
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
+
+  return { battle, events };
 }
 
 /**
@@ -157,7 +175,17 @@ export function BossArenaScene(): React.JSX.Element {
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [battle, setBattle] = useState<BossBattle>(createBattle);
+  const [{ battle, events }, setBattle] = useState<Battle>(createBattle);
+
+  // SE。戦闘が流すイベントを購読して鳴らす。戦闘を作り直したら (やり直し)
+  // 前の購読と音源を捨てて繋ぎ直す。
+  //
+  // ここで購読していなければ、戦闘がイベントを流しても誰も聞いていない
+  // 状態になる。単騎PoC 側は combat-session.ts が同じ形で繋いでいる。
+  useEffect(() => {
+    const output = createHtmlAudioOutput();
+    return createAudioManager({ eventBus: events, output, getSettings: readPresentationSettings });
+  }, [events]);
 
   // 画面に出す決着。
   //
