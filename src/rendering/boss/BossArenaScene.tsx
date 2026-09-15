@@ -21,6 +21,14 @@ import {
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 import type { PlanarPosition } from '@/game/movement/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
+import type { PlayerStatus } from '@/game/player/player-state';
+import {
+  isLocalPlayerId,
+  LOCAL_PLAYER_IDS,
+  readLocalPlayerId,
+  useLocalPlayerStore,
+  type LocalPlayerId,
+} from '@/store/local-player-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
@@ -51,11 +59,10 @@ import { DangerZoneMarks } from './DangerZoneMarks';
  * 危険範囲は判定に使う `DangerZone` をそのまま描く。表示用に別の形を
  * 作らないことが「危険範囲が視覚的に読める」(#58) の前提。
  *
- * 操作するのは1人 (オドルノ) だけ。3人分の同時操作は #52 P6。
+ * 操作するのは同時に1人だけで、3人分の同時操作は #52 P6。ただし「その1人が
+ * 誰か」は画面から切り替えられる (Issue #106)。roster には最初から3人居るので、
+ * キーボードとカメラの接続先を差し替えるだけで切り替わる。
  */
-
-/** 操作するプレイヤー。 */
-const LOCAL_PLAYER_ID = 'odoruno';
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
@@ -97,7 +104,7 @@ function createBattle(): Battle {
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
-      { id: LOCAL_PLAYER_ID, characterId: 'ODORUNO', position: PLAYER_SPAWN },
+      { id: 'odoruno', characterId: 'ODORUNO', position: PLAYER_SPAWN },
       { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
       { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
@@ -183,17 +190,38 @@ function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolea
  */
 type SceneOutcome = BattleOutcome | 'LOCAL_DOWN';
 
-function sceneOutcome(battle: BossBattle): SceneOutcome {
+function sceneOutcome(battle: BossBattle, localPlayerId: LocalPlayerId): SceneOutcome {
   const settled = battle.outcome();
   if (settled !== 'ONGOING') return settled;
 
-  const local = battle.players.find((player) => player.snapshot().id === LOCAL_PLAYER_ID);
+  const local = battle.players.find((player) => player.snapshot().id === localPlayerId);
   // 倒れて寝落ちのカウントが始まっている間も、操作は戻らない。
   return local !== undefined && local.snapshot().status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
 }
 
+/**
+ * 各プレイヤーの状態を切り替えパネルへ渡す。
+ *
+ * 変わったときだけ書く。毎フレーム同じ値を set すると、購読している
+ * パネルが毎フレーム再レンダーされる (view / zones と同じ規律)。
+ */
+function publishLocalPlayerStatuses(snapshot: BattleSnapshot): void {
+  const { statuses, setStatuses } = useLocalPlayerStore.getState();
+
+  const next: Partial<Record<LocalPlayerId, PlayerStatus>> = {};
+  for (const player of snapshot.players) {
+    if (isLocalPlayerId(player.id)) next[player.id] = player.status;
+  }
+
+  const changed =
+    Object.keys(next).length !== Object.keys(statuses).length ||
+    LOCAL_PLAYER_IDS.some((id) => next[id] !== statuses[id]);
+  if (changed) setStatuses(next);
+}
+
 export function BossArenaScene(): React.JSX.Element {
   const worldTutorialVisible = useWorldTutorialStore((state) => state.visible);
+  const localPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
 
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
@@ -223,6 +251,7 @@ export function BossArenaScene(): React.JSX.Element {
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
+  // 中身は actorRoots から引き直す (下の Effect)。
   const localRoot = useRef<Group>(null);
 
   // 入力は useFrame から毎フレーム引く。requestAnimationFrame を別に
@@ -259,8 +288,11 @@ export function BossArenaScene(): React.JSX.Element {
       // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
       // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
       // 別方向へ転がる。
-      if (adapter !== null) battle.submit(LOCAL_PLAYER_ID, adapter.pollMove());
-      battle.submit(LOCAL_PLAYER_ID, action);
+      // 操作対象は毎回ストアから読む。フックの戻り値を掴んで deps へ入れると
+      // 切り替えのたびにこの Effect が張り直され、押しっぱなしの移動が切れる。
+      const activePlayerId = readLocalPlayerId();
+      if (adapter !== null) battle.submit(activePlayerId, adapter.pollMove());
+      battle.submit(activePlayerId, action);
     });
     const input = adapter;
 
@@ -292,6 +324,20 @@ export function BossArenaScene(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onRestart);
   }, [outcome]);
 
+  // 操作対象が変わったら、離れたキャラへ移動停止を送る。
+  //
+  // 入力アダプタは1つで、submit 先のIDを差し替えているだけなので、
+  // 直前のキャラの player-state には最後に送った移動入力が残る。
+  // 放っておくと、切り替えた瞬間に前のキャラが押しっぱなしのまま走り出す。
+  const previousLocalPlayerId = useRef(localPlayerId);
+  useEffect(() => {
+    const left = previousLocalPlayerId.current;
+    previousLocalPlayerId.current = localPlayerId;
+    if (left === localPlayerId) return;
+
+    battle.submit(left, { type: 'MOVE', input: { forward: 0, right: 0 } });
+  }, [battle, localPlayerId]);
+
   useFrame((_, delta) => {
     // 決着後は時間を進めない。倒れたまま技を撃たれ続けると、
     // 何が起きて負けたのかが画面に残らない。
@@ -300,8 +346,15 @@ export function BossArenaScene(): React.JSX.Element {
     }
 
     // 移動は押しっぱなしの状態なので毎フレーム取り出す。
+    // 操作対象は毎フレーム読む。切り替えても Effect を張り直さずに追従できる。
+    const activePlayerId = readLocalPlayerId();
+
+    // 追従カメラの見る Root を選択中のキャラへ合わせる。ref コールバックで
+    // 決めると、切り替え時に新旧どちらが先に走るかで一瞬古い Root を指す。
+    localRoot.current = actorRoots.current.get(activePlayerId) ?? null;
+
     const input = inputRef.current;
-    if (input !== null) battle.submit(LOCAL_PLAYER_ID, input.pollMove());
+    if (input !== null) battle.submit(activePlayerId, input.pollMove());
 
     battle.update(delta);
 
@@ -331,6 +384,9 @@ export function BossArenaScene(): React.JSX.Element {
     previousBossPosition.current = snapshot.boss.position;
     setView((previous) => (isSameView(previous, next) ? previous : next));
 
+    // 切り替えパネルへ各人の状態を渡す。寝ているキャラは選べないようにする。
+    publishLocalPlayerStatuses(snapshot);
+
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
     // 追尾ビームの着弾点が判定と食い違う。
@@ -344,7 +400,7 @@ export function BossArenaScene(): React.JSX.Element {
       active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
     );
 
-    const nextOutcome = sceneOutcome(battle);
+    const nextOutcome = sceneOutcome(battle, activePlayerId);
     setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
 
@@ -392,16 +448,17 @@ export function BossArenaScene(): React.JSX.Element {
             ref={(node) => {
               if (node === null) {
                 actorRoots.current.delete(player.id);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = null;
               } else {
                 actorRoots.current.set(player.id, node);
-                if (player.id === LOCAL_PLAYER_ID) localRoot.current = node;
               }
+              // localRoot はここで決めない。操作キャラを切り替えると新旧2つの
+              // ref コールバックが走り、どちらが後かで一瞬古い Root を指す。
+              // 選択中の Root は下の Effect でまとめて引き直す。
             }}
             player={player}
             now={view.now}
             context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
-            local={player.id === LOCAL_PLAYER_ID}
+            local={player.id === localPlayerId}
           />
         </Suspense>
       ))}
