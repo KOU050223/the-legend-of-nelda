@@ -20,7 +20,7 @@ const MODEL_URL = '/models/hori-daisuke.glb';
 const MODEL_STANDING_HEIGHT = 0.762;
 
 /** 既存のグレーボックスBossに合わせた表示上の高さ。 */
-const DISPLAY_HEIGHT = 2.4;
+export const DISPLAY_HEIGHT = 2.4;
 
 type Props = {
   /** 再生するクリップ。既定は登場演出の `stand-up`。 */

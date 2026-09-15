@@ -21,7 +21,10 @@ import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter'
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterModel } from '../character/CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from '../character/character-models';
-import { HoriDaisukeModel } from '../character/HoriDaisukeModel';
+import {
+  DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
+  HoriDaisukeModel,
+} from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 
@@ -402,13 +405,22 @@ function StatusBar({
   );
 }
 
-/** ボスのHPバー。プレイヤーより大きく、頭上高くに置く。 */
+/**
+ * ボスのHPバーの高さ。ボスの表示高さのすぐ上へ置く。
+ *
+ * プレイヤーのバーと同じ理由で、頭から離しすぎない。遠近法で、高い位置に
+ * あるものほど画面の端にあるときに横へ大きくずれて見え、モデルと別の場所に
+ * バーが浮いているように読める。
+ */
+const BOSS_BAR_HEIGHT = BOSS_DISPLAY_HEIGHT + 0.4;
+
+/** ボスのHPバー。プレイヤーより大きく、頭上に置く。 */
 function BossNameplate({ hp, hpMax }: { hp: number; hpMax: number }): React.JSX.Element {
   const ratio = hp / hpMax;
   const width = 4;
 
   return (
-    <Billboard position={[0, 4, 0]}>
+    <Billboard position={[0, BOSS_BAR_HEIGHT, 0]}>
       <mesh>
         <planeGeometry args={[width, 0.3]} />
         <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
