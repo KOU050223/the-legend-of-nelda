@@ -536,6 +536,7 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
+      <SleepCamera target={bossRoot} active={view.finale === 'HORI_FALLING_ASLEEP'} />
       <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.finale} />
     </>
   );
@@ -543,6 +544,21 @@ export function BossArenaScene(): React.JSX.Element {
 
 /** 就寝演出専用の簡易3D布団。物理判定は持たず、突然のPop-inを安全に再現する。 */
 function FinaleFuton(): React.JSX.Element {
+  const quilt = useRef<Group>(null);
+  const appearedAt = useRef<number | null>(null);
+
+  useFrame(({ clock }, delta) => {
+    appearedAt.current ??= clock.getElapsedTime();
+    const elapsed = clock.getElapsedTime() - appearedAt.current;
+    // 前半で掛け布団をめくり、後半で倒れ込んだ堀大輔へ被せる。
+    const lift =
+      elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
+    if (quilt.current !== null) {
+      quilt.current.position.y = MathUtils.damp(quilt.current.position.y, 0.53 + lift, 8, delta);
+      quilt.current.rotation.z = MathUtils.damp(quilt.current.rotation.z, -lift * 0.52, 8, delta);
+    }
+  });
+
   return (
     <group position={[0, 0.18, 0.15]} rotation={[0, 0.12, 0]}>
       <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
@@ -553,12 +569,36 @@ function FinaleFuton(): React.JSX.Element {
         <boxGeometry args={[0.85, 0.2, 1.22]} />
         <meshStandardMaterial color="#fff1c6" roughness={0.96} />
       </mesh>
-      <mesh position={[0.22, 0.53, 0]} castShadow>
-        <boxGeometry args={[1.85, 0.2, 1.34]} />
-        <meshStandardMaterial color="#e65764" roughness={0.88} />
-      </mesh>
+      <group ref={quilt} position={[0.22, 0.53, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[1.85, 0.2, 1.34]} />
+          <meshStandardMaterial color="#e65764" roughness={0.88} />
+        </mesh>
+      </group>
     </group>
   );
+}
+
+const SLEEP_CAMERA_OFFSET = new Vector3(0, 3.1, 5.1);
+const sleepCameraDesired = new Vector3();
+
+/** 就寝だけは、操作キャラ追従を上書きして堀大輔へ寄る。 */
+function SleepCamera({
+  target,
+  active,
+}: {
+  target: React.RefObject<Group | null>;
+  active: boolean;
+}): null {
+  useFrame(({ camera }, delta) => {
+    const boss = target.current;
+    if (!active || boss === null) return;
+
+    sleepCameraDesired.copy(boss.position).add(SLEEP_CAMERA_OFFSET);
+    camera.position.lerp(sleepCameraDesired, 1 - Math.exp(-4.4 * delta));
+    camera.lookAt(boss.position.x, boss.position.y + 0.75, boss.position.z);
+  });
+  return null;
 }
 
 /**

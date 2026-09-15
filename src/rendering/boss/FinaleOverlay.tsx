@@ -231,23 +231,21 @@ function HoriFallingAsleep(): React.JSX.Element {
   return (
     <section className={`${styles.overlay} ${styles.sleeping}`} aria-live="assertive">
       <p className={styles.sleepingLine}>「……眠い。」</p>
-      <div className={styles.futonPop}>
-        <p>緊 急 布 団 配 送</p>
-        <div className={styles.futon} aria-label="突然出現した布団">
-          <span className={styles.futonPillow} />
-          <span className={styles.futonQuilt}>GOOD NIGHT</span>
-        </div>
-        <strong>Zzz...</strong>
-      </div>
+      <p className={styles.sleepingHint}>……布団が、静かにめくられた。</p>
+      <p className={styles.sleepingZzz}>Zzz...</p>
     </section>
   );
 }
 
 function Ending(): React.JSX.Element {
   const goTo = useScreenStore((state) => state.goTo);
+  const [creditsSkipped, setCreditsSkipped] = useState(false);
 
   return (
-    <section className={`${styles.overlay} ${styles.ending}`} aria-live="polite">
+    <section
+      className={`${styles.overlay} ${styles.ending} ${creditsSkipped ? styles.endingSkipped : ''}`}
+      aria-live="polite"
+    >
       <video
         className={styles.endingMovie}
         src={horiSleepingMovie}
@@ -261,18 +259,52 @@ function Ending(): React.JSX.Element {
         <p className={styles.endingPrologue}>こうして世界に――</p>
         <p className={styles.endingLine}>安眠が戻った。</p>
       </div>
-      <div className={styles.credits}>
-        <p>CAST</p>
-        <strong>堀大輔　as　眠りを思い出した男</strong>
-        <p>DEVELOPED BY</p>
-        <strong>THE LEGEND OF NELDA 開発チーム</strong>
-        <p>SPECIAL THANKS</p>
-        <strong>すべての眠い人たち</strong>
-      </div>
-      <div className={styles.endingFinal}>
-        <div className={styles.endingTitle}>
+      <div className={styles.creditsViewport} aria-label="スタッフロール">
+        <div className={styles.credits}>
           <p>THE LEGEND OF NELDA</p>
-          <h1>THE END</h1>
+          <strong>END CREDITS</strong>
+          <p>CAST</p>
+          <strong>堀大輔　as　眠りを思い出した男</strong>
+          <strong>オドルノ大輔　as　伝説を奏でた者</strong>
+          <strong>PayPay大輔　as　見守る仲間</strong>
+          <strong>オラオラ大輔　as　見守る仲間</strong>
+          <p>ORIGINAL STORY</p>
+          <strong>堀大輔が眠るまで</strong>
+          <p>GAME DESIGN</p>
+          <strong>眠気と根性の境界線</strong>
+          <p>LEGENDARY OCARINA</p>
+          <strong>現実世界で演奏してくれたあなた</strong>
+          <p>3D CHARACTER ART</p>
+          <strong>堀大輔、そして眠らない意思</strong>
+          <p>CAMERA WORK</p>
+          <strong>無駄に壮大な寄りと間</strong>
+          <p>SLEEP CONSULTANT</p>
+          <strong>布団</strong>
+          <p>EMERGENCY FUTON DELIVERY</p>
+          <strong>最終局面のどこからともなく</strong>
+          <p>QUALITY ASSURANCE</p>
+          <strong>寝る気がないため効果がありません</strong>
+          <p>SPECIAL THANKS</p>
+          <strong>すべての眠い人たち</strong>
+          <strong>明日の自分</strong>
+          <strong>そして、8時間の睡眠</strong>
+        </div>
+      </div>
+      {!creditsSkipped && (
+        <button
+          className={styles.skipCredits}
+          type="button"
+          onClick={() => setCreditsSkipped(true)}
+        >
+          エンドロールをスキップ
+        </button>
+      )}
+      <div className={styles.endingFinal}>
+        <div className={styles.endingTitleCenter}>
+          <div className={styles.endingTitle}>
+            <p>THE LEGEND OF NELDA</p>
+            <h1>THE END</h1>
+          </div>
         </div>
         <div className={styles.sleepResult}>
           <span>堀大輔</span>
