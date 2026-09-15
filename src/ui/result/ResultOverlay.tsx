@@ -3,7 +3,13 @@ import { getDefeatCinematicState } from '@/game/cinematic/defeat-cinematic';
 import { DEFEAT_RESULT_TIMING, RESULT_TIMING } from './result-presentation';
 import styles from './ResultOverlay.module.css';
 
-export function ResultOverlay({ onRestart }: { onRestart: () => void }): React.JSX.Element | null {
+export function ResultOverlay({
+  onRestart,
+  onTitle,
+}: {
+  onRestart: () => void;
+  onTitle: () => void;
+}): React.JSX.Element | null {
   const result = useGameStore((state) => state.result);
   if (!result) return null;
   const victory = result.outcome === 'victory';
@@ -46,9 +52,14 @@ export function ResultOverlay({ onRestart }: { onRestart: () => void }): React.J
       )}
       {((victory && result.elapsedMs >= RESULT_TIMING.restart) ||
         (!victory && result.elapsedMs >= DEFEAT_RESULT_TIMING.restart)) && (
-        <button className={styles.restart} onClick={onRestart}>
-          RESTART <span>もう一度、目を覚ませ</span>
-        </button>
+        <div className={styles.actions}>
+          <button className={styles.restart} onClick={onRestart}>
+            RESTART <span>もう一度、目を覚ませ</span>
+          </button>
+          <button className={styles.titleButton} onClick={onTitle}>
+            TITLE <span>タイトルへ戻る</span>
+          </button>
+        </div>
       )}
     </section>
   );

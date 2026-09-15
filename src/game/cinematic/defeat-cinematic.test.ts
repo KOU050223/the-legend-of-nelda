@@ -23,6 +23,14 @@ describe('敗北シネマティック', () => {
     expect(state.showRestart).toBe(true);
   });
 
+  it('字幕の切り替えには読み終えるための間隔がある', () => {
+    expect(getDefeatCinematicState(4_000).caption).toBe('全員が、眠ってしまった。');
+    expect(getDefeatCinematicState(4_800).caption).toBeNull();
+    expect(getDefeatCinematicState(5_000).caption).toBe(
+      '堀大輔の「睡眠改善プログラム」は、世界へ広がった。',
+    );
+  });
+
   it('タイムラインより前の時刻や負の時刻を安全に扱う', () => {
     const state = getDefeatCinematicState(-100);
 
