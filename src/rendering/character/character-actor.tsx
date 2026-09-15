@@ -17,8 +17,10 @@ export interface CharacterActorProps {
   /** 親が前フレーム差分を計算済みなら、その条件をそのまま使う。 */
   context?: MotionContext | undefined;
   local?: boolean;
-  /** 一人称では自分のClientだけモデルと頭上表示を隠す。 */
-  hidePresentation?: boolean;
+  /** 一人称では自分のClientだけ3Dモデルを隠す。 */
+  hideModel?: boolean;
+  /** 一人称では画面固定HUDへ移すため、自分の頭上HPバーを隠す。 */
+  hideStatusBar?: boolean;
 }
 
 /**
@@ -33,20 +35,18 @@ export interface CharacterActorProps {
  * ここは結果を読むだけにする (docs/technical-design.md §13)。
  */
 export const CharacterActor = forwardRef<Group, CharacterActorProps>(function CharacterActor(
-  { player, now, context, local = false, hidePresentation = false },
+  { player, now, context, local = false, hideModel = false, hideStatusBar = false },
   ref,
 ): React.JSX.Element {
   return (
     <group ref={ref}>
-      {!hidePresentation && (
-        <>
-          <CharacterModel
-            characterId={player.characterId}
-            context={context ?? motionContextFor(player, now)}
-          />
-          <StatusBar player={player} local={local} />
-        </>
+      {!hideModel && (
+        <CharacterModel
+          characterId={player.characterId}
+          context={context ?? motionContextFor(player, now)}
+        />
       )}
+      {!hideStatusBar && <StatusBar player={player} local={local} />}
     </group>
   );
 });

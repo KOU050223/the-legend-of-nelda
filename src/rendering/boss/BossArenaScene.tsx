@@ -38,6 +38,7 @@ import {
   type LocalPlayerId,
 } from '@/store/local-player-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
+import { useFirstPersonHealthHudStore } from '@/ui/hud/first-person-health-hud-store';
 
 import { BattleThirdPersonCamera, type BattleCameraMode } from '../camera/BattleThirdPersonCamera';
 import { FirstPersonCamera } from '../camera/FirstPersonCamera';
@@ -334,6 +335,7 @@ export function BossArenaScene({
   // finale など「snapshot を見て動く Effect」はこれを読む。view が null の間は
   // 演出を始めない (リモート接続直後の1瞬)。
   const finale = view?.snapshot.finale ?? 'NONE';
+  const localPlayer = view?.snapshot.players.find((player) => player.id === localPlayerId) ?? null;
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
   const [melodyStarted, setMelodyStarted] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
@@ -341,6 +343,17 @@ export function BossArenaScene({
   const [melodyMissSequence, setMelodyMissSequence] = useState(0);
   const [melodyExpected, setMelodyExpected] = useState<NoteName | null>(null);
   const [showMelodyHint, setShowMelodyHint] = useState(false);
+
+  useEffect(() => {
+    const hud = useFirstPersonHealthHudStore.getState();
+    if (cameraMode === 'first-person' && finale === 'NONE' && localPlayer !== null) {
+      hud.show(localPlayer.hp, localPlayer.hpMax);
+    } else {
+      hud.hide();
+    }
+  }, [cameraMode, finale, localPlayer]);
+
+  useEffect(() => () => useFirstPersonHealthHudStore.getState().hide(), []);
   const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
@@ -768,7 +781,8 @@ export function BossArenaScene({
             now={view.now}
             context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
             local={player.id === localPlayerId}
-            hidePresentation={cameraMode === 'first-person' && player.id === localPlayerId}
+            hideModel={cameraMode === 'first-person' && player.id === localPlayerId}
+            hideStatusBar={cameraMode === 'first-person' && player.id === localPlayerId}
           />
         </Suspense>
       ))}
