@@ -45,7 +45,7 @@ export function TitleScreen(): React.JSX.Element {
         <nav className={styles.links} aria-label="メニュー">
           {items.map((item, index) => (
             <button
-              key={item.screen}
+              key={item.mode ?? item.screen}
               type="button"
               className={index === 0 ? styles.primary : styles.link}
               onClick={() => {
