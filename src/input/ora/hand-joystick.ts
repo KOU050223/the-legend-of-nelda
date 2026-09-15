@@ -19,22 +19,28 @@ export interface HandJoystick {
   reset(): void;
 }
 
-const defaults: Required<HandJoystickOptions> = {
+export const DEFAULT_HAND_JOYSTICK_OPTIONS = {
   deadZoneEnter: 0.1,
   deadZoneRelease: 0.08,
   maxDistance: 0.35,
   smoothing: 0.35,
-};
+} as const;
 
 const neutralInput = (): MovementInput => ({ forward: 0, right: 0 });
 
 /** 左手の位置を半径ベースの連続移動入力へ変換する。 */
 export function createHandJoystick(options: HandJoystickOptions = {}): HandJoystick {
   const config = {
-    deadZoneEnter: options.deadZoneEnter ?? defaults.deadZoneEnter,
-    deadZoneRelease: options.deadZoneRelease ?? defaults.deadZoneRelease,
-    maxDistance: Math.max(Number.EPSILON, options.maxDistance ?? defaults.maxDistance),
-    smoothing: Math.min(1, Math.max(0, options.smoothing ?? defaults.smoothing)),
+    deadZoneEnter: options.deadZoneEnter ?? DEFAULT_HAND_JOYSTICK_OPTIONS.deadZoneEnter,
+    deadZoneRelease: options.deadZoneRelease ?? DEFAULT_HAND_JOYSTICK_OPTIONS.deadZoneRelease,
+    maxDistance: Math.max(
+      Number.EPSILON,
+      options.maxDistance ?? DEFAULT_HAND_JOYSTICK_OPTIONS.maxDistance,
+    ),
+    smoothing: Math.min(
+      1,
+      Math.max(0, options.smoothing ?? DEFAULT_HAND_JOYSTICK_OPTIONS.smoothing),
+    ),
   };
   let smoothed: { x: number; y: number } | undefined;
   let active = false;

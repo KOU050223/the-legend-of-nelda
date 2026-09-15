@@ -18,6 +18,7 @@ import {
   createOraVoiceAttackRecognizer,
   type OraUtteranceCandidate,
 } from './voice-attack-recognizer';
+import type { HandObservation } from './types';
 import { requestWebcam, stopWebcam } from './webcam';
 import { createVoiceBaselineCalibrator } from './voice-calibration';
 
@@ -57,9 +58,23 @@ export interface OraCalibrationState {
   progress: number;
 }
 
+export interface OraHandTrackingFrame {
+  left: HandObservation['left'];
+  neutral: { x: number; y: number } | undefined;
+}
+
+/** 実機での音量ゲート・キーワード判定の切り分け用に、直近の発話判定結果を公開する。 */
+export interface OraVoiceCandidateInfo {
+  transcript: string;
+  intensity: number;
+  hits: number;
+}
+
 export interface OraProductionInputOptions {
   onStatusChange?: (status: OraProductionInputStatus) => void;
   onCalibrationChange?: (state: OraCalibrationState) => void;
+  onHandTrackingFrame?: (frame: OraHandTrackingFrame) => void;
+  onVoiceCandidate?: (info: OraVoiceCandidateInfo) => void;
   /** テストでブラウザの時間・スケジューラを差し替える。 */
   now?: () => number;
   requestAnimationFrame?: (callback: (timestamp: number) => void) => number;
@@ -243,6 +258,22 @@ export async function attachOraProductionInput(
     return state;
   };
 
+  const notifyHandTrackingFrame = (frame: OraHandTrackingFrame): void => {
+    try {
+      options.onHandTrackingFrame?.(frame);
+    } catch {
+      // 表示側の例外で手入力の処理を止めない。
+    }
+  };
+
+  const notifyVoiceCandidate = (info: OraVoiceCandidateInfo): void => {
+    try {
+      options.onVoiceCandidate?.(info);
+    } catch {
+      // 表示側の例外で音声処理を止めない。
+    }
+  };
+
   const setSpeechRecognitionStatus = (
     nextStatus: SpeechRecognitionStatus,
     nextReason?: OraProductionInputReason,
@@ -391,9 +422,25 @@ export async function attachOraProductionInput(
         endedAt,
         intensity: intensityBetween(startedAt, endedAt),
       };
-      if (!handCalibrator.isComplete() || !voiceCalibrator.isComplete()) continue;
+      // Calibration未完了でも認識結果自体は公開する。「音声認識が拾えていない」
+      // のか「Calibration待ちで止めている」のかを実機で切り分けるため。
+      const calibrated = handCalibrator.isComplete() && voiceCalibrator.isComplete();
+      const attacks = calibrated ? voiceAttackRecognizer.recognize(candidate) : [];
+      if (import.meta.env.DEV) {
+        console.debug('[ora] voice candidate', {
+          transcript: candidate.transcript,
+          intensity: candidate.intensity,
+          hits: attacks.length,
+          calibrated,
+        });
+      }
+      notifyVoiceCandidate({
+        transcript: candidate.transcript,
+        intensity: candidate.intensity,
+        hits: attacks.length,
+      });
+      if (!calibrated) continue;
 
-      const attacks = voiceAttackRecognizer.recognize(candidate);
       for (let attackIndex = 0; attackIndex < attacks.length; attackIndex += 1) {
         scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS);
       }
@@ -462,6 +509,8 @@ export async function attachOraProductionInput(
     try {
       const observation = handDetector.detect(video, timestamp);
       handCalibrator.sample(observation.left, timestamp);
+      const neutral = handCalibrator.getNeutral();
+      notifyHandTrackingFrame({ left: observation.left, neutral });
       const calibration = notifyCalibration();
       if (!calibration.handComplete || !calibration.voiceComplete) {
         joystick.reset();
@@ -470,7 +519,6 @@ export async function attachOraProductionInput(
         return;
       }
 
-      const neutral = handCalibrator.getNeutral();
       emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
       const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
       if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });

@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 
-import { Billboard, Text } from '@react-three/drei';
+import { Billboard, Html, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { MathUtils, Vector3, type Group } from 'three';
 
@@ -28,8 +28,11 @@ import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
 import {
   createOraProductionInput,
   type OraCalibrationState,
+  type OraHandTrackingFrame,
   type OraProductionInputStatus,
+  type OraVoiceCandidateInfo,
 } from '@/input/ora/ora-production-input';
+import { DEFAULT_HAND_JOYSTICK_OPTIONS } from '@/input/ora/hand-joystick';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 import type { PlanarPosition } from '@/game/movement/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -94,6 +97,32 @@ const BATTLE_CAMERA_OFFSET = new Vector3(0, 16, 18);
 
 /** 注視点はキャラの足元より少し先。ボスとの間を画面へ収める。 */
 const BATTLE_LOOK_AT_HEIGHT = 2;
+const AIR_JOYSTICK_DIAMETER_PX = 104;
+const AIR_JOYSTICK_DOT_DIAMETER_PX = 14;
+const AIR_JOYSTICK_MAX_OFFSET_PX = 38;
+
+function syncAirJoystickDot(
+  dot: HTMLDivElement | null,
+  { left, neutral }: OraHandTrackingFrame,
+): void {
+  if (dot === null) return;
+  if (left === undefined || neutral === undefined) {
+    dot.style.opacity = '0';
+    dot.style.transform = 'translate(-50%, -50%)';
+    return;
+  }
+
+  const dx = left.x - neutral.x;
+  const dy = left.y - neutral.y;
+  const distance = Math.hypot(dx, dy);
+  const maxDistance = DEFAULT_HAND_JOYSTICK_OPTIONS.maxDistance;
+  const clampScale = distance > maxDistance ? maxDistance / distance : 1;
+  const offsetX = (dx * clampScale * AIR_JOYSTICK_MAX_OFFSET_PX) / maxDistance;
+  const offsetY = (dy * clampScale * AIR_JOYSTICK_MAX_OFFSET_PX) / maxDistance;
+
+  dot.style.opacity = '1';
+  dot.style.transform = `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`;
+}
 
 /** `?attack=WAKE_UP_ALARM` のように技を固定する。動作確認用の口。 */
 function pinnedAttackId(): HoriAttackId | null {
@@ -328,6 +357,8 @@ export function BossArenaScene({
   // KeyboardはuseFrameから毎フレーム引き、Oraは検出フレームからpushする。
   // 入力元を判別できる小さな共用体にして、OraへpollMoveしないことを型で保つ。
   const inputRef = useRef<SceneInput | null>(null);
+  // 手追跡もカメラ同率で届くため、React stateへ入れずHUDのDOMを直接動かす。
+  const airJoystickDot = useRef<HTMLDivElement>(null);
 
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
@@ -366,6 +397,7 @@ export function BossArenaScene({
     providedSource !== undefined && view === null ? 'pending' : isOra ? 'ora' : 'keyboard';
   const [oraCalibration, setOraCalibration] = useState<OraCalibrationState | null>(null);
   const [oraStatus, setOraStatus] = useState<OraProductionInputStatus | null>(null);
+  const [oraVoiceCandidate, setOraVoiceCandidate] = useState<OraVoiceCandidateInfo | null>(null);
   const oraCalibrationHints =
     oraCalibration === null
       ? []
@@ -603,6 +635,12 @@ export function BossArenaScene({
         onStatusChange: (status) => {
           if (!disposed) setOraStatus(status);
         },
+        onVoiceCandidate: (info) => {
+          if (!disposed) setOraVoiceCandidate(info);
+        },
+        onHandTrackingFrame: (frame) => {
+          if (!disposed) syncAirJoystickDot(airJoystickDot.current, frame);
+        },
       });
 
       void Promise.resolve(attachOra(submit))
@@ -770,20 +808,143 @@ export function BossArenaScene({
     <>
       <World />
 
-      {inputMode === 'ora' && oraCalibrationHints.length > 0 && (
-        <Billboard position={[BOSS_ANCHOR.x, 8, BOSS_ANCHOR.z]}>
-          <Text fontSize={0.48} color="#f2f2f7" anchorY="middle">
-            {oraCalibrationHints.join('\n')}
-          </Text>
-        </Billboard>
-      )}
+      {inputMode === 'ora' && (
+        <Html fullscreen style={{ pointerEvents: 'none' }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: 20,
+              left: '50%',
+              width: 'min(92vw, 560px)',
+              display: 'grid',
+              gap: 8,
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+            }}
+          >
+            {oraCalibrationHints.length > 0 && (
+              <div
+                style={{
+                  borderRadius: 8,
+                  background: 'rgba(0, 0, 0, 0.58)',
+                  color: '#f2f2f7',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  lineHeight: 1.5,
+                  padding: '8px 14px',
+                }}
+              >
+                {oraCalibrationHints.map((hint) => (
+                  <div key={hint}>{hint}</div>
+                ))}
+              </div>
+            )}
+            {oraStatus?.phase === 'error' && (
+              <div
+                style={{
+                  borderRadius: 8,
+                  background: 'rgba(0, 0, 0, 0.58)',
+                  color: '#ff453a',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  lineHeight: 1.5,
+                  padding: '8px 14px',
+                }}
+              >
+                オラ入力を開始できません。カメラ・マイクの状態を確認してください。
+              </div>
+            )}
+          </div>
 
-      {inputMode === 'ora' && oraStatus?.phase === 'error' && (
-        <Billboard position={[BOSS_ANCHOR.x, 7.2, BOSS_ANCHOR.z]}>
-          <Text fontSize={0.38} color="#ff453a" anchorY="middle">
-            オラ入力を開始できません。カメラ・マイクの状態を確認してください。
-          </Text>
-        </Billboard>
+          {import.meta.env.DEV && (
+            // 実機検証用の一時的な状態表示。DevToolsを開かなくても
+            // Calibration/SpeechRecognition/直近の発話判定を追える。
+            <div
+              style={{
+                position: 'absolute',
+                top: 20,
+                right: 20,
+                width: 260,
+                borderRadius: 8,
+                background: 'rgba(0, 0, 0, 0.58)',
+                color: '#f2f2f7',
+                fontSize: 11,
+                fontFamily: 'monospace',
+                lineHeight: 1.6,
+                padding: '8px 10px',
+                textAlign: 'left',
+              }}
+            >
+              <div>hand: {String(oraCalibration?.handComplete ?? false)}</div>
+              <div>voice: {String(oraCalibration?.voiceComplete ?? false)}</div>
+              <div>
+                speech: {oraStatus?.speechRecognition ?? 'unknown'}
+                {oraStatus?.reason ? ` (${oraStatus.reason})` : ''}
+              </div>
+              <div>candidate: {oraVoiceCandidate ? `"${oraVoiceCandidate.transcript}"` : '-'}</div>
+              <div>
+                intensity: {oraVoiceCandidate?.intensity.toFixed(2) ?? '-'} / hits:{' '}
+                {oraVoiceCandidate?.hits ?? '-'}
+              </div>
+            </div>
+          )}
+
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 24,
+              left: 24,
+              boxSizing: 'border-box',
+              width: AIR_JOYSTICK_DIAMETER_PX,
+              height: AIR_JOYSTICK_DIAMETER_PX,
+              border: '2px solid rgba(242, 242, 247, 0.72)',
+              borderRadius: '50%',
+              background: 'rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                left: '50%',
+                color: '#f2f2f7',
+                fontSize: 12,
+                fontWeight: 600,
+                transform: 'translateX(-50%)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              AIR JOYSTICK
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'rgba(242, 242, 247, 0.9)',
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+            <div
+              ref={airJoystickDot}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: AIR_JOYSTICK_DOT_DIAMETER_PX,
+                height: AIR_JOYSTICK_DOT_DIAMETER_PX,
+                borderRadius: '50%',
+                background: '#ffd60a',
+                boxShadow: '0 0 8px rgba(255, 214, 10, 0.8)',
+                opacity: 0,
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+          </div>
+        </Html>
       )}
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}

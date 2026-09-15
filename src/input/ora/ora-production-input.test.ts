@@ -39,6 +39,7 @@ vi.mock('../microphone/microphone-adapter', () => ({
 import {
   createOraProductionInput,
   type OraCalibrationState,
+  type OraHandTrackingFrame,
   type OraProductionInputStatus,
 } from './ora-production-input';
 
@@ -57,6 +58,7 @@ let timeoutCallbacks: Map<number, TimeoutCallback>;
 let nextTimeoutId: number;
 let nowMs: number;
 let rms: number;
+let observedLeft: HandObservation['left'];
 
 class FakeSpeechRecognition {
   static readonly instances: FakeSpeechRecognition[] = [];
@@ -126,6 +128,7 @@ function runNextTimeout(): void {
 function createTestAttach(
   options: {
     onCalibrationChange?: (state: OraCalibrationState) => void;
+    onHandTrackingFrame?: (frame: OraHandTrackingFrame) => void;
     onStatusChange?: (status: OraProductionInputStatus) => void;
   } = {},
 ): AttachInputAdapter {
@@ -196,13 +199,14 @@ function setupSuccessfulResources(): void {
   nextTimeoutId = 1;
   nowMs = 0;
   rms = 0;
+  observedLeft = hand(0.2, 0.2);
   FakeSpeechRecognition.instances.length = 0;
 
   const detector = {
     detect: vi.fn<(_video: HTMLVideoElement, capturedAt: number) => HandObservation>(
       (_video, capturedAt) => ({
         capturedAt,
-        left: hand(0.2, 0.2),
+        ...(observedLeft === undefined ? {} : { left: observedLeft }),
         right: hand(0.8, 0.2),
       }),
     ),
@@ -285,6 +289,33 @@ describe('createOraProductionInput', () => {
 
     expect(actions.some((action) => action.type === 'ATTACK')).toBe(true);
     expect(actions.some((action) => action.type === 'CHARACTER_ACTION')).toBe(true);
+
+    adapter.detach();
+  });
+
+  it('Calibration中・完了後・見失い時の左手追跡フレームを通知する', async () => {
+    const frames: OraHandTrackingFrame[] = [];
+    const adapter = await createTestAttach({
+      onHandTrackingFrame: (frame) => frames.push(frame),
+    })(() => undefined);
+
+    runNextFrame(0);
+    expect(frames).toEqual([{ left: hand(0.2, 0.2), neutral: undefined }]);
+
+    rms = 0.2;
+    runInterval();
+    nowMs = 350;
+    rms = 0;
+    runInterval();
+    runNextFrame(1_000);
+    expect(frames.at(-1)).toEqual({
+      left: hand(0.2, 0.2),
+      neutral: { x: 0.2, y: 0.2 },
+    });
+
+    observedLeft = undefined;
+    runNextFrame(1_016);
+    expect(frames.at(-1)).toEqual({ left: undefined, neutral: undefined });
 
     adapter.detach();
   });

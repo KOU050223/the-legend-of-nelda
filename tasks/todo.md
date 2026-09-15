@@ -197,3 +197,14 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - 追加テスト: 通常音量がbaselineに左右されずATTACKを通す回帰テスト、複数hitの140ms間隔分散emitの確認、detach後に予約済みATTACKが発火しないことの確認。
 - 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/74テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過（Claudeが独立再実行して確認済み）。
 - `src/ui/ora-debug/`配下（Phase6並列作業）には触れていない。コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
+
+## Phase5 UX修正 + 実機調査ツール（PR #125 レビュー指摘つづき）
+
+追加の実機フィードバック（左手のAir Joystick可視化がない、Calibration案内が3Dワールド内・マップ中央に表示されて邪魔、「オラ」のRMSが0.1程度までしか出ないが依然ATTACKが発火しない）に対応した。
+
+1. **Calibration案内・エラー表示を3D Billboardから画面固定2D HUDへ移動**（Codex実装）: `<Billboard>`（`BOSS_ANCHOR`=マップ中央付近に描画）をやめ、`@react-three/drei`の`<Html fullscreen>`で画面上部固定に変更。
+2. **左手Air Joystickインジケータを新規追加**（Codex実装）: `ora-production-input.ts`に`onHandTrackingFrame`コールバックを追加し、`processFrame`から毎フレーム（Calibration中も含め）手位置とNeutralを公開。`BossArenaScene.tsx`側はReact stateを使わず`useRef`でDOM要素のstyleを直接書き換える設計（既存の「位置はstateへ入れない」方針を踏襲）。クランプ半径は`hand-joystick.ts`から新規exportした`DEFAULT_HAND_JOYSTICK_OPTIONS`を再利用し、UI側で定数を複製していない。
+3. **実機調査用のデバッグ状態パネルを追加**（Claude実装）: Claudeがブラウザ自動操作（Claude in Chrome）で実機を直接操作し、SpeechRecognitionの実際の動作を切り分け調査した。孤立したWeb Speech APIテストでは正常動作を確認したが、アプリの実`handleSpeechResult`へ合成「オラ」resultを注入するテストでは、Calibration完了ゲート（`!handCalibrator.isComplete() || !voiceCalibrator.isComplete()`）が音声処理そのものを止めていることを確認した（手のCalibrationが完了していないとATTACKは一切評価されない）。この切り分けをDevToolsなしで実機でも追えるよう、`onVoiceCandidate`コールバックを追加し、`candidate`計算をCalibration完了ゲートより前へ移動（Calibration未完了でも直近の認識結果・intensity・hit数を公開するように変更）。`BossArenaScene.tsx`の新HUDへ、DEV限定で`hand`/`voice`/`speech`/`candidate`/`intensity`/`hits`を表示する小さな状態パネルを追加した。
+- 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/75テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過。
+- ユーザーへ、フルリロード後にオラ大輔を選び直し、画面右上のDEVパネルで`hand`/`voice`/`speech`/`candidate`の実値を見ながら再テストするよう依頼中。ATTACKが依然発火しない場合、この表示から原因（Calibration待ちか、キーワード判定棄却か）を直接特定できる。
+- コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
