@@ -278,6 +278,17 @@ describe('勝敗', () => {
 });
 
 describe('最終局面のBossBattle統合', () => {
+  it('デバッグ操作では、結界を経ずにHP10%の最終形態直後へ移れる', () => {
+    const { battle } = setup();
+
+    battle.debugEnterNoSleepMode();
+
+    expect(battle.boss.snapshot().phase).toBe('NO_SLEEP_MODE');
+    expect(battle.boss.snapshot().hp).toBe(battle.boss.snapshot().hpMax * 0.1);
+    expect(battle.snapshot().finale).toBe('NONE');
+    expect(battle.snapshot().barrier).toBeNull();
+  });
+
   it('最終形態直後は通常操作を残し、時間経過で最終演出へ進める', () => {
     const { battle, clock } = setup();
     enterNoSleepMode(battle);

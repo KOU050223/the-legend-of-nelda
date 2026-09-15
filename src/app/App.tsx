@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
+import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
@@ -82,6 +83,7 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene world />
+        <FinalePresentation />
         <MicrophoneDebugPanel />
       </div>
     );

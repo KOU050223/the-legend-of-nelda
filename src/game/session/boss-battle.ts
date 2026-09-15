@@ -89,6 +89,8 @@ export interface BossBattle {
   outcome(): BattleOutcome;
   /** 最終演出を次の状態へ進める。状態変更は Authority のみが行う。 */
   advanceFinale(): FinaleState;
+  /** 開発用。結界を経ずにHP10%の最終形態直後へ移す。 */
+  debugEnterNoSleepMode(): void;
   readonly boss: HoriBoss;
   readonly players: readonly Player[];
   snapshot(): BattleSnapshot;
@@ -282,6 +284,22 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
       if (finale === 'NONE') return finale;
       finale = nextFinaleState(finale);
       return finale;
+    },
+
+    debugEnterNoSleepMode() {
+      const snapshot = boss.snapshot();
+      boss.restore({
+        ...snapshot,
+        hp: snapshot.hpMax * 0.1,
+        phase: 'NO_SLEEP_MODE',
+        activeAttack: null,
+        bossDownUntil: null,
+        nextAttackAt: clock.now(),
+        takenAt: clock.now(),
+      });
+      barrierChallenge = null;
+      finale = 'NONE';
+      noSleepModeStartedAt = clock.now();
     },
 
     boss,

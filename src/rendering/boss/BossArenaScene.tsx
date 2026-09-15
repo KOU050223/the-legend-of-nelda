@@ -8,7 +8,7 @@ import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
-import { createGameEventBus } from '@/game/events/game-event';
+import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
 import {
   createBossBattle,
   type BattleOutcome,
@@ -26,6 +26,8 @@ import {
 } from '../character/HoriDaisukeModel';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
+import { publishFinalePresentation, resetFinalePresentation } from './finale-presentation-store';
+import { LegendaryOcarina } from './LegendaryOcarina';
 
 /**
  * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
@@ -70,11 +72,17 @@ function shouldSkipBarriers(): boolean {
   return new URLSearchParams(window.location.search).get('skipBarrier') === '1';
 }
 
-function createBattle(): BossBattle {
+interface BattleRuntime {
+  readonly battle: BossBattle;
+  readonly events: GameEventBus;
+}
+
+function createBattleRuntime(): BattleRuntime {
   const pinned = pinnedAttackId();
-  return createBossBattle({
+  const events = createGameEventBus();
+  const battle = createBossBattle({
     clock: createRealClock(),
-    events: createGameEventBus(),
+    events,
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
@@ -86,6 +94,7 @@ function createBattle(): BossBattle {
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
+  return { battle, events };
 }
 
 /**
@@ -95,7 +104,9 @@ function createBattle(): BossBattle {
  * 毎フレーム「変わった」ことになり、state へ逃がした意味が無くなる。
  */
 function isSameView(a: BattleSnapshot, b: BattleSnapshot): boolean {
-  if (a.boss.hp !== b.boss.hp || a.boss.phase !== b.boss.phase) return false;
+  if (a.boss.hp !== b.boss.hp || a.boss.phase !== b.boss.phase || a.finale !== b.finale) {
+    return false;
+  }
   if (a.players.length !== b.players.length) return false;
 
   return a.players.every((player, index) => {
@@ -142,7 +153,8 @@ export function BossArenaScene(): React.JSX.Element {
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [battle, setBattle] = useState<BossBattle>(createBattle);
+  const [runtime, setRuntime] = useState<BattleRuntime>(createBattleRuntime);
+  const { battle } = runtime;
 
   // 画面に出す決着。
   //
@@ -172,6 +184,57 @@ export function BossArenaScene(): React.JSX.Element {
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
   const [view, setView] = useState<BattleSnapshot>(() => battle.snapshot());
+  const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
+
+  useEffect(() => {
+    publishFinalePresentation({
+      phase: view.boss.phase,
+      finale: view.finale,
+      zeroDamageSequence,
+    });
+  }, [view.boss.phase, view.finale, zeroDamageSequence]);
+
+  useEffect(() => resetFinalePresentation, []);
+
+  useEffect(
+    () =>
+      runtime.events.subscribe((event) => {
+        if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
+          setZeroDamageSequence((current) => current + 1);
+        }
+      }),
+    [runtime.events],
+  );
+
+  useEffect(() => {
+    if (zeroDamageSequence === 0) return undefined;
+
+    const timer = window.setTimeout(() => setZeroDamageSequence(0), 900);
+    return () => window.clearTimeout(timer);
+  }, [zeroDamageSequence]);
+
+  useEffect(() => {
+    const delayMs =
+      // 台詞を読ませる間と、オカリナが空から降りる間を別々に確保する。
+      // 最終局面の急な切り替えに見せず、後続の旋律入力へ気持ちを向けさせるため。
+      view.finale === 'FINAL_STANDOFF' ? 7_500 : view.finale === 'OCARINA_APPEARING' ? 5_200 : null;
+    if (delayMs === null) return undefined;
+
+    const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [battle, view.finale]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
+
+    function onDebugFinale(event: KeyboardEvent): void {
+      if (event.code !== 'KeyZ' || event.repeat) return;
+      battle.debugEnterNoSleepMode();
+    }
+
+    window.addEventListener('keydown', onDebugFinale);
+    return () => window.removeEventListener('keydown', onDebugFinale);
+  }, [battle]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -207,10 +270,11 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
-      setBattle(createBattle());
+      setRuntime(createBattleRuntime());
       setOutcome('ONGOING');
       setZones([]);
       setImminent(false);
+      setZeroDamageSequence(0);
     }
 
     window.addEventListener('keydown', onRestart);
@@ -280,7 +344,7 @@ export function BossArenaScene(): React.JSX.Element {
         <Suspense fallback={null}>
           <HoriDaisukeModel />
         </Suspense>
-        <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />
+        {view.finale === 'NONE' && <BossNameplate hp={view.boss.hp} hpMax={view.boss.hpMax} />}
       </group>
 
       {/*
@@ -328,6 +392,7 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
+      <LegendaryOcarina phase={view.finale} />
     </>
   );
 }
