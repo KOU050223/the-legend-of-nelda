@@ -197,6 +197,29 @@ describe('MatchingScreen', () => {
     expect(connection.client.requestStart).toHaveBeenCalledOnce();
   });
 
+  it('Authorityが自分のRoleを確定するとVoice Chatの接続UIを表示する', () => {
+    useMultiplayerSessionStore.setState({
+      status: 'CONNECTED',
+      participantId: 'participant-test',
+      lobby: {
+        type: 'LOBBY',
+        slots: [
+          { participantId: 'participant-test', role: 'ORA', connected: true },
+          { participantId: 'participant-b', role: 'PAY', connected: true },
+          { participantId: 'participant-c', role: 'ODORUNO', connected: true },
+        ],
+        started: false,
+        full: false,
+      },
+    });
+
+    render(<MatchingScreen />);
+
+    expect(screen.getByRole('region', { name: 'ボイスチャット' })).toBeInTheDocument();
+    expect(screen.getByLabelText('ボイスチャット接続状態')).toHaveTextContent('DISCONNECTED');
+    expect(screen.getByRole('button', { name: 'マイクを有効にする' })).toBeInTheDocument();
+  });
+
   it('4人目のfull状態では役割選択とSTARTを表示しない', () => {
     useMultiplayerSessionStore.setState({
       status: 'FULL',

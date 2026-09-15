@@ -6,6 +6,7 @@ import { type ConnectionStatus, useMultiplayerSessionStore } from '@/multiplayer
 import { useScreenStore } from '@/app/screen';
 
 import styles from './MatchingScreen.module.css';
+import { useMultiplayerVoiceSession } from './use-multiplayer-voice-session';
 
 /** START受理後の演出を見せてからGAMEへ渡すまでの時間。通信は一切待たない。 */
 const CELEBRATION_MS = 900;
@@ -67,6 +68,7 @@ export function MatchingScreen(): React.JSX.Element {
     slots.every((slot) => slot.connected && slot.role !== null) &&
     new Set(slots.map((slot) => slot.role)).size === 3;
   const canStart = canEditRole && allSlotsReady;
+  const voice = useMultiplayerVoiceSession({ participantId, lobby });
 
   useEffect(() => {
     useMultiplayerSessionStore.getState().connect();
@@ -171,6 +173,8 @@ export function MatchingScreen(): React.JSX.Element {
           </fieldset>
         )}
 
+        <VoiceChatPanel voice={voice} />
+
         {canEditRole && (
           <button
             className={styles.startButton}
@@ -201,5 +205,62 @@ export function MatchingScreen(): React.JSX.Element {
         )}
       </section>
     </main>
+  );
+}
+
+function VoiceChatPanel({
+  voice,
+}: {
+  voice: ReturnType<typeof useMultiplayerVoiceSession>;
+}): React.JSX.Element | null {
+  if (voice.context === null) return null;
+
+  const payMode = voice.context.role === 'PAY';
+  const connection = voice.snapshot.connection;
+  const isConnected = connection === 'CONNECTED' || connection === 'RECONNECTING';
+
+  return (
+    <section className={styles.voicePanel} aria-label="ボイスチャット">
+      <p className={styles.voiceTitle}>VOICE CHAT</p>
+      <output className={styles.voiceStatus} aria-label="ボイスチャット接続状態">
+        {connection}
+      </output>
+      <p className={styles.voiceMode}>
+        {payMode ? 'MIC: WASSHOI MODE' : `MIC: ${voice.snapshot.microphone}`}
+      </p>
+      {!voice.enabled ? (
+        <button
+          className={styles.voiceButton}
+          type="button"
+          disabled={voice.busy}
+          onClick={() => void voice.enable()}
+        >
+          {voice.busy ? 'VOICE 接続中…' : payMode ? 'VOICEを有効にする' : 'マイクを有効にする'}
+        </button>
+      ) : payMode ? (
+        <button className={styles.voiceButton} type="button" onClick={() => void voice.disable()}>
+          VOICEを無効にする
+        </button>
+      ) : (
+        <div className={styles.voiceButtons}>
+          <button
+            className={styles.voiceButton}
+            type="button"
+            disabled={!isConnected}
+            onClick={() => void voice.toggleMicrophone()}
+          >
+            {voice.snapshot.microphone === 'ON' ? 'マイクをOFFにする' : 'マイクをONにする'}
+          </button>
+          <button className={styles.voiceButton} type="button" onClick={() => void voice.disable()}>
+            VOICEを無効にする
+          </button>
+        </div>
+      )}
+      {voice.snapshot.error !== null && (
+        <p className={styles.voiceError} role="alert">
+          VOICE ERROR: {voice.snapshot.error}
+        </p>
+      )}
+    </section>
   );
 }

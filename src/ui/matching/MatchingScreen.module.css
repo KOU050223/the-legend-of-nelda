@@ -203,6 +203,72 @@
   border: 0;
 }
 
+.voicePanel {
+  width: min(100%, 360px);
+  margin: 4px auto 18px;
+  padding: 12px;
+  border: 2px solid #4c7c8b;
+  border-radius: 10px;
+  background: #112c3be0;
+}
+
+.voiceTitle,
+.voiceStatus,
+.voiceMode {
+  margin: 0;
+  font-weight: 900;
+}
+
+.voiceTitle {
+  color: #7dd3fc;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+
+.voiceStatus {
+  margin-top: 4px;
+  color: #e0f2fe;
+  font-size: 0.9rem;
+}
+
+.voiceMode {
+  margin-top: 3px;
+  color: #bae6fd;
+  font-size: 0.75rem;
+}
+
+.voiceButtons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.voiceButton {
+  margin-top: 10px;
+  padding: 7px 12px;
+  border: 2px solid #164e63;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #67e8f9, #22a6bf);
+  color: #082f49;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.voiceButton:disabled {
+  cursor: wait;
+  filter: grayscale(0.7);
+  opacity: 0.6;
+}
+
+.voiceError {
+  margin: 10px 0 0;
+  color: #fecaca;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .rolePicker legend {
   margin: 0 auto 8px;
   color: #ffe7a1;
