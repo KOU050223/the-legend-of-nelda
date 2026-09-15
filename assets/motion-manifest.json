@@ -11,7 +11,10 @@
         "baseClip": "stand-up",
         "sources": {
           "walking.fbx": "walk",
-          "Sleeping Idle.fbx": "sleep"
+          "Sleeping Idle.fbx": "sleep",
+          "Warrior Idle.fbx": "idle",
+          "Sprinting Forward Roll.fbx": "roll",
+          "Punch Combo.fbx": "punch"
         },
         "motionDir": "assets/motions"
       },
@@ -24,13 +27,31 @@
           "loop": true,
           "label": "歩行"
         },
+        "idle": {
+          "loop": true,
+          "label": "待機"
+        },
+        "roll": {
+          "loop": false,
+          "label": "回避"
+        },
+        "punch": {
+          "loop": false,
+          "label": "攻撃"
+        },
         "sleep": {
           "loop": true,
           "label": "sleep"
         }
       },
-      "defaultClip": "stand-up",
-      "rules": []
+      "defaultClip": "idle",
+      "rules": [
+        { "when": "attacking", "clip": "punch" },
+        { "when": "dodging", "clip": "roll" },
+        { "when": "fallingAsleep", "clip": "sleep" },
+        { "when": "asleep", "clip": "sleep" },
+        { "when": "moving", "clip": "walk" }
+      ]
     },
     "star-platinum": {
       "label": "オラ大輔 (スタープラチナ)",
@@ -41,7 +62,10 @@
         "script": "scripts/build-star-platinum-glb.py",
         "baseClip": "idle",
         "sources": {
-          "Punch Combo.fbx": "punch"
+          "Punch Combo.fbx": "punch",
+          "walking.fbx": "walk",
+          "Sleeping Idle.fbx": "sleep",
+          "Sprinting Forward Roll.fbx": "roll"
         },
         "motionDir": "assets/character/star-platimun-low-poly/export/motions"
       },
@@ -53,6 +77,18 @@
         "punch": {
           "loop": false,
           "label": "ラッシュ"
+        },
+        "walk": {
+          "loop": true,
+          "label": "歩行"
+        },
+        "sleep": {
+          "loop": true,
+          "label": "sleep"
+        },
+        "roll": {
+          "loop": false,
+          "label": "回避"
         }
       },
       "defaultClip": "idle",
@@ -60,7 +96,11 @@
         {
           "when": "attacking",
           "clip": "punch"
-        }
+        },
+        { "when": "dodging", "clip": "roll" },
+        { "when": "fallingAsleep", "clip": "sleep" },
+        { "when": "asleep", "clip": "sleep" },
+        { "when": "moving", "clip": "walk" }
       ]
     },
     "dance-daisuke": {
@@ -73,7 +113,10 @@
         "motionDir": "assets/motions",
         "baseClip": "idle",
         "sources": {
-          "walking.fbx": "walk"
+          "walking.fbx": "walk",
+          "Sleeping Idle.fbx": "sleep",
+          "Sprinting Forward Roll.fbx": "roll",
+          "Punch Combo.fbx": "punch"
         }
       },
       "clips": {
@@ -84,10 +127,28 @@
         "walk": {
           "loop": true,
           "label": "歩行"
+        },
+        "sleep": {
+          "loop": true,
+          "label": "sleep"
+        },
+        "roll": {
+          "loop": false,
+          "label": "回避"
+        },
+        "punch": {
+          "loop": false,
+          "label": "攻撃"
         }
       },
       "defaultClip": "idle",
-      "rules": []
+      "rules": [
+        { "when": "attacking", "clip": "punch" },
+        { "when": "dodging", "clip": "roll" },
+        { "when": "fallingAsleep", "clip": "sleep" },
+        { "when": "asleep", "clip": "sleep" },
+        { "when": "moving", "clip": "walk" }
+      ]
     },
     "paypay-daisuke": {
       "label": "Pay大輔",
@@ -99,7 +160,10 @@
         "motionDir": "assets/motions",
         "baseClip": "idle",
         "sources": {
-          "walking.fbx": "walk"
+          "walking.fbx": "walk",
+          "Sleeping Idle.fbx": "sleep",
+          "Sprinting Forward Roll.fbx": "roll",
+          "Punch Combo.fbx": "punch"
         }
       },
       "clips": {
@@ -110,10 +174,28 @@
         "walk": {
           "loop": true,
           "label": "歩行"
+        },
+        "sleep": {
+          "loop": true,
+          "label": "sleep"
+        },
+        "roll": {
+          "loop": false,
+          "label": "回避"
+        },
+        "punch": {
+          "loop": false,
+          "label": "攻撃"
         }
       },
       "defaultClip": "idle",
-      "rules": []
+      "rules": [
+        { "when": "attacking", "clip": "punch" },
+        { "when": "dodging", "clip": "roll" },
+        { "when": "fallingAsleep", "clip": "sleep" },
+        { "when": "asleep", "clip": "sleep" },
+        { "when": "moving", "clip": "walk" }
+      ]
     }
   }
 }

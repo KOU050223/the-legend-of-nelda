@@ -19,6 +19,8 @@ const CONDITION_LABELS: Readonly<Record<MotionCondition, string>> = {
   attacking: '攻撃中',
   fallingAsleep: '寝落ちかけ',
   asleep: '就寝',
+  moving: '移動中',
+  dodging: '回避中',
 };
 
 /**
