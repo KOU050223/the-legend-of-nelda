@@ -5,6 +5,15 @@ import {
   type HoriBossOptions,
 } from '../boss/hori-boss';
 import type { BossTarget } from '../boss/boss-target';
+import { isBarrierPhase } from '../boss/boss-phase';
+import {
+  createBarrierChallenge,
+  type BarrierChallenge,
+  type BarrierChallengeSnapshot,
+  type BarrierParticipant,
+  type BarrierPayView,
+  isBarrierAction,
+} from '../barrier/barrier-challenge';
 import { DEFAULT_REVIVAL, type CharacterId } from '../config/phase2-player-balance';
 import type { PlanarPosition } from '../movement/types';
 import type { GameEventBus } from '../events/game-event';
@@ -53,6 +62,7 @@ export interface PlayerSeed {
 export interface BattleSnapshot {
   readonly boss: BossSnapshot;
   readonly players: readonly PlayerSnapshot[];
+  readonly barrier: BarrierChallengeSnapshot | null;
 }
 
 export type BattleOutcome = 'ONGOING' | 'VICTORY' | 'DEFEAT';
@@ -67,6 +77,18 @@ export interface BossBattle {
   readonly boss: HoriBoss;
   readonly players: readonly Player[];
   snapshot(): BattleSnapshot;
+  /** ACTIVE な PAY だけが結界の正解情報を取得する。 */
+  barrierViewFor(playerId: string): BarrierPayView | null;
+}
+
+function toBarrierParticipant(player: Player): BarrierParticipant {
+  const snapshot = player.snapshot();
+  return {
+    id: snapshot.id,
+    characterId: snapshot.characterId,
+    status: snapshot.status,
+    position: snapshot.position,
+  };
 }
 
 /**
@@ -129,6 +151,20 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     },
   });
 
+  let barrierChallenge: BarrierChallenge | null = null;
+
+  function syncBarrierChallenge(): void {
+    const phase = boss.snapshot().phase;
+    if (!isBarrierPhase(phase)) {
+      barrierChallenge = null;
+      return;
+    }
+
+    if (barrierChallenge === null || barrierChallenge.snapshot().phase !== phase) {
+      barrierChallenge = createBarrierChallenge(phase);
+    }
+  }
+
   function findReviveTarget(rescuer: Player): Player | null {
     const from = rescuer.snapshot().position;
     let nearest: Player | null = null;
@@ -159,20 +195,26 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         return;
       }
 
-      // INTERACT と CHARACTER_ACTION はここまで来るが、まだ誰も消費しない。
-      //
-      // INTERACT の相手になる装置・祭壇は #54（アンカー座標）と
-      // ショートスリーパー結界のIssueが持ち、CHARACTER_ACTION の中身は
-      // #45 とオラ大輔の専用アクション設計が未確定
-      // (docs/phase2-gameplay-spec.md §18 の P0 保留事項)。
-      // どちらもその実装がこの層へ繋がる。キーは割り当ててあるので、
-      // 受け手ができた時点でここへ分岐を足せばそのまま動く。
+      if (isBarrierAction(action)) {
+        syncBarrierChallenge();
+        if (barrierChallenge !== null) {
+          const result = barrierChallenge.submit(toBarrierParticipant(player), action);
+          if (result.completed) {
+            boss.breakBarrier();
+            syncBarrierChallenge();
+          }
+          return;
+        }
+      }
+
       player.submit(action);
     },
 
     update(deltaSeconds) {
       for (const player of players) player.update(deltaSeconds);
+      syncBarrierChallenge();
       boss.update(activeTargets(players, clock.now()));
+      syncBarrierChallenge();
     },
 
     outcome() {
@@ -186,10 +228,19 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     players,
 
     snapshot() {
+      syncBarrierChallenge();
       return {
         boss: boss.snapshot(),
         players: players.map((player) => player.snapshot()),
+        barrier: barrierChallenge?.snapshot() ?? null,
       };
+    },
+
+    barrierViewFor(playerId) {
+      syncBarrierChallenge();
+      const player = byId.get(playerId);
+      if (player === undefined || barrierChallenge === null) return null;
+      return barrierChallenge.viewFor(toBarrierParticipant(player));
     },
   };
 }

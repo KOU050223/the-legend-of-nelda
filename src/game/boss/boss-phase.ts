@@ -106,7 +106,9 @@ export function isInvulnerablePhase(phase: BossPhase): boolean {
 }
 
 /** そのフェーズが協力ギミック (ショートスリーパー結界) を要求するか。 */
-export function isBarrierPhase(phase: BossPhase): boolean {
+export function isBarrierPhase(
+  phase: BossPhase,
+): phase is Extract<BossPhase, 'BARRIER_1' | 'BARRIER_2'> {
   return phase === 'BARRIER_1' || phase === 'BARRIER_2';
 }
 
