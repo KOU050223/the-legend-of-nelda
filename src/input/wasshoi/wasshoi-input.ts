@@ -60,6 +60,14 @@ export async function attachWasshoiInput(
   const noiseGate = createAdaptiveNoiseGate(config.threshold);
   options.onStatusChange?.('requesting-permission');
 
+  if (navigator.mediaDevices?.getUserMedia === undefined) {
+    const error = new Error(
+      'マイクを使うには HTTPS または localhost で開いてください。LAN の http:// URL では利用できません。',
+    );
+    options.onStatusChange?.('error');
+    throw error;
+  }
+
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
