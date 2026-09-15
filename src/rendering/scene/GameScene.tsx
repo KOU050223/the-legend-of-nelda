@@ -1,8 +1,11 @@
 import { Canvas } from '@react-three/fiber';
 import { ResultCamera } from '../result/ResultCamera';
+import { Color } from 'three';
 
+import { getDefeatCinematicState } from '@/game/cinematic/defeat-cinematic';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { requestedScene } from '@/app/scene-mode';
+import { useGameStore } from '@/store/game-store';
 
 import { BossMesh } from '../boss/BossMesh';
 import { PlayerMesh } from '../player/PlayerMesh';
@@ -44,13 +47,21 @@ export function GameScene({ world, multiplayer }: GameSceneProps = {}): React.JS
   // WorldSceneとMultiplayerArenaSceneは同じ草原の見た目 (BossArenaScene) を
   // 共有するため、背景・光源はこの2つをまとめて「アリーナ系」として選ぶ。
   const showArenaVisuals = multiplayer || (world ?? requestedScene() === 'world');
+  const result = useGameStore((state) => state.result);
+  const cinematic =
+    !showArenaVisuals && result?.outcome === 'defeat'
+      ? getDefeatCinematicState(result.elapsedMs)
+      : null;
+  const darkness = cinematic?.darkness ?? 0;
+  const background = new Color(COMBAT_BACKGROUND).lerp(new Color('#080912'), darkness).getStyle();
 
   return (
     <Canvas shadows camera={{ position: [0, 2.5, 8], fov: 50 }}>
-      <color attach="background" args={[showArenaVisuals ? WORLD_BACKGROUND : COMBAT_BACKGROUND]} />
+      <color attach="background" args={[showArenaVisuals ? WORLD_BACKGROUND : background]} />
 
-      <ambientLight intensity={showArenaVisuals ? 0.7 : 0.4} />
-      <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
+      <ambientLight intensity={showArenaVisuals ? 0.7 : 0.4 - darkness * 0.28} />
+      <directionalLight position={[4, 6, 4]} intensity={1.4 - darkness * 0.9} castShadow />
+      {cinematic && <fog attach="fog" args={['#080912', 5 - darkness * 2, 24 - darkness * 12]} />}
 
       {multiplayer ? (
         <MultiplayerArenaScene />

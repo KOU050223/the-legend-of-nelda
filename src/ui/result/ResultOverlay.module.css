@@ -39,6 +39,20 @@
 .verdict span {
   color: #aaa5a0;
 }
+.caption {
+  position: absolute;
+  inset-inline: 8%;
+  bottom: 18%;
+  margin: 0;
+  color: #ddd9ee;
+  font:
+    clamp(16px, 2vw, 28px) Georgia,
+    'Times New Roman',
+    serif;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 10px #000;
+  animation: proclaim 0.6s ease-out both;
+}
 .title {
   position: absolute;
   top: 29%;
@@ -89,6 +103,9 @@
 .defeat .subtitle p {
   font-style: italic;
   font-size: 34px;
+}
+.defeat .title h1 {
+  letter-spacing: 0.18em;
 }
 .restart {
   position: absolute;

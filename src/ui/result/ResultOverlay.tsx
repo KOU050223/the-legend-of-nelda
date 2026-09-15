@@ -1,11 +1,13 @@
 import { useGameStore } from '@/store/game-store';
-import { RESULT_TIMING } from './result-presentation';
+import { getDefeatCinematicState } from '@/game/cinematic/defeat-cinematic';
+import { DEFEAT_RESULT_TIMING, RESULT_TIMING } from './result-presentation';
 import styles from './ResultOverlay.module.css';
 
 export function ResultOverlay({ onRestart }: { onRestart: () => void }): React.JSX.Element | null {
   const result = useGameStore((state) => state.result);
   if (!result) return null;
   const victory = result.outcome === 'victory';
+  const defeatState = victory ? null : getDefeatCinematicState(result.elapsedMs);
   return (
     <section
       className={`${styles.overlay} ${victory ? styles.victory : styles.defeat}`}
@@ -13,30 +15,37 @@ export function ResultOverlay({ onRestart }: { onRestart: () => void }): React.J
     >
       <div className={styles.flash} />
       <div className={styles.letterbox} />
-      <p className={styles.verdict}>
-        {victory ? 'THE FINAL AWAKENING' : 'HORI SLEEPINESS 100%'}{' '}
-        <span> — {victory ? '決着' : '意識、消失'}</span>
-      </p>
-      {result.elapsedMs >= RESULT_TIMING.title && (
+      {victory && (
+        <p className={styles.verdict}>
+          THE FINAL AWAKENING <span> — 決着</span>
+        </p>
+      )}
+      {!victory && defeatState?.caption && (
+        <p className={styles.caption} aria-live="polite">
+          {defeatState.caption}
+        </p>
+      )}
+      {victory && result.elapsedMs >= RESULT_TIMING.title && (
         <div className={styles.title} aria-live="polite">
-          <p className={styles.chapter}>
-            {victory ? '眠りとの戦いに、終止符。' : '世界の命運は、まぶたに託された。'}
-          </p>
-          <h1>{victory ? 'SLEEP DEMON DEFEATED' : 'HORI FELL ASLEEP'}</h1>
+          <p className={styles.chapter}>眠りとの戦いに、終止符。</p>
+          <h1>SLEEP DEMON DEFEATED</h1>
           <div className={styles.rule} />
           {result.elapsedMs >= RESULT_TIMING.subtitle && (
             <div className={styles.subtitle}>
-              <p>{victory ? 'WAKE FORCE COMPLETE' : 'Zzz...'}</p>
-              <span>
-                {victory
-                  ? 'そして勇者は、二度寝を許さなかった。'
-                  : '勇者はただ、あと5分だけ眠りたかった。'}
-              </span>
+              <p>WAKE FORCE COMPLETE</p>
+              <span>そして勇者は、二度寝を許さなかった。</span>
             </div>
           )}
         </div>
       )}
-      {result.elapsedMs >= RESULT_TIMING.restart && (
+      {!victory && defeatState?.showBadEnd && (
+        <div className={styles.title} aria-live="polite">
+          <p className={styles.chapter}>世界の安眠が失われた。</p>
+          <h1>BAD END</h1>
+        </div>
+      )}
+      {((victory && result.elapsedMs >= RESULT_TIMING.restart) ||
+        (!victory && result.elapsedMs >= DEFEAT_RESULT_TIMING.restart)) && (
         <button className={styles.restart} onClick={onRestart}>
           RESTART <span>もう一度、目を覚ませ</span>
         </button>

@@ -14,14 +14,10 @@ describe('ResultOverlay', () => {
     dispose?.();
   });
 
-  it.each([
-    {
-      to: 'BOSS_DEFEATED' as const,
-      title: 'SLEEP DEMON DEFEATED',
-      subtitle: 'WAKE FORCE COMPLETE',
-    },
-    { to: 'PLAYER_LOSE' as const, title: 'HORI FELL ASLEEP', subtitle: 'Zzz...' },
-  ])('$to の決着後に間を置いて結果と再戦操作を順に表示する', ({ to, title, subtitle }) => {
+  it('勝利後は既存の結果と再戦操作を順に表示する', () => {
+    const to = 'BOSS_DEFEATED' as const;
+    const title = 'SLEEP DEMON DEFEATED';
+    const subtitle = 'WAKE FORCE COMPLETE';
     const clock = createFakeClock();
     const bus = createGameEventBus();
     const presentation = syncResultWithGameEvents(bus, clock);
@@ -50,6 +46,37 @@ describe('ResultOverlay', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     act(() => {
       clock.advance(700);
+      presentation.update();
+    });
+    expect(screen.getByRole('button', { name: /RESTART/ })).toBeInTheDocument();
+  });
+
+  it('敗北後は字幕を段階表示してからBAD ENDと再戦操作を表示する', () => {
+    const clock = createFakeClock();
+    const bus = createGameEventBus();
+    const presentation = syncResultWithGameEvents(bus, clock);
+    dispose = () => presentation.dispose();
+    render(<ResultOverlay onRestart={() => {}} />);
+
+    act(() => bus.emit({ type: 'COMBAT_STATE_CHANGED', from: 'HIT', to: 'PLAYER_LOSE' }));
+
+    act(() => {
+      clock.advance(4_000);
+      presentation.update();
+    });
+    expect(screen.getByText('全員が、眠ってしまった。')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+
+    act(() => {
+      clock.advance(3_000);
+      presentation.update();
+    });
+    expect(screen.getByRole('heading', { name: 'BAD END' })).toBeInTheDocument();
+    expect(screen.getByText('世界の安眠が失われた。')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    act(() => {
+      clock.advance(2_000);
       presentation.update();
     });
     expect(screen.getByRole('button', { name: /RESTART/ })).toBeInTheDocument();
