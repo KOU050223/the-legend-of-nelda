@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useScreenStore, type GameMode, type Screen } from '@/app/screen';
 
+import oraShadow from '../../../assets/character/star-platimun-low-poly/Oradaisuke_black.png';
+import payShadow from '../../../assets/character/paypay-daisuke-v1/pay_black.png';
+import odorunoShadow from '../../../assets/character/dance-daisuke/daisuke_black.png';
+
 import styles from './TitleScreen.module.css';
 import { createTitleVoicePlayer, type TitleVoicePlayer } from './title-voice';
 
@@ -45,6 +49,11 @@ export function TitleScreen(): React.JSX.Element {
   return (
     <div className={styles.title}>
       <img className={styles.background} src="/title/bg.png" alt="" aria-hidden="true" />
+      <div className={styles.skyFigures} aria-hidden="true">
+        <img className={`${styles.skyFigure} ${styles.oraShadow}`} src={oraShadow} alt="" />
+        <img className={`${styles.skyFigure} ${styles.payShadow}`} src={payShadow} alt="" />
+        <img className={`${styles.skyFigure} ${styles.odorunoShadow}`} src={odorunoShadow} alt="" />
+      </div>
       <button
         className={styles.heroButton}
         type="button"
