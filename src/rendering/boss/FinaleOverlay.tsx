@@ -247,11 +247,22 @@ function HoriFallingAsleep(): React.JSX.Element {
 
 function Ending(): React.JSX.Element {
   const goTo = useScreenStore((state) => state.goTo);
-  const [creditsSkipped, setCreditsSkipped] = useState(false);
+  const [creditsRolling, setCreditsRolling] = useState(false);
+  const [showFinal, setShowFinal] = useState(false);
+
+  useEffect(() => {
+    // 「安眠が戻った」の余韻を残してから、下からではなく上からロールを始める。
+    const startTimer = window.setTimeout(() => setCreditsRolling(true), 3_400);
+    const endTimer = window.setTimeout(() => setShowFinal(true), 21_400);
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, []);
 
   return (
     <section
-      className={`${styles.overlay} ${styles.ending} ${creditsSkipped ? styles.endingSkipped : ''}`}
+      className={`${styles.overlay} ${styles.ending} ${showFinal ? styles.endingSkipped : ''}`}
       aria-live="polite"
     >
       <video
@@ -268,7 +279,7 @@ function Ending(): React.JSX.Element {
         <p className={styles.endingLine}>安眠が戻った。</p>
       </div>
       <div className={styles.creditsViewport} aria-label="スタッフロール">
-        <div className={styles.credits}>
+        <div className={`${styles.credits} ${creditsRolling ? styles.creditsRolling : ''}`}>
           <p>THE LEGEND OF NELDA</p>
           <strong>END CREDITS</strong>
           <p>CAST</p>
@@ -298,12 +309,8 @@ function Ending(): React.JSX.Element {
           <strong>そして、8時間の睡眠</strong>
         </div>
       </div>
-      {!creditsSkipped && (
-        <button
-          className={styles.skipCredits}
-          type="button"
-          onClick={() => setCreditsSkipped(true)}
-        >
+      {creditsRolling && !showFinal && (
+        <button className={styles.skipCredits} type="button" onClick={() => setShowFinal(true)}>
           エンドロールをスキップ
         </button>
       )}
