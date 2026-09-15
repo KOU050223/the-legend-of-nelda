@@ -9,6 +9,7 @@ function location(pathname: string, search = '') {
 describe('画面 URL の対応', () => {
   it.each([
     ['/', 'TITLE'],
+    ['/intro', 'INTRO'],
     ['/battle', 'BATTLE'],
     ['/world', 'WORLD'],
     ['/debug/ora', 'ORA_DEBUG'],

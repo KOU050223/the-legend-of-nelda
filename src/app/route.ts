@@ -4,6 +4,7 @@ export type AppRoute = Screen | 'ORA_DEBUG';
 
 const routePaths: Record<AppRoute, string> = {
   TITLE: '/',
+  INTRO: '/intro',
   BATTLE: '/battle',
   WORLD: '/world',
   ORA_DEBUG: '/debug/ora',
@@ -27,6 +28,7 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
     }
   }
 
+  if (location.pathname === '/intro') return 'INTRO';
   if (location.pathname === '/battle') return 'BATTLE';
   return 'TITLE';
 }

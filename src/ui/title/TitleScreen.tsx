@@ -15,7 +15,7 @@ interface MenuItem {
  * この行自体を出さない。
  */
 function menuItems(): MenuItem[] {
-  const items: MenuItem[] = [{ label: 'はじめから', screen: 'BATTLE' }];
+  const items: MenuItem[] = [{ label: 'はじめから', screen: 'INTRO' }];
   if (import.meta.env.DEV) items.push({ label: 'ワールドへ', screen: 'WORLD' });
   return items;
 }

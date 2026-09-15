@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { currentRoute, navigateToScreen } from './route';
-export type Screen = 'TITLE' | 'BATTLE' | 'WORLD';
+export type Screen = 'TITLE' | 'INTRO' | 'BATTLE' | 'WORLD';
 
 interface ScreenStore {
   screen: Screen;
@@ -10,7 +10,7 @@ interface ScreenStore {
 
 function initialScreen(): Screen {
   const route = currentRoute();
-  return route === 'BATTLE' || route === 'WORLD' ? route : 'TITLE';
+  return route === 'INTRO' || route === 'BATTLE' || route === 'WORLD' ? route : 'TITLE';
 }
 
 export const useScreenStore = create<ScreenStore>((set) => ({
