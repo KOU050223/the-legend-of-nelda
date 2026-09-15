@@ -11,6 +11,7 @@ import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
+import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
 import { useScreenStore } from './screen';
@@ -100,6 +101,7 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene world />
+        <WorldTutorialGuide />
         <MicrophoneDebugPanel />
       </div>
     );
