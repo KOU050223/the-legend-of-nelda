@@ -20,7 +20,12 @@ import { FINALE_STATES } from '../finale/finale-state';
 import { createBossBattle, outcomeOfSnapshot, type BossBattle } from './boss-battle';
 
 function setup(
-  options: { attack?: HoriAttackId; initialHp?: number; debugSkipBarriers?: boolean } = {},
+  options: {
+    attack?: HoriAttackId;
+    initialHp?: number;
+    debugSkipBarriers?: boolean;
+    solo?: boolean;
+  } = {},
 ) {
   const pinned = options.attack;
   const clock = createFakeClock(0);
@@ -31,14 +36,17 @@ function setup(
   const battle = createBossBattle({
     clock,
     events,
-    roster: [
-      { id: 'odoruno', characterId: 'ODORUNO', position: { x: 2, z: 0 } },
-      { id: 'pay', characterId: 'PAY', position: { x: 10, z: 0 } },
-      { id: 'ora', characterId: 'ORA', position: { x: -10, z: 0 } },
-    ],
+    roster: options.solo
+      ? [{ id: 'odoruno', characterId: 'ODORUNO', position: { x: 2, z: 0 } }]
+      : [
+          { id: 'odoruno', characterId: 'ODORUNO', position: { x: 2, z: 0 } },
+          { id: 'pay', characterId: 'PAY', position: { x: 10, z: 0 } },
+          { id: 'ora', characterId: 'ORA', position: { x: -10, z: 0 } },
+        ],
     ...(options.debugSkipBarriers === undefined
       ? {}
       : { debugSkipBarriers: options.debugSkipBarriers }),
+    ...(options.solo === undefined ? {} : { solo: options.solo }),
     createBoss: (bossOptions: HoriBossOptions) =>
       createHoriBoss({
         ...bossOptions,
@@ -384,6 +392,41 @@ describe('戦闘全体のスナップショット', () => {
 });
 
 describe('結界チャレンジのBossBattle統合', () => {
+  it('ソロ戦では3人前提の結界を撤廃して次の攻撃フェーズへ進む', () => {
+    const { battle, emitted } = setup({ solo: true });
+
+    battle.boss.damage(300);
+
+    expect(battle.players).toHaveLength(1);
+    expect(battle.snapshot().barrier).toBeNull();
+    expect(battle.boss.snapshot().phase).toBe('FIELD_ADDED');
+    expect(emitted).toContainEqual({
+      type: 'BOSS_DOWN_STARTED',
+      durationMs: BOSS_DOWN_DURATION_MS,
+    });
+  });
+
+  it('ソロ戦では結界を挟まずHP10%の最終局面まで進められる', () => {
+    const { battle, clock } = setup({ solo: true });
+
+    for (let hit = 0; hit < 3; hit += 1) {
+      battle.boss.damage(300);
+      battle.update(0.016);
+      clock.advance(BOSS_DOWN_DURATION_MS);
+      battle.update(0.016);
+    }
+
+    expect(battle.players).toHaveLength(1);
+    expect(battle.boss.snapshot().phase).toBe('NO_SLEEP_MODE');
+    expect(battle.snapshot().barrier).toBeNull();
+
+    battle.submit('odoruno', { type: 'ATTACK' });
+    clock.advance(comboStepAt(0).windupMs + 1);
+    battle.update(0.016);
+
+    expect(battle.snapshot().finale).toBe('FINAL_STANDOFF');
+  });
+
   it('開発用の結界スキップでは、結界を自動解除して総攻撃へ進める', () => {
     const { battle, emitted } = setup({ debugSkipBarriers: true });
 

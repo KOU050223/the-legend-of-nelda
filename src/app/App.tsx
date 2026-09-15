@@ -11,7 +11,6 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
-import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
@@ -127,11 +126,6 @@ export function App(): React.JSX.Element {
         <GameScene world />
         <FinalePresentation />
         <WorldTutorialGuide />
-        {/*
-          操作キャラの切り替え (Issue #106)。DEV ガードは付けない。
-          一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
-        */}
-        <PlayerSwitch />
         <MicrophoneDebugPanel />
       </div>
     );
