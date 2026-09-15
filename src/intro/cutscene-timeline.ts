@@ -6,6 +6,9 @@ export interface CutsceneShot {
   focus:
     | 'RUINS_WIDE'
     | 'RUINS_APPROACH'
+    | 'HORI_INTRO'
+    | 'HORI_AWAKENED'
+    | 'HORI_HERO'
     | 'WORLD'
     | 'HORI'
     | 'REVEAL'
@@ -31,18 +34,32 @@ export const INTRO_SHOTS: readonly CutsceneShot[] = [
     focus: 'RUINS_APPROACH',
   },
   {
-    durationMs: 3_300,
-    subtitle: 'しかし――「聞かざる」の力を持つ男、堀大輔は……',
-    camera: [2, 2.4, 7],
-    lookAt: [0, 1, -3],
-    focus: 'HORI',
+    durationMs: 1_000,
+    subtitle: 'しかし――',
+    camera: [4.6, 0.8, 6.6],
+    lookAt: [0, 1.5, 0.5],
+    focus: 'HORI_INTRO',
   },
   {
-    durationMs: 2_800,
-    subtitle: 'ショートスリーパーに目覚めた。\n「人間に長い睡眠など必要ない。」',
-    camera: [0, 1.4, 4.7],
-    lookAt: [0, 1, -3],
-    focus: 'HORI',
+    durationMs: 2_100,
+    subtitle: '「聞かざる」の力を持つ男、堀大輔は……',
+    camera: [2.8, 2.1, 5.9],
+    lookAt: [0, 1.7, 0.5],
+    focus: 'HORI_INTRO',
+  },
+  {
+    durationMs: 1_400,
+    subtitle: 'ショートスリーパーに目覚めた。',
+    camera: [1.3, 2.25, 4.7],
+    lookAt: [0, 1.85, 0.5],
+    focus: 'HORI_AWAKENED',
+  },
+  {
+    durationMs: 1_700,
+    subtitle: '「人間に長い睡眠など必要ない。」',
+    camera: [0.6, 2.3, 3.8],
+    lookAt: [0, 1.9, 0.5],
+    focus: 'HORI_HERO',
   },
   {
     durationMs: 2_800,

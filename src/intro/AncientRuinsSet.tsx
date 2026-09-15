@@ -22,7 +22,11 @@ const MOUNTAINS: readonly [number, number, number, number][] = [
  * プレイ用の衝突・移動・ナビゲーションは持たせず、低ポリの層を重ねて
  * 「三つの力が祀られた場所」を短時間で見せる。
  */
-export function AncientRuinsSet(): React.JSX.Element {
+export function AncientRuinsSet({
+  villainAwakened = false,
+}: {
+  villainAwakened?: boolean;
+}): React.JSX.Element {
   return (
     <>
       <fog attach="fog" args={['#263555', 22, 62]} />
@@ -32,6 +36,7 @@ export function AncientRuinsSet(): React.JSX.Element {
       <pointLight position={[6, 4, 1]} intensity={42} distance={18} decay={0} color="#ff9a4b" />
       <pointLight position={[0, 5, -3]} intensity={18} distance={16} decay={0} color="#789dff" />
       <pointLight position={[0, 9, -16]} intensity={2.5} distance={36} decay={0} color="#95aaff" />
+      <HoriRimLights awakened={villainAwakened} />
       <Moon />
       <RuinsGround />
       <DistantMountains />
@@ -42,6 +47,17 @@ export function AncientRuinsSet(): React.JSX.Element {
       <StoneMonkeyMonument kind="MOUTH" position={[7, 0, -6]} rotationY={-0.16} />
       <Torches />
       <Dust />
+    </>
+  );
+}
+
+function HoriRimLights({ awakened }: { awakened: boolean }): React.JSX.Element | null {
+  if (!awakened) return null;
+
+  return (
+    <>
+      <pointLight position={[0, 5, -2]} intensity={28} distance={18} decay={0} color="#b894ff" />
+      <pointLight position={[-3, 3, 1]} intensity={9} distance={12} decay={0} color="#84b7ff" />
     </>
   );
 }

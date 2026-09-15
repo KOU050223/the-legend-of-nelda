@@ -9,7 +9,8 @@ describe('intro cutscene timeline', () => {
 
     expect(shotAt(0).focus).toBe('RUINS_WIDE');
     expect(shotAt(openingShot.durationMs).focus).toBe('RUINS_APPROACH');
-    expect(shotAt(openingShot.durationMs + 3_300).focus).toBe('HORI');
+    expect(shotAt(openingShot.durationMs + 3_300).focus).toBe('HORI_INTRO');
+    expect(shotAt(openingShot.durationMs + 3_300 + 1_000 + 2_100).focus).toBe('HORI_AWAKENED');
     expect(shotAt(INTRO_DURATION_MS - 1).focus).toBe('FINAL');
   });
 });
