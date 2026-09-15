@@ -6,6 +6,7 @@ import {
   SHOCKWAVE_INNER_RADIUS,
   SHOCKWAVE_OUTER_RADIUS,
   dumbbellSlamStateAt,
+  dumbbellSlamVisibility,
 } from './dumbbell-slam';
 
 const TIMING = { telegraphMs: 1400, activeMs: 400 };
@@ -82,5 +83,34 @@ describe('dumbbellSlamStateAt', () => {
     // 演出だけが範囲を誤解させないこと。判定の形は phase2-boss-balance が持つ。
     expect(SHOCKWAVE_INNER_RADIUS).toBe(3);
     expect(SHOCKWAVE_OUTER_RADIUS).toBe(18);
+  });
+});
+
+describe('dumbbellSlamVisibility', () => {
+  /** 判定の頭。ダンベルも衝撃波も出ている瞬間。 */
+  const impact = dumbbellSlamStateAt(TIMING.telegraphMs, TIMING);
+
+  it('演出強度 0 では飾りを丸ごと消す', () => {
+    // Issue #11 完了条件: 絵を切ってもゲームロジックは変わらない。
+    // 危険範囲マークは情報なので別途描かれ続ける (ここの対象外)。
+    expect(dumbbellSlamVisibility(impact, 0)).toEqual({ dumbbell: false, shockwave: false });
+  });
+
+  it('演出を切っていなければ判定中は両方出す', () => {
+    expect(dumbbellSlamVisibility(impact, 1)).toEqual({ dumbbell: true, shockwave: true });
+  });
+
+  it('予兆中はダンベルだけ出し、衝撃波はまだ出さない', () => {
+    const telegraph = dumbbellSlamStateAt(0, TIMING);
+    expect(dumbbellSlamVisibility(telegraph, 1)).toEqual({ dumbbell: true, shockwave: false });
+  });
+
+  it('硬直中は何も出さない', () => {
+    const recover = dumbbellSlamStateAt(TIMING.telegraphMs + TIMING.activeMs, TIMING);
+    expect(dumbbellSlamVisibility(recover, 1)).toEqual({ dumbbell: false, shockwave: false });
+  });
+
+  it('負の演出強度でも消える', () => {
+    expect(dumbbellSlamVisibility(impact, -1)).toEqual({ dumbbell: false, shockwave: false });
   });
 });

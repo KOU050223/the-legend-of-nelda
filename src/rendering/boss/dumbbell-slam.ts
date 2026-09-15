@@ -26,8 +26,13 @@ export const SHOCKWAVE_OUTER_RADIUS = ALARM_SHAPE.kind === 'RING' ? ALARM_SHAPE.
 /** ダンベルを振り上げる高さ。予兆の頭でここまで上がる。 */
 export const DUMBBELL_LIFT_HEIGHT = 6.5;
 
-/** 叩きつけた後にダンベルが残る高さ (地面に転がっている見た目)。 */
-export const DUMBBELL_GROUND_HEIGHT = 0.5;
+/**
+ * 叩きつけた後にダンベルが残る高さ (地面に転がっている見た目)。
+ *
+ * プレートの半径 (DumbbellSlam.tsx の PLATE_RADIUS) より高くする。低くすると
+ * プレートが地面へ埋まって、転がっているというより刺さって見える。
+ */
+export const DUMBBELL_GROUND_HEIGHT = 0.66;
 
 /**
  * 予兆のうち、振り上げに使う割合。残りは振り上げきった位置での「溜め」。
@@ -142,4 +147,33 @@ export function dumbbellSlamStateAt(
   }
 
   return IDLE;
+}
+
+/** ダンベルと衝撃波を今このフレームで描くか。 */
+export interface DumbbellSlamVisibility {
+  readonly dumbbell: boolean;
+  readonly shockwave: boolean;
+}
+
+/**
+ * 演出強度と現在の状態から、何を描くかを決める。
+ *
+ * 描画から切り出してあるのは、**演出強度 0 で丸ごと消えること** (Issue #11
+ * 完了条件: 絵を切ってもゲームロジックは変わらない) を Three.js を動かさずに
+ * 確かめるため。`vfx-cue.ts` / `audio-manager.ts` が同じ理由で Pure function に
+ * なっているのに倣う。
+ *
+ * ここで消えるのは判定を持たない飾りだけで、危険範囲マーク
+ * (`DangerZoneMarks`) は情報なので別に描かれ続ける。
+ */
+export function dumbbellSlamVisibility(
+  state: DumbbellSlamState,
+  scale: number,
+): DumbbellSlamVisibility {
+  if (scale <= 0) return { dumbbell: false, shockwave: false };
+
+  return {
+    dumbbell: state.phase !== 'NONE',
+    shockwave: state.shockwaveOpacity > 0 && state.shockwaveRadius > 0,
+  };
 }

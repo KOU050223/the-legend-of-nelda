@@ -6,7 +6,11 @@ import type { PlanarPosition } from '@/game/movement/types';
 import { visualScale } from '@/presentation/presentation-settings';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 
-import { dumbbellSlamStateAt, type DumbbellSlamTiming } from './dumbbell-slam';
+import {
+  dumbbellSlamStateAt,
+  dumbbellSlamVisibility,
+  type DumbbellSlamTiming,
+} from './dumbbell-slam';
 
 /**
  * 絶対起床アラームの演出。ダンベルを振り上げて地面へ叩きつけ、
@@ -71,8 +75,12 @@ export function DumbbellSlam({ frame }: DumbbellSlamProps): React.JSX.Element {
           }
         : dumbbellSlamStateAt(current.elapsedMs, current.timing);
 
+    // 何を描くかは Pure function 側で決める (演出強度 0 で消えることの
+    // テストを Three.js 抜きで書けるようにするため)。
+    const show = dumbbellSlamVisibility(state, scale);
+
     if (dumbbell.current) {
-      const visible = scale > 0 && current !== null && state.phase !== 'NONE';
+      const visible = current !== null && show.dumbbell;
       dumbbell.current.visible = visible;
       if (visible && current !== null) {
         dumbbell.current.position.set(current.origin.x, state.dumbbellY, current.origin.z);
@@ -83,8 +91,7 @@ export function DumbbellSlam({ frame }: DumbbellSlamProps): React.JSX.Element {
     }
 
     if (shockwave.current) {
-      const visible =
-        scale > 0 && current !== null && state.shockwaveOpacity > 0 && state.shockwaveRadius > 0;
+      const visible = current !== null && show.shockwave;
       shockwave.current.visible = visible;
       if (visible && current !== null) {
         shockwave.current.position.set(current.origin.x, GROUND_OFFSET_Y, current.origin.z);
