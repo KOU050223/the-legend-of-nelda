@@ -24,9 +24,16 @@ Mixamo のアクションは全て `mixamo.com` 系の同じ名前で入って�
     blender --background --python scripts/build-hori-daisuke-glb.py
 """
 
+import sys
 from pathlib import Path
 
 import bpy
+
+# Blender の --python は実行したスクリプトの場所を sys.path へ入れないため、
+# 隣の motion_manifest を読めるように明示で足す。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from motion_manifest import load_model  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CHARACTER = REPO / 'assets' / 'character' / 'hori-daisuke-v1' / 'export'
@@ -36,16 +43,16 @@ OUT = REPO / 'public' / 'models' / 'hori-daisuke.glb'
 # モーションFBXを探す場所。共有を先に見る。
 MOTION_DIRS = (REPO / 'assets' / 'motions', CHARACTER / 'motions')
 
+# クリップ定義は assets/motion-manifest.json が持つ。React側も同じファイルを
+# 読むので、モーションを追加するときに触るのはマニフェストだけでよい。
+MODEL = load_model('hori-daisuke')
+
 # ベースFBXに同梱されているアクションのクリップ名。
-BASE_CLIP = 'stand-up'
+BASE_CLIP: str = MODEL['build']['baseClip']
 
 # モーションFBXのファイル名 -> GLB内のクリップ名。ファイル名は MOTION_DIRS から
-# 探すので、共有・キャラ固有のどちらに置いたかをここへ書く必要はない。
-# src/rendering/character/horiDaisukeMotions.ts の MOTION_CLIPS と対応させる。
-# モーションFBXを追加したら、ここにファイル名とクリップ名を足す。
-MOTIONS: dict[str, str] = {
-    'walking.fbx': 'walk',
-}
+# 探すので、共有・キャラ固有のどちらに置いたかをマニフェストへ書く必要はない。
+MOTIONS: dict[str, str] = MODEL['build']['sources']
 
 # FBXインポート設定。ベースとモーションで必ず同じ値を使う。異なるスケールで読むと
 # Hips の location チャンネルだけ桁がずれ、キャラが沈む・飛ぶ。

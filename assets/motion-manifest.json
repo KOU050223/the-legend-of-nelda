@@ -1,0 +1,119 @@
+{
+  "$comment": "モデルごとのモーション定義。Pythonのビルドスクリプトと表示層(TS)が同じこのファイルを読む。片方だけ更新してズレるのを防ぐため、定義はここ1本にまとめる。詳細は docs/motion-manifest.md。",
+  "models": {
+    "hori-daisuke": {
+      "label": "堀大輔 (ボス)",
+      "url": "/models/hori-daisuke.glb",
+      "standingHeight": 0.762,
+      "rig": "mixamo",
+      "build": {
+        "script": "scripts/build-hori-daisuke-glb.py",
+        "baseClip": "stand-up",
+        "sources": {
+          "walking.fbx": "walk",
+          "Sleeping Idle.fbx": "sleep"
+        },
+        "motionDir": "assets/motions"
+      },
+      "clips": {
+        "stand-up": {
+          "loop": false,
+          "label": "起き上がり"
+        },
+        "walk": {
+          "loop": true,
+          "label": "歩行"
+        },
+        "sleep": {
+          "loop": true,
+          "label": "sleep"
+        }
+      },
+      "defaultClip": "stand-up",
+      "rules": []
+    },
+    "star-platinum": {
+      "label": "オラ大輔 (スタープラチナ)",
+      "url": "/models/star-platinum.glb",
+      "standingHeight": 1.98,
+      "rig": "mixamo",
+      "build": {
+        "script": "scripts/build-star-platinum-glb.py",
+        "baseClip": "idle",
+        "sources": {
+          "Punch Combo.fbx": "punch"
+        },
+        "motionDir": "assets/character/star-platimun-low-poly/export/motions"
+      },
+      "clips": {
+        "idle": {
+          "loop": true,
+          "label": "待機"
+        },
+        "punch": {
+          "loop": false,
+          "label": "ラッシュ"
+        }
+      },
+      "defaultClip": "idle",
+      "rules": [
+        {
+          "when": "attacking",
+          "clip": "punch"
+        }
+      ]
+    },
+    "dance-daisuke": {
+      "label": "オドルノDaisuke",
+      "url": "/models/dance-daisuke.glb",
+      "standingHeight": 1.809,
+      "rig": "mixamo",
+      "build": {
+        "script": "scripts/build-blender-daisuke-glb.py",
+        "motionDir": "assets/motions",
+        "baseClip": "idle",
+        "sources": {
+          "walking.fbx": "walk"
+        }
+      },
+      "clips": {
+        "idle": {
+          "loop": true,
+          "label": "待機"
+        },
+        "walk": {
+          "loop": true,
+          "label": "歩行"
+        }
+      },
+      "defaultClip": "idle",
+      "rules": []
+    },
+    "paypay-daisuke": {
+      "label": "Pay大輔",
+      "url": "/models/paypay-daisuke.glb",
+      "standingHeight": 1.902,
+      "rig": "mixamo",
+      "build": {
+        "script": "scripts/build-blender-daisuke-glb.py",
+        "motionDir": "assets/motions",
+        "baseClip": "idle",
+        "sources": {
+          "walking.fbx": "walk"
+        }
+      },
+      "clips": {
+        "idle": {
+          "loop": true,
+          "label": "待機"
+        },
+        "walk": {
+          "loop": true,
+          "label": "歩行"
+        }
+      },
+      "defaultClip": "idle",
+      "rules": []
+    }
+  }
+}

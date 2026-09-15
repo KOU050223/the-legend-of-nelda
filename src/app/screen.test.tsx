@@ -20,10 +20,12 @@ vi.mock('@/rendering/scene/GameScene', () => ({
 
 /**
  * 確認用ページは 3D Canvas を持つため jsdom では描けない。ここで見たいのは
- * 「?debug=hori でこの画面へ入るか」だけなので、目印に差し替える。
+ * 「?debug=motion でこの画面へ入るか」だけなので、目印に差し替える。
+ *
+ * 本番バンドルへ入れないよう lazy() で読むので、出てくるのを待ってから見る。
  */
-vi.mock('@/ui/hori-debug/HoriDebugPage', () => ({
-  HoriDebugPage: () => <div data-testid="hori-debug" />,
+vi.mock('@/ui/motion-debug/MotionDebugPage', () => ({
+  MotionDebugPage: () => <div data-testid="motion-debug" />,
 }));
 
 describe('ルートの画面遷移', () => {
@@ -39,13 +41,22 @@ describe('ルートの画面遷移', () => {
     window.history.replaceState({}, '', '/');
   });
 
-  it('?debug=hori はタイトルを経由せずモデル確認画面を出す', () => {
+  it('?debug=motion はタイトルを経由せずモーション確認画面を出す', async () => {
+    window.history.replaceState({}, '', '/?debug=motion');
+
+    render(<App />);
+
+    expect(await screen.findByTestId('motion-debug')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
+  });
+
+  // ボス専用だった頃の入口。手順書やブックマークに残っているため受け続ける。
+  it('旧称の ?debug=hori も同じ画面を出す', async () => {
     window.history.replaceState({}, '', '/?debug=hori');
 
     render(<App />);
 
-    expect(screen.getByTestId('hori-debug')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '寝ルダの伝説' })).not.toBeInTheDocument();
+    expect(await screen.findByTestId('motion-debug')).toBeInTheDocument();
   });
 
   it('最初に開くのはタイトルで、戦闘は始まっていない (Issue #63)', () => {

@@ -10,10 +10,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "isolatedModules": true,
+    // Vite の configLoader: 'native' が拡張子付きの import を求めるため
+    // (拡張子を省くと将来のメジャーで読めなくなる警告が出る)。
+    "allowImportingTsExtensions": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
     "noEmit": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vite-plugin-motion-manifest.ts", "vite-plugin-motion-upload.ts", "blender-build-log.ts"]
 }

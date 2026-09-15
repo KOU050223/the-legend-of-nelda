@@ -6,10 +6,13 @@ import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 
 import { CharacterModel } from './CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from './character-models';
+import { motionContextFor } from './motion-context';
 
 export interface CharacterActorProps {
   /** 再レンダー対象の表示状態。HPバーとモデル選択がこの値を使う。 */
   player: PlayerSnapshot;
+  /** 現在時刻 (GameClock の now)。連撃の局面を測ってモーションを決める。 */
+  now: number;
   local?: boolean;
 }
 
@@ -20,14 +23,17 @@ export interface CharacterActorProps {
  * 親のゲームフレームがRootへ反映し、ここは表示の階層だけを担当する。
  * そのため、位置更新のために毎フレームReactを再レンダーする必要がなく、
  * モデルとバーが別の座標系へ分かれることもない。
+ *
+ * 再生するモーションは状態から導く。判定のタイミングはゲームロジックが持ち、
+ * ここは結果を読むだけにする (docs/technical-design.md §13)。
  */
 export const CharacterActor = forwardRef<Group, CharacterActorProps>(function CharacterActor(
-  { player, local = false },
+  { player, now, local = false },
   ref,
 ): React.JSX.Element {
   return (
     <group ref={ref}>
-      <CharacterModel characterId={player.characterId} />
+      <CharacterModel characterId={player.characterId} context={motionContextFor(player, now)} />
       <StatusBar player={player} local={local} />
     </group>
   );
