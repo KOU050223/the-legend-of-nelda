@@ -103,9 +103,11 @@ export function FinaleOverlay({
   if (finale === 'OCARINA_APPEARING' || finale === 'WAITING_FOR_MELODY') {
     return (
       <section className={styles.overlay} aria-live="polite">
-        <div className={styles.ocarina}>
+        <div className={`${styles.ocarina} ${performing ? styles.ocarinaPerforming : ''}`}>
           {finale === 'OCARINA_APPEARING' ? (
-            <p>……空から、何かが降りてくる。</p>
+            <div className={styles.ocarinaPrompt}>
+              <p>……空から、何かが降りてくる。</p>
+            </div>
           ) : (
             <>
               {performing ? (
@@ -117,7 +119,7 @@ export function FinaleOverlay({
                   showNextHint={showMelodyHint}
                 />
               ) : (
-                <>
+                <div className={styles.ocarinaPrompt}>
                   <p>
                     伝説のオカリナが
                     <br />
@@ -134,7 +136,7 @@ export function FinaleOverlay({
                   >
                     演奏を始める
                   </button>
-                </>
+                </div>
               )}
             </>
           )}

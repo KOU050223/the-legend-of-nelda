@@ -150,11 +150,22 @@
   position: absolute;
   inset: 0;
   display: grid;
-  align-content: center;
+  align-content: end;
   justify-items: center;
-  padding: 0 4vw;
+  padding: 0 4vw clamp(24px, 5vh, 64px);
   background: radial-gradient(circle at 50% 56%, #f5c74844, transparent 42%);
   animation: cinematicIn 0.45s ease-out both;
+}
+
+.ocarinaPerforming {
+  align-content: center;
+  padding-bottom: 0;
+}
+
+.ocarinaPrompt {
+  width: min(880px, 92vw);
+  padding: clamp(12px, 2vw, 22px) clamp(18px, 4vw, 46px);
+  background: linear-gradient(90deg, transparent, #12070e99 15% 85%, transparent);
 }
 
 .ocarina p {
@@ -169,8 +180,9 @@
   display: block;
   margin-top: 16px;
   color: #ffe781;
-  font-size: clamp(28px, 5vw, 66px);
-  letter-spacing: 0.18em;
+  font-size: clamp(20px, 3.6vw, 54px);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
 }
 
 .startMelody {

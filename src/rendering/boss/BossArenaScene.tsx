@@ -809,15 +809,25 @@ export function BossArenaScene({
         player={localRoot}
         boss={bossRoot}
         inputYawRef={cameraInputYawRef}
-        active={cameraMode !== 'first-person' && finale !== 'HORI_FALLING_ASLEEP'}
+        active={
+          cameraMode !== 'first-person' &&
+          finale !== 'HORI_FALLING_ASLEEP' &&
+          finale !== 'OCARINA_APPEARING' &&
+          finale !== 'WAITING_FOR_MELODY'
+        }
       />
       <FirstPersonCamera
         player={localRoot}
         inputYawRef={cameraInputYawRef}
-        active={cameraMode === 'first-person' && finale !== 'HORI_FALLING_ASLEEP'}
+        active={
+          cameraMode === 'first-person' &&
+          finale !== 'HORI_FALLING_ASLEEP' &&
+          finale !== 'OCARINA_APPEARING' &&
+          finale !== 'WAITING_FOR_MELODY'
+        }
       />
       <SleepCamera target={bossRoot} active={finale === 'HORI_FALLING_ASLEEP'} />
-      <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} />
+      <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} anchor={bossRoot} />
     </>
   );
 }
