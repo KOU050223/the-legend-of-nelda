@@ -28,9 +28,16 @@ FBXにはマテリアルはあるがテクスチャが結び付いていない�
 変わるうえ、プレイヤーサイズの表示では効かない。
 """
 
+import sys
 from pathlib import Path
 
 import bpy
+
+# Blender の --python は実行したスクリプトの場所を sys.path へ入れないため、
+# 隣の motion_manifest を読めるように明示で足す。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from motion_manifest import load_model  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CHARACTER = REPO / 'assets' / 'character' / 'star-platimun-low-poly'
@@ -38,15 +45,16 @@ SRC = CHARACTER / 'export' / 'Neutral Idle.fbx'
 TEXTURES = CHARACTER / 'textures'
 OUT = REPO / 'public' / 'models' / 'star-platinum.glb'
 
-"""ベースFBXに同梱されているアクションのクリップ名。character-models.ts の
-`clip` と一致させる。片方だけ変えるとクリップを引けなくなる。"""
-BASE_CLIP = 'idle'
+# クリップ定義は assets/motion-manifest.json が持つ。React側も同じファイルを
+# 読むので、モーションを追加するときに触るのはマニフェストだけでよい。
+MODEL = load_model('star-platinum')
+
+"""ベースFBXに同梱されているアクションのクリップ名。"""
+BASE_CLIP: str = MODEL['build']['baseClip']
 
 """モーションFBXのファイル名 -> GLB内のクリップ名。
-モーションを追加したら export/motions/ へ置き、ここへ足す。"""
-MOTIONS: dict[str, str] = {
-    'Punch Combo.fbx': 'punch',
-}
+モーションを追加したら export/motions/ へ置き、マニフェストへ足す。"""
+MOTIONS: dict[str, str] = MODEL['build']['sources']
 
 MOTION_DIR = CHARACTER / 'export' / 'motions'
 

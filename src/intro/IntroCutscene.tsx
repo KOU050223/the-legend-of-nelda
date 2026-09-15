@@ -69,14 +69,14 @@ export function IntroCutscene({ onComplete }: { onComplete: () => void }): React
         {isHoriCut ? (
           <Suspense fallback={null}>
             <group position={[0, 0.4, 0.5]} scale={1.35}>
-              <HoriDaisukeModel motion="stand-up" />
+              <HoriDaisukeModel clip="stand-up" />
             </group>
           </Suspense>
         ) : (
           !usesRuinsSet && (
             <Suspense fallback={null}>
               <group position={[0, 0, -3]}>
-                <HoriDaisukeModel motion="stand-up" />
+                <HoriDaisukeModel clip="stand-up" />
               </group>
               {heroesAreRevealed && <Heroes />}
             </Suspense>

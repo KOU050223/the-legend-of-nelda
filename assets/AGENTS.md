@@ -69,4 +69,10 @@ Mixamoのリグは `mixamorig:*` の33ボーンで共通なので、モーショ
 - ボーン名の集合がベースのリグと**完全に一致**していること。過不足があると、
   そのボーンだけバインドポーズに取り残されて姿勢が壊れる
 
+どのクリップがどのGLBに入っているか、どの状態でどれを再生するかは
+[`motion-manifest.json`](motion-manifest.json) が持つ。ビルドスクリプトと
+表示層が同じファイルを読むので、片方だけ更新してズレることがない。追加の
+手順と、`?debug=motion` での確認・割り当ては
+[`docs/motion-manifest.md`](../docs/motion-manifest.md) を参照する。
+
 GLBへまとめる手順は各キャラのREADMEにある。
