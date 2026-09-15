@@ -16,6 +16,7 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
@@ -133,6 +134,8 @@ function sceneOutcome(battle: BossBattle): SceneOutcome {
 }
 
 export function BossArenaScene(): React.JSX.Element {
+  const worldTutorialVisible = useWorldTutorialStore((state) => state.visible);
+
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
@@ -311,7 +314,7 @@ export function BossArenaScene(): React.JSX.Element {
       <TutorialFairy
         anchor={localRoot}
         fallbackPosition={[PLAYER_SPAWN.x, 0, PLAYER_SPAWN.z]}
-        visible
+        visible={worldTutorialVisible}
       />
 
       {/*
