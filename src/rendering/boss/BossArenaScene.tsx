@@ -2,7 +2,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { Vector3, type Group } from 'three';
+import { MathUtils, Vector3, type Group } from 'three';
 
 import { createAudioManager } from '@/audio/audio-manager';
 import { createHtmlAudioOutput } from '@/audio/audio-output';
@@ -19,6 +19,9 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
+import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
+import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 import type { PlanarPosition } from '@/game/movement/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import type { PlayerStatus } from '@/game/player/player-state';
@@ -47,6 +50,12 @@ import {
 import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
+import {
+  publishFinalePresentation,
+  resetFinalePresentation,
+  type PlayedMelodyNote,
+} from './finale-presentation-store';
+import { LegendaryOcarina } from './LegendaryOcarina';
 
 /**
  * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
@@ -152,6 +161,7 @@ function motionContextsFor(
 function isSameView(a: View, b: View): boolean {
   if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
   if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
+  if (a.snapshot.finale !== b.snapshot.finale) return false;
   if (a.snapshot.players.length !== b.snapshot.players.length) return false;
   if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
 
@@ -261,6 +271,7 @@ export function BossArenaScene(): React.JSX.Element {
   // 位置と向きは毎フレーム変わるので state へ入れない。Object3D を直接
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
   const bossRoot = useRef<Group>(null);
+  const bossVisual = useRef<Group>(null);
   const actorRoots = useRef(new Map<string, Group>());
   const previousPositions = useRef(new Map<string, PlanarPosition>());
   const previousBossPosition = useRef<PlanarPosition | undefined>(undefined);
@@ -274,6 +285,162 @@ export function BossArenaScene(): React.JSX.Element {
     playerMotionContexts: [],
     bossMotionContext: {},
   }));
+  const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
+  const [melodyStarted, setMelodyStarted] = useState(false);
+  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
+  const [playedMelodyNotes, setPlayedMelodyNotes] = useState<readonly PlayedMelodyNote[]>([]);
+  const [melodyMissSequence, setMelodyMissSequence] = useState(0);
+  const [melodyExpected, setMelodyExpected] = useState<NoteName | null>(null);
+  const [showMelodyHint, setShowMelodyHint] = useState(false);
+  const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
+  const microphoneStop = useRef<(() => void) | null>(null);
+  const melodyNoteSequence = useRef(0);
+  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
+
+  useEffect(() => {
+    publishFinalePresentation({
+      phase: view.snapshot.boss.phase,
+      finale: view.snapshot.finale,
+      zeroDamageSequence,
+      microphoneStatus,
+      playedMelodyNotes,
+      melodyMissSequence,
+      melodyExpected,
+      showMelodyHint,
+    });
+  }, [
+    view.snapshot.boss.phase,
+    view.snapshot.finale,
+    zeroDamageSequence,
+    microphoneStatus,
+    playedMelodyNotes,
+    melodyMissSequence,
+    melodyExpected,
+    showMelodyHint,
+  ]);
+
+  useEffect(() => resetFinalePresentation, []);
+
+  useEffect(
+    () =>
+      events.subscribe((event) => {
+        if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
+          setZeroDamageSequence((current) => current + 1);
+        }
+      }),
+    [events],
+  );
+
+  useEffect(() => {
+    if (zeroDamageSequence === 0) return undefined;
+    const timer = window.setTimeout(() => setZeroDamageSequence(0), 900);
+    return () => window.clearTimeout(timer);
+  }, [zeroDamageSequence]);
+
+  useEffect(() => {
+    const finale = view.snapshot.finale;
+    const delayMs =
+      finale === 'FINAL_STANDOFF'
+        ? 7_500
+        : finale === 'OCARINA_APPEARING'
+          ? 5_200
+          : finale === 'MELODY_ACCEPTED'
+            ? 2_700
+            : finale === 'MEMORY'
+              ? 14_500
+              : finale === 'HORI_FALLING_ASLEEP'
+                ? 5_000
+                : null;
+    if (delayMs === null) return undefined;
+    const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [battle, view.snapshot.finale]);
+
+  useEffect(() => {
+    let disposed = false;
+    function startMelody(): void {
+      if (microphoneStop.current !== null || view.snapshot.finale !== 'WAITING_FOR_MELODY') return;
+      setMelodyStarted(true);
+      setMicrophoneStatus('requesting-permission');
+      setMelodyExpected(melody.current.snapshot().expected);
+      setShowMelodyHint(false);
+      void attachMicrophoneNoteInput(
+        (event) => {
+          if (
+            event.type === 'note-off' ||
+            (event.type === 'note-change' && event.note.name.includes('#'))
+          )
+            return;
+          const result = melody.current.consume(event);
+          if (result === 'IGNORED') return;
+          const snapshot = melody.current.snapshot();
+          setMelodyExpected(snapshot.expected);
+          setShowMelodyHint(snapshot.showHint);
+          setMelodyActivitySequence((current) => current + 1);
+          setPlayedMelodyNotes((current) => [
+            ...current.slice(-5),
+            {
+              id: melodyNoteSequence.current++,
+              name: event.note.name,
+              correct: result === 'CORRECT' || result === 'COMPLETE',
+            },
+          ]);
+          if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
+          if (result === 'COMPLETE') {
+            microphoneStop.current?.();
+            microphoneStop.current = null;
+            battle.advanceFinale();
+          }
+        },
+        { onStatusChange: setMicrophoneStatus },
+      )
+        .then((stop) => {
+          if (disposed) stop();
+          else microphoneStop.current = stop;
+        })
+        .catch(() => undefined);
+    }
+    window.addEventListener('finale:melody-start', startMelody);
+    return () => {
+      disposed = true;
+      window.removeEventListener('finale:melody-start', startMelody);
+      microphoneStop.current?.();
+      microphoneStop.current = null;
+    };
+  }, [battle, view.snapshot.finale]);
+
+  useEffect(() => {
+    if (!melodyStarted || view.snapshot.finale !== 'WAITING_FOR_MELODY') return undefined;
+    const timer = window.setTimeout(
+      () => setShowMelodyHint(true),
+      melodyActivitySequence === 0 ? 9_000 : 7_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [melodyActivitySequence, melodyStarted, view.snapshot.finale]);
+
+  useEffect(() => {
+    const completeEnding = () => {
+      if (view.snapshot.finale === 'ENDING') battle.advanceFinale();
+    };
+    window.addEventListener('finale:ending-complete', completeEnding);
+    return () => window.removeEventListener('finale:ending-complete', completeEnding);
+  }, [battle, view.snapshot.finale]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
+    const onDebugFinale = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.code === 'KeyZ') battle.debugEnterNoSleepMode();
+      if (event.code === 'KeyM' && view.snapshot.finale === 'WAITING_FOR_MELODY') {
+        melody.current.forceComplete();
+        microphoneStop.current?.();
+        microphoneStop.current = null;
+        battle.advanceFinale();
+      }
+    };
+    window.addEventListener('keydown', onDebugFinale);
+    return () => window.removeEventListener('keydown', onDebugFinale);
+  }, [battle, view.snapshot.finale]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -318,6 +485,16 @@ export function BossArenaScene(): React.JSX.Element {
       setOutcome('ONGOING');
       setZones([]);
       setImminent(false);
+      setZeroDamageSequence(0);
+      setMelodyStarted(false);
+      setMicrophoneStatus('idle');
+      setPlayedMelodyNotes([]);
+      setMelodyMissSequence(0);
+      setMelodyExpected(null);
+      setShowMelodyHint(false);
+      setMelodyActivitySequence(0);
+      melodyNoteSequence.current = 0;
+      melody.current.reset();
     }
 
     window.addEventListener('keydown', onRestart);
@@ -359,6 +536,25 @@ export function BossArenaScene(): React.JSX.Element {
     battle.update(delta);
 
     const snapshot = battle.snapshot();
+
+    const sleeping =
+      snapshot.finale === 'HORI_FALLING_ASLEEP' ||
+      snapshot.finale === 'ENDING' ||
+      snapshot.finale === 'COMPLETE';
+    if (bossVisual.current !== null) {
+      bossVisual.current.rotation.z = MathUtils.damp(
+        bossVisual.current.rotation.z,
+        sleeping ? Math.PI / 2 : 0,
+        3.4,
+        delta,
+      );
+      bossVisual.current.position.y = MathUtils.damp(
+        bossVisual.current.position.y,
+        sleeping ? 0.32 : 0,
+        3.4,
+        delta,
+      );
+    }
 
     // 位置と向きは Object3D へ直接反映する。真実源はロジック側
     // (boss-battle) で、ここは映すだけ。
@@ -420,14 +616,17 @@ export function BossArenaScene(): React.JSX.Element {
           GLB の読み込みは suspend する。ここで受け止めないと、読み込みの間
           Canvas の中身が丸ごと消えて草原ごと真っ暗になる。
         */}
-        <Suspense fallback={null}>
-          {/*
-            モーションはボスのスナップショットから決める。条件とクリップの
-            対応はマニフェストへ閉じ込め、ここは状態を渡すだけにする。
-          */}
-          <HoriDaisukeModel context={view.bossMotionContext} />
-        </Suspense>
-        <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
+        <group ref={bossVisual}>
+          <Suspense fallback={null}>
+            <HoriDaisukeModel context={view.bossMotionContext} />
+          </Suspense>
+        </group>
+        {(view.snapshot.finale === 'HORI_FALLING_ASLEEP' || view.snapshot.finale === 'ENDING') && (
+          <FinaleFuton />
+        )}
+        {view.snapshot.finale === 'NONE' && (
+          <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
+        )}
       </group>
 
       {/*
@@ -485,8 +684,66 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
+      <SleepCamera target={bossRoot} active={view.snapshot.finale === 'HORI_FALLING_ASLEEP'} />
+      <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.snapshot.finale} />
     </>
   );
+}
+
+/** 就寝演出専用の簡易3D布団。物理判定を持たず、安全にPop-inさせる。 */
+function FinaleFuton(): React.JSX.Element {
+  const quilt = useRef<Group>(null);
+  const appearedAt = useRef<number | null>(null);
+
+  useFrame(({ clock }, delta) => {
+    appearedAt.current ??= clock.getElapsedTime();
+    const elapsed = clock.getElapsedTime() - appearedAt.current;
+    const lift =
+      elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
+    if (quilt.current !== null) {
+      quilt.current.position.y = MathUtils.damp(quilt.current.position.y, 0.53 + lift, 8, delta);
+      quilt.current.rotation.z = MathUtils.damp(quilt.current.rotation.z, -lift * 0.52, 8, delta);
+    }
+  });
+
+  return (
+    <group position={[0, 0.18, 0.15]} rotation={[0, 0.12, 0]}>
+      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.9, 0.35, 1.55]} />
+        <meshStandardMaterial color="#bd344a" roughness={0.9} />
+      </mesh>
+      <mesh position={[-0.88, 0.48, 0]} castShadow>
+        <boxGeometry args={[0.85, 0.2, 1.22]} />
+        <meshStandardMaterial color="#fff1c6" roughness={0.96} />
+      </mesh>
+      <group ref={quilt} position={[0.22, 0.53, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[1.85, 0.2, 1.34]} />
+          <meshStandardMaterial color="#e65764" roughness={0.88} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+const SLEEP_CAMERA_OFFSET = new Vector3(0, 3.1, 5.1);
+const sleepCameraDesired = new Vector3();
+
+function SleepCamera({
+  target,
+  active,
+}: {
+  target: React.RefObject<Group | null>;
+  active: boolean;
+}): null {
+  useFrame(({ camera }, delta) => {
+    const boss = target.current;
+    if (!active || boss === null) return;
+    sleepCameraDesired.copy(boss.position).add(SLEEP_CAMERA_OFFSET);
+    camera.position.lerp(sleepCameraDesired, 1 - Math.exp(-4.4 * delta));
+    camera.lookAt(boss.position.x, boss.position.y + 0.75, boss.position.z);
+  });
+  return null;
 }
 
 /**

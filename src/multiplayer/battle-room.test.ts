@@ -28,6 +28,7 @@ function createBattleSnapshot(): BattleSnapshot {
     },
     players: [],
     barrier: null,
+    finale: 'NONE',
   };
 }
 
@@ -47,6 +48,8 @@ function createBattleHarness(
       elapsed += deltaSeconds;
     },
     outcome: () => 'ONGOING' as const,
+    advanceFinale: () => 'NONE' as const,
+    debugEnterNoSleepMode: () => undefined,
     boss: {
       update: () => undefined,
       damage: () => 0,

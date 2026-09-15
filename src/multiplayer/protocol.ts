@@ -1,4 +1,5 @@
 import type { BattleSnapshot } from '../game/session/boss-battle';
+import { FINALE_STATES } from '../game/finale/finale-state';
 import { isDiscreteGameActionType, type GameAction } from '../game/types/game-action';
 import type { WasshoiEvent } from '../input/wasshoi/types';
 
@@ -67,7 +68,13 @@ export function isWasshoiEvent(value: unknown): value is WasshoiEvent {
 }
 
 export function isBattleSnapshot(value: unknown): value is BattleSnapshot {
-  return isRecord(value) && isRecord(value.boss) && Array.isArray(value.players);
+  return (
+    isRecord(value) &&
+    isRecord(value.boss) &&
+    Array.isArray(value.players) &&
+    typeof value.finale === 'string' &&
+    (FINALE_STATES as readonly string[]).includes(value.finale)
+  );
 }
 
 export function isClientToAuthorityMessage(value: unknown): value is ClientToAuthorityMessage {
