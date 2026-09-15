@@ -101,7 +101,7 @@ export interface AuthorityServer {
 }
 
 export function createAuthorityServer(options: AuthorityServerOptions): AuthorityServer {
-  const wss = new WebSocketServer({ port: options.port });
+  const wss = new WebSocketServer({ port: options.port, host: '0.0.0.0' });
   const transport = createNodeAuthorityTransport(wss);
   const createBattle =
     options.createBattle ??
