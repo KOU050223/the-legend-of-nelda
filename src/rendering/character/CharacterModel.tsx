@@ -5,6 +5,7 @@ import type { Group } from 'three';
 import type { CharacterId } from '@/game/config/phase2-player-balance';
 
 import { CHARACTER_DISPLAY_HEIGHT, CHARACTER_MODELS } from './character-models';
+import { disableSkinnedCulling } from './disableSkinnedCulling';
 
 export interface CharacterModelProps {
   /** どの大輔を描くか。GLBとスケールは CHARACTER_MODELS が持つ。 */
@@ -53,7 +54,7 @@ export function CharacterModel({ characterId }: CharacterModelProps): React.JSX.
     // 3体に同じ値が当たる。モデルが増えても補正は散らばらない。
     // (ボスは入力で向きを変えないため、この補正を持たない)
     <group ref={root} rotation={[0, Math.PI, 0]} scale={CHARACTER_DISPLAY_HEIGHT / standingHeight}>
-      <Clone object={scene} castShadow />
+      <Clone object={scene} castShadow ref={disableSkinnedCulling} />
     </group>
   );
 }

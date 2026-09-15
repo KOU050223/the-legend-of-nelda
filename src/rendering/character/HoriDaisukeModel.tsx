@@ -8,6 +8,7 @@ import {
   MOTION_FADE_SECONDS,
   type HoriDaisukeMotion,
 } from './horiDaisukeMotions';
+import { disableSkinnedCulling } from './disableSkinnedCulling';
 
 /** FBX群から合成したGLB。`scripts/build-hori-daisuke-glb.py` で生成する。 */
 const MODEL_URL = '/models/hori-daisuke.glb';
@@ -85,7 +86,7 @@ export function HoriDaisukeModel({ motion = DEFAULT_MOTION }: Props = {}): React
 
   return (
     <group ref={root} scale={DISPLAY_HEIGHT / MODEL_STANDING_HEIGHT}>
-      <Clone object={scene} castShadow />
+      <Clone object={scene} castShadow ref={disableSkinnedCulling} />
     </group>
   );
 }
