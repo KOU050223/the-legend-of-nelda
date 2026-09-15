@@ -71,9 +71,9 @@ import { LegendaryOcarina } from './LegendaryOcarina';
  * 危険範囲は判定に使う `DangerZone` をそのまま描く。表示用に別の形を
  * 作らないことが「危険範囲が視覚的に読める」(#58) の前提。
  *
- * 操作するのは同時に1人だけで、3人分の同時操作は #52 P6。ただし「その1人が
- * 誰か」は画面から切り替えられる (Issue #106)。roster には最初から3人居るので、
- * キーボードとカメラの接続先を差し替えるだけで切り替わる。
+ * 操作するのは同時に1人だけ。ソロではオドルノ1人を生成し、リモートでは
+ * Authority が割り当てた1人を表示する。ローカルの操作対象切り替えは、複数人を
+ * 同時操作する仕組みではなく、既存セッションとの互換用に残している。
  */
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
@@ -115,13 +115,15 @@ function createBattle(): Battle {
   const battle = createBossBattle({
     clock: createRealClock(),
     events,
-    // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
-    // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
+    // スポーン地点は #54 のアリーナ定義をそのまま使う。ソロでも3人を生成し、
+    // 1人のプレイヤーが操作対象を切り替えながら進められるようにする。
+    // 3人協力を前提にした結界は BossBattle 側で省略する。
     roster: [
       { id: 'odoruno', characterId: 'ODORUNO', position: PLAYER_SPAWN },
       { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
       { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
     ],
+    solo: true,
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
@@ -289,14 +291,8 @@ export function BossArenaScene({
 
   // 画面に出す決着。
   //
-  // `outcomeOfSnapshot` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
-  // (§5.5)。ただし今は操作できるのがオドルノ1人しか居ない。倒れても
-  // 仲間2人は ACTIVE のままなので勝敗は ONGOING から動かず、
-  // 操作だけが効かない状態で止まる (蘇生は ACTIVE な仲間からしか出せない)。
-  //
-  // そこで画面側では「操作キャラが倒れた」もやり直せる終わりとして扱う。
-  // ロジックの勝敗条件は変えない。3人分の同時操作が入れば
-  // (#52 P6) 仲間が起こしに来るので、この分岐は消える。
+  // `outcomeOfSnapshot` は全プレイヤーが寝たら敗北と判定する。ソロでは
+  // プレイヤーが1人だけなので、そのまま「自分が倒れたら敗北」となる。
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。

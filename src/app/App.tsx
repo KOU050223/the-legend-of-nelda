@@ -127,10 +127,6 @@ export function App(): React.JSX.Element {
         <GameScene world />
         <FinalePresentation />
         <WorldTutorialGuide />
-        {/*
-          操作キャラの切り替え (Issue #106)。DEV ガードは付けない。
-          一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
-        */}
         <PlayerSwitch />
         <MicrophoneDebugPanel />
       </div>

@@ -6,10 +6,8 @@ import type { PlayerStatus } from '@/game/player/player-state';
 /**
  * 操作対象のプレイヤーを切り替える。(Issue #106)
  *
- * 3人分の player-state はもともと roster として動いている
- * (BossArenaScene の createBattle)。固定されていたのは「キーボードと
- * カメラがどの1人に繋がるか」だけなので、その束縛だけを状態にする。
- * 3人を同時に操作する話ではない (それは #52 P6)。
+ * ソロではオドルノだけを生成するが、既存のキャラID対応とセッション互換の
+ * ため、切り替え用の状態・型は残している。
  *
  * ネットワーク経由の対戦では local が誰かは `WELCOME` の playerId で
  * 決まる (src/multiplayer)。ここはローカル1台で動かすときの切り替えで、

@@ -94,6 +94,7 @@ describe('ルートの画面遷移', () => {
     // URL に ?scene=world が無くても、画面がワールドならワールドとして描く。
     // ここが戦闘のままだと、リンク先が Combat の見た目になってしまう。
     expect(gameSceneProps.at(-1)?.world).toBe(true);
+    expect(screen.getByRole('region', { name: '操作キャラ切り替え' })).toBeInTheDocument();
   });
 
   it('ひとり用のイントロをスキップするとワールドを開く (Issue #110)', () => {
