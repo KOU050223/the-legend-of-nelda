@@ -4,9 +4,9 @@ import type { CharacterId } from '@/game/config/phase2-player-balance';
 import type { LobbySlot } from '@/multiplayer/protocol';
 import { type ConnectionStatus, useMultiplayerSessionStore } from '@/multiplayer/session-store';
 import { useScreenStore } from '@/app/screen';
+import { useAppMultiplayerVoiceSession } from '@/ui/voice/MultiplayerVoiceSessionProvider';
 
 import styles from './MatchingScreen.module.css';
-import { useMultiplayerVoiceSession } from './use-multiplayer-voice-session';
 
 /** START受理後の演出を見せてからGAMEへ渡すまでの時間。通信は一切待たない。 */
 const CELEBRATION_MS = 900;
@@ -68,7 +68,7 @@ export function MatchingScreen(): React.JSX.Element {
     slots.every((slot) => slot.connected && slot.role !== null) &&
     new Set(slots.map((slot) => slot.role)).size === 3;
   const canStart = canEditRole && allSlotsReady;
-  const voice = useMultiplayerVoiceSession({ participantId, lobby });
+  const voice = useAppMultiplayerVoiceSession();
 
   useEffect(() => {
     useMultiplayerSessionStore.getState().connect();
@@ -211,7 +211,7 @@ export function MatchingScreen(): React.JSX.Element {
 function VoiceChatPanel({
   voice,
 }: {
-  voice: ReturnType<typeof useMultiplayerVoiceSession>;
+  voice: ReturnType<typeof useAppMultiplayerVoiceSession>;
 }): React.JSX.Element | null {
   if (voice.context === null) return null;
 

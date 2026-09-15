@@ -1,0 +1,45 @@
+.hud {
+  position: fixed;
+  z-index: 20;
+  top: 14px;
+  right: 14px;
+  min-width: 126px;
+  padding: 8px 10px;
+  border: 2px solid #164e63;
+  border-radius: 8px;
+  background: #082f49dd;
+  color: #e0f2fe;
+  font-family: 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.title,
+.mode,
+.participant {
+  display: block;
+}
+
+.title {
+  color: #67e8f9;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+}
+
+.mode {
+  margin-top: 3px;
+}
+
+.participant {
+  margin-top: 3px;
+  color: #bae6fd;
+}
+
+.speaking {
+  color: #fef08a;
+}
+
+.error {
+  color: #fecaca;
+}

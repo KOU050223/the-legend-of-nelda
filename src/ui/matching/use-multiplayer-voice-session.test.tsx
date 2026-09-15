@@ -99,4 +99,26 @@ describe('useMultiplayerVoiceSession', () => {
 
     await waitFor(() => expect(mocks.disconnect).toHaveBeenCalledOnce());
   });
+
+  it('MATCHINGからGAMEへ相当するkeepSession中は維持し、TITLE復帰時に切断する', async () => {
+    const lobby = lobbyFor('ODORUNO');
+    const { result, rerender } = renderHook(
+      ({ keepSession }) =>
+        useMultiplayerVoiceSession({
+          participantId: 'participant-local',
+          lobby,
+          keepSession,
+        }),
+      { initialProps: { keepSession: true } },
+    );
+
+    await act(async () => {
+      await result.current.enable();
+    });
+    rerender({ keepSession: true });
+    expect(mocks.disconnect).not.toHaveBeenCalled();
+
+    rerender({ keepSession: false });
+    await waitFor(() => expect(mocks.disconnect).toHaveBeenCalledOnce());
+  });
 });

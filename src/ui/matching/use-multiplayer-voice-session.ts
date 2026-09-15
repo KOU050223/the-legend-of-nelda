@@ -47,9 +47,12 @@ export interface MultiplayerVoiceSession {
 export function useMultiplayerVoiceSession({
   participantId,
   lobby,
+  keepSession = true,
 }: {
   participantId: string | null;
   lobby: LobbyMessage | null;
+  /** falseになる画面遷移では、Room/Trackを必ず破棄する。 */
+  keepSession?: boolean;
 }): MultiplayerVoiceSession {
   const context = useMemo(
     () => resolveMultiplayerVoiceContext({ participantId, lobby }),
@@ -72,9 +75,10 @@ export function useMultiplayerVoiceSession({
   }, []);
 
   useEffect(() => {
-    if (sessionRef.current === null || activeContextKeyRef.current === currentKey) return;
+    const contextChanged = activeContextKeyRef.current !== currentKey;
+    if (sessionRef.current === null || (keepSession && !contextChanged)) return;
     void disconnect();
-  }, [currentKey, disconnect]);
+  }, [currentKey, disconnect, keepSession]);
 
   useEffect(
     () => () => {
