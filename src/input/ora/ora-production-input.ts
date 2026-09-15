@@ -100,18 +100,31 @@ interface SpeechRecognitionResultEvent {
   results: SpeechResultList;
 }
 
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
+
+/**
+ * 権限拒否・サービス不許可以外は、無音タイムアウト等の一時的な失敗として
+ * 復帰を試みる。ここに入れなかった理由コードは全て再起動を試みる対象になる。
+ */
+const FATAL_SPEECH_RECOGNITION_ERRORS: ReadonlySet<string> = new Set([
+  'not-allowed',
+  'service-not-allowed',
+]);
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
   addEventListener(type: 'result', listener: (event: SpeechRecognitionResultEvent) => void): void;
-  addEventListener(type: 'error', listener: () => void): void;
+  addEventListener(type: 'error', listener: (event: SpeechRecognitionErrorEvent) => void): void;
   addEventListener(type: 'end', listener: () => void): void;
   removeEventListener(
     type: 'result',
     listener: (event: SpeechRecognitionResultEvent) => void,
   ): void;
-  removeEventListener(type: 'error', listener: () => void): void;
+  removeEventListener(type: 'error', listener: (event: SpeechRecognitionErrorEvent) => void): void;
   removeEventListener(type: 'end', listener: () => void): void;
   start(): void;
   stop(): void;
@@ -208,7 +221,7 @@ export async function attachOraProductionInput(
   let video: HTMLVideoElement | undefined;
   let recognition: SpeechRecognitionLike | undefined;
   let speechResultListener: ((event: SpeechRecognitionResultEvent) => void) | undefined;
-  let speechErrorListener: (() => void) | undefined;
+  let speechErrorListener: ((event: SpeechRecognitionErrorEvent) => void) | undefined;
   let speechEndListener: (() => void) | undefined;
   let frameId: number | undefined;
   let intervalId: number | undefined;
@@ -465,11 +478,15 @@ export async function attachOraProductionInput(
     recognition.interimResults = false;
     recognition.lang = 'ja-JP';
     speechResultListener = handleSpeechResult;
-    speechErrorListener = () => {
+    speechErrorListener = (event) => {
+      // 無音タイムアウト('no-speech')等は継続リッスン中によく起きる一時的な
+      // 失敗で、直後の'end'から自動復帰する。ここでstatusを'error'にすると
+      // end側の再起動ガード('available'のときだけ再開)が永久に効かなくなる。
+      if (!FATAL_SPEECH_RECOGNITION_ERRORS.has(event.error)) return;
       setSpeechRecognitionStatus(
         'error',
         'error',
-        'SpeechRecognitionの開始後にエラーが発生しました。',
+        `SpeechRecognitionでカメラ/マイクの権限に関するエラーが発生しました (${event.error})。`,
       );
     };
     speechEndListener = () => {

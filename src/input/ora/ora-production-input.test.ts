@@ -68,6 +68,7 @@ class FakeSpeechRecognition {
   lang = '';
   private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
   started = false;
+  startCount = 0;
   stopped = false;
 
   constructor() {
@@ -86,6 +87,7 @@ class FakeSpeechRecognition {
 
   start(): void {
     this.started = true;
+    this.startCount += 1;
   }
 
   stop(): void {
@@ -95,6 +97,14 @@ class FakeSpeechRecognition {
   emitFinal(transcript: string): void {
     const event = { resultIndex: 0, results: [{ isFinal: true, 0: { transcript } }] };
     for (const listener of this.listeners.get('result') ?? []) listener(event);
+  }
+
+  emitError(error: string): void {
+    for (const listener of this.listeners.get('error') ?? []) listener({ error });
+  }
+
+  emitEnd(): void {
+    for (const listener of this.listeners.get('end') ?? []) listener(undefined);
   }
 }
 
@@ -401,6 +411,41 @@ describe('createOraProductionInput', () => {
     expect(actions.some((action) => action.type === 'MOVE')).toBe(true);
     expect(actions.some((action) => action.type === 'CHARACTER_ACTION')).toBe(true);
     expect(actions.some((action) => action.type === 'ATTACK')).toBe(false);
+
+    adapter.detach();
+  });
+
+  it('no-speech等の一時的なエラーはstatusを壊さず、endから自動的に再開する', async () => {
+    const statuses: OraProductionInputStatus[] = [];
+    const adapter = await createTestAttach({ onStatusChange: (status) => statuses.push(status) })(
+      () => undefined,
+    );
+    const recognition = FakeSpeechRecognition.instances.at(-1)!;
+    expect(recognition.startCount).toBe(1);
+
+    recognition.emitError('no-speech');
+    recognition.emitEnd();
+
+    expect(recognition.startCount).toBe(2);
+    expect(statuses.some((status) => status.speechRecognition === 'error')).toBe(false);
+
+    adapter.detach();
+  });
+
+  it('not-allowedはspeechRecognitionをerrorにし、endから再開を試みない', async () => {
+    const statuses: OraProductionInputStatus[] = [];
+    const adapter = await createTestAttach({ onStatusChange: (status) => statuses.push(status) })(
+      () => undefined,
+    );
+    const recognition = FakeSpeechRecognition.instances.at(-1)!;
+
+    recognition.emitError('not-allowed');
+    recognition.emitEnd();
+
+    expect(recognition.startCount).toBe(1);
+    expect(
+      statuses.some((status) => status.speechRecognition === 'error' && status.reason === 'error'),
+    ).toBe(true);
 
     adapter.detach();
   });

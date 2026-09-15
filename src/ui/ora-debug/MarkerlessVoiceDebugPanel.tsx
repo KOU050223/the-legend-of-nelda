@@ -28,6 +28,11 @@ import styles from './OraDebugPage.module.css';
 const FFT_SIZE = 2_048;
 const ANALYSIS_INTERVAL_MS = 50;
 const RUSH_WINDOW_MS = 1_200;
+/** 権限拒否・サービス不許可以外は、無音タイムアウト等の一時的な失敗として扱う。 */
+const FATAL_SPEECH_RECOGNITION_ERRORS: ReadonlySet<string> = new Set([
+  'not-allowed',
+  'service-not-allowed',
+]);
 
 const emptyHandObservation: HandObservation = { capturedAt: 0 };
 const emptyMovement: MovementInput = { forward: 0, right: 0 };
@@ -536,6 +541,14 @@ export function MarkerlessVoiceDebugPanel(): React.JSX.Element {
     };
     const handleError = (event: Event): void => {
       const errorEvent = event as SpeechRecognitionErrorEventLike;
+      // 'no-speech'等は継続リッスン中によく起きる一時的な失敗で、直後の
+      // 'end'で自然に収まる。権限・サービス不許可以外はエラー表示にしない。
+      if (
+        errorEvent.error === undefined ||
+        !FATAL_SPEECH_RECOGNITION_ERRORS.has(errorEvent.error)
+      ) {
+        return;
+      }
       setSpeechStatus('error');
       setSpeechError(
         errorEvent.message ?? errorEvent.error ?? 'SpeechRecognitionでエラーが発生しました。',
