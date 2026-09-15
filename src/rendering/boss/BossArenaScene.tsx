@@ -308,15 +308,28 @@ export function BossArenaScene(): React.JSX.Element {
       melodyExpected,
       showMelodyHint,
     });
-  }, [view.snapshot.boss.phase, view.snapshot.finale, zeroDamageSequence, microphoneStatus, playedMelodyNotes, melodyMissSequence, melodyExpected, showMelodyHint]);
+  }, [
+    view.snapshot.boss.phase,
+    view.snapshot.finale,
+    zeroDamageSequence,
+    microphoneStatus,
+    playedMelodyNotes,
+    melodyMissSequence,
+    melodyExpected,
+    showMelodyHint,
+  ]);
 
   useEffect(() => resetFinalePresentation, []);
 
-  useEffect(() => events.subscribe((event) => {
-    if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
-      setZeroDamageSequence((current) => current + 1);
-    }
-  }), [events]);
+  useEffect(
+    () =>
+      events.subscribe((event) => {
+        if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
+          setZeroDamageSequence((current) => current + 1);
+        }
+      }),
+    [events],
+  );
 
   useEffect(() => {
     if (zeroDamageSequence === 0) return undefined;
@@ -326,11 +339,18 @@ export function BossArenaScene(): React.JSX.Element {
 
   useEffect(() => {
     const finale = view.snapshot.finale;
-    const delayMs = finale === 'FINAL_STANDOFF' ? 7_500
-      : finale === 'OCARINA_APPEARING' ? 5_200
-        : finale === 'MELODY_ACCEPTED' ? 2_700
-          : finale === 'MEMORY' ? 14_500
-            : finale === 'HORI_FALLING_ASLEEP' ? 5_000 : null;
+    const delayMs =
+      finale === 'FINAL_STANDOFF'
+        ? 7_500
+        : finale === 'OCARINA_APPEARING'
+          ? 5_200
+          : finale === 'MELODY_ACCEPTED'
+            ? 2_700
+            : finale === 'MEMORY'
+              ? 14_500
+              : finale === 'HORI_FALLING_ASLEEP'
+                ? 5_000
+                : null;
     if (delayMs === null) return undefined;
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
@@ -344,27 +364,41 @@ export function BossArenaScene(): React.JSX.Element {
       setMicrophoneStatus('requesting-permission');
       setMelodyExpected(melody.current.snapshot().expected);
       setShowMelodyHint(false);
-      void attachMicrophoneNoteInput((event) => {
-        if (event.type === 'note-off' || (event.type === 'note-change' && event.note.name.includes('#'))) return;
-        const result = melody.current.consume(event);
-        if (result === 'IGNORED') return;
-        const snapshot = melody.current.snapshot();
-        setMelodyExpected(snapshot.expected);
-        setShowMelodyHint(snapshot.showHint);
-        setMelodyActivitySequence((current) => current + 1);
-        setPlayedMelodyNotes((current) => [...current.slice(-5), {
-          id: melodyNoteSequence.current++, name: event.note.name,
-          correct: result === 'CORRECT' || result === 'COMPLETE',
-        }]);
-        if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
-        if (result === 'COMPLETE') {
-          microphoneStop.current?.();
-          microphoneStop.current = null;
-          battle.advanceFinale();
-        }
-      }, { onStatusChange: setMicrophoneStatus }).then((stop) => {
-        if (disposed) stop(); else microphoneStop.current = stop;
-      }).catch(() => undefined);
+      void attachMicrophoneNoteInput(
+        (event) => {
+          if (
+            event.type === 'note-off' ||
+            (event.type === 'note-change' && event.note.name.includes('#'))
+          )
+            return;
+          const result = melody.current.consume(event);
+          if (result === 'IGNORED') return;
+          const snapshot = melody.current.snapshot();
+          setMelodyExpected(snapshot.expected);
+          setShowMelodyHint(snapshot.showHint);
+          setMelodyActivitySequence((current) => current + 1);
+          setPlayedMelodyNotes((current) => [
+            ...current.slice(-5),
+            {
+              id: melodyNoteSequence.current++,
+              name: event.note.name,
+              correct: result === 'CORRECT' || result === 'COMPLETE',
+            },
+          ]);
+          if (result === 'MISS') setMelodyMissSequence((current) => current + 1);
+          if (result === 'COMPLETE') {
+            microphoneStop.current?.();
+            microphoneStop.current = null;
+            battle.advanceFinale();
+          }
+        },
+        { onStatusChange: setMicrophoneStatus },
+      )
+        .then((stop) => {
+          if (disposed) stop();
+          else microphoneStop.current = stop;
+        })
+        .catch(() => undefined);
     }
     window.addEventListener('finale:melody-start', startMelody);
     return () => {
@@ -377,7 +411,10 @@ export function BossArenaScene(): React.JSX.Element {
 
   useEffect(() => {
     if (!melodyStarted || view.snapshot.finale !== 'WAITING_FOR_MELODY') return undefined;
-    const timer = window.setTimeout(() => setShowMelodyHint(true), melodyActivitySequence === 0 ? 9_000 : 7_000);
+    const timer = window.setTimeout(
+      () => setShowMelodyHint(true),
+      melodyActivitySequence === 0 ? 9_000 : 7_000,
+    );
     return () => window.clearTimeout(timer);
   }, [melodyActivitySequence, melodyStarted, view.snapshot.finale]);
 
@@ -584,8 +621,12 @@ export function BossArenaScene(): React.JSX.Element {
             <HoriDaisukeModel context={view.bossMotionContext} />
           </Suspense>
         </group>
-        {(view.snapshot.finale === 'HORI_FALLING_ASLEEP' || view.snapshot.finale === 'ENDING') && <FinaleFuton />}
-        {view.snapshot.finale === 'NONE' && <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />}
+        {(view.snapshot.finale === 'HORI_FALLING_ASLEEP' || view.snapshot.finale === 'ENDING') && (
+          <FinaleFuton />
+        )}
+        {view.snapshot.finale === 'NONE' && (
+          <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
+        )}
       </group>
 
       {/*
@@ -657,7 +698,8 @@ function FinaleFuton(): React.JSX.Element {
   useFrame(({ clock }, delta) => {
     appearedAt.current ??= clock.getElapsedTime();
     const elapsed = clock.getElapsedTime() - appearedAt.current;
-    const lift = elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
+    const lift =
+      elapsed < 0.72 ? (elapsed / 0.72) * 0.92 : Math.max(0, 0.92 - (elapsed - 0.72) * 1.7);
     if (quilt.current !== null) {
       quilt.current.position.y = MathUtils.damp(quilt.current.position.y, 0.53 + lift, 8, delta);
       quilt.current.rotation.z = MathUtils.damp(quilt.current.rotation.z, -lift * 0.52, 8, delta);
@@ -687,7 +729,13 @@ function FinaleFuton(): React.JSX.Element {
 const SLEEP_CAMERA_OFFSET = new Vector3(0, 3.1, 5.1);
 const sleepCameraDesired = new Vector3();
 
-function SleepCamera({ target, active }: { target: React.RefObject<Group | null>; active: boolean }): null {
+function SleepCamera({
+  target,
+  active,
+}: {
+  target: React.RefObject<Group | null>;
+  active: boolean;
+}): null {
   useFrame(({ camera }, delta) => {
     const boss = target.current;
     if (!active || boss === null) return;
