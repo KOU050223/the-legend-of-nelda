@@ -113,7 +113,7 @@ describe('通常攻撃の3段連撃', () => {
     expect(hits[0]?.damage).toBe(CHARACTER_STATS.PAY.attackPower);
   });
 
-  it('音声ATTACKの声量をダメージへ反映し、Authority側で範囲外をクランプする', () => {
+  it('オラ大輔の音声ATTACKは声量をダメージへ反映し、Authority側で範囲外をクランプする', () => {
     const cases = [
       { intensity: 0, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MIN },
       { intensity: 1, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MAX },
@@ -122,12 +122,23 @@ describe('通常攻撃の3段連撃', () => {
     ];
 
     for (const { intensity, multiplier } of cases) {
-      const { player, clock, hits } = setup();
+      const { player, clock, hits } = setup({ characterId: 'ORA' });
       player.submit({ type: 'ATTACK', intensity });
       clock.advance(comboStepAt(0).windupMs);
       player.update(0.016);
 
-      expect(hits[0]?.damage).toBeCloseTo(CHARACTER_STATS.PAY.attackPower * multiplier);
+      expect(hits[0]?.damage).toBeCloseTo(CHARACTER_STATS.ORA.attackPower * multiplier);
+    }
+  });
+
+  it('オラ大輔以外はintensity付きATTACKでも基準ダメージにする', () => {
+    for (const characterId of ['ODORUNO', 'PAY'] as const) {
+      const { player, clock, hits } = setup({ characterId });
+      player.submit({ type: 'ATTACK', intensity: 1 });
+      clock.advance(comboStepAt(0).windupMs);
+      player.update(0.016);
+
+      expect(hits[0]?.damage).toBe(CHARACTER_STATS[characterId].attackPower);
     }
   });
 
@@ -483,14 +494,14 @@ describe('プレイヤー状態のスナップショット', () => {
 
   it('攻撃の途中で復元しても、同じ時刻に判定が出る', () => {
     const step = comboStepAt(0);
-    const origin = setup();
+    const origin = setup({ characterId: 'ORA' });
     origin.player.submit({ type: 'ATTACK', intensity: 1 });
     origin.clock.advance(step.windupMs / 2);
 
     const wire: PlayerSnapshot = structuredClone(origin.player.snapshot());
     expect(wire.swing?.damageMultiplier).toBe(ORA_VOICE_DAMAGE_MULTIPLIER_MAX);
 
-    const replica = setup();
+    const replica = setup({ characterId: 'ORA' });
     replica.clock.advance(step.windupMs / 2);
     replica.player.restore(wire);
 
@@ -502,7 +513,7 @@ describe('プレイヤー状態のスナップショット', () => {
     replica.player.update(0.016);
     expect(replica.hits).toHaveLength(1);
     expect(replica.hits[0]?.damage).toBeCloseTo(
-      CHARACTER_STATS.PAY.attackPower * ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
+      CHARACTER_STATS.ORA.attackPower * ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
     );
   });
 });

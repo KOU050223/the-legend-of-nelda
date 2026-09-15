@@ -216,7 +216,8 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (action.type === 'ATTACK') {
-        startAttack(action.intensity);
+        // wire上のintensityは全キャラから届き得るため、音声ATTACK補正はオラだけに限定する。
+        startAttack(characterId === 'ORA' ? action.intensity : undefined);
         return;
       }
       if (action.type === 'DODGE') {
