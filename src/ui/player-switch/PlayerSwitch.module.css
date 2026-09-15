@@ -1,8 +1,8 @@
-/* EffectSettings と同じ見た目。並べて置くので、そちらの上へ積む。 */
+/* 見た目は EffectSettings と揃える。位置は右上で、右下の演出設定とは離す。 */
 .panel {
   position: absolute;
   right: 1.5rem;
-  bottom: 13rem;
+  top: 1.5rem;
   z-index: 3;
   display: flex;
   flex-direction: column;
