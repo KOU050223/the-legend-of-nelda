@@ -40,8 +40,8 @@ export const CHARACTER_MODELS: Readonly<Record<CharacterId, CharacterModelSpec>>
   /** Pay大輔: 青シャツ・赤眼鏡。待機モーション。 */
   PAY: { url: '/models/paypay-daisuke.glb', standingHeight: 1.902, clip: 'Animation' },
   /**
-   * オラ大輔: スタープラチナ。`scripts/convert-star-platinum-to-glb.py` で
-   * FBXから変換する。リグもアニメーションも持たないTポーズの静的モデル。
+   * オラ大輔: スタープラチナ。Mixamo Auto-Rigger でリグを付け、
+   * `scripts/build-star-platinum-glb.py` で待機モーション込みのGLBにする。
    */
-  ORA: { url: '/models/star-platinum.glb', standingHeight: 2.0, clip: null },
+  ORA: { url: '/models/star-platinum.glb', standingHeight: 1.98, clip: 'idle' },
 };
