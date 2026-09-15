@@ -245,7 +245,14 @@ export function BossArenaScene(): React.JSX.Element {
     const delayMs =
       // 台詞を読ませる間と、オカリナが空から降りる間を別々に確保する。
       // 最終局面の急な切り替えに見せず、後続の旋律入力へ気持ちを向けさせるため。
-      view.finale === 'FINAL_STANDOFF' ? 7_500 : view.finale === 'OCARINA_APPEARING' ? 5_200 : null;
+      view.finale === 'FINAL_STANDOFF'
+        ? 7_500
+        : view.finale === 'OCARINA_APPEARING'
+          ? 5_200
+          : // 旋律完成の余韻を置いてから、回想へ暗転する。
+            view.finale === 'MELODY_ACCEPTED'
+            ? 2_700
+            : null;
     if (delayMs === null) return undefined;
 
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
@@ -311,13 +318,23 @@ export function BossArenaScene(): React.JSX.Element {
     if (!import.meta.env.DEV) return undefined;
 
     function onDebugFinale(event: KeyboardEvent): void {
-      if (event.code !== 'KeyZ' || event.repeat) return;
-      battle.debugEnterNoSleepMode();
+      if (event.repeat) return;
+      if (event.code === 'KeyZ') {
+        battle.debugEnterNoSleepMode();
+        return;
+      }
+      // 発表・回想演出の確認用。通常ビルドではリスナー自体を登録しない。
+      if (event.code === 'KeyM' && view.finale === 'WAITING_FOR_MELODY') {
+        melody.current.forceComplete();
+        microphoneStop.current?.();
+        microphoneStop.current = null;
+        battle.advanceFinale();
+      }
     }
 
     window.addEventListener('keydown', onDebugFinale);
     return () => window.removeEventListener('keydown', onDebugFinale);
-  }, [battle]);
+  }, [battle, view.finale]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の

@@ -4,6 +4,9 @@ import type { MicrophoneInputStatus } from '@/input/microphone/types';
 import type { NoteName } from '@/input/microphone/types';
 import { useState } from 'react';
 
+import horiFrontPhoto from '../../../assets/character/hori-daisuke-v1/source/source-front.png';
+import horiGymPhoto from '../../../assets/character/hori-daisuke-v1/source/source-gym.png';
+
 import type { PlayedMelodyNote } from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
 
@@ -73,6 +76,14 @@ export function FinaleOverlay({
     );
   }
 
+  if (finale === 'MELODY_ACCEPTED') {
+    return <MelodyAccepted />;
+  }
+
+  if (finale === 'MEMORY') {
+    return <MemoryReel />;
+  }
+
   if (finale === 'OCARINA_APPEARING' || finale === 'WAITING_FOR_MELODY') {
     return (
       <section className={styles.overlay} aria-live="polite">
@@ -116,6 +127,55 @@ export function FinaleOverlay({
   }
 
   return null;
+}
+
+/** 旋律完成の一瞬だけ、画面を止めたように見せて回想へ繋ぐ。 */
+function MelodyAccepted(): React.JSX.Element {
+  return (
+    <section className={`${styles.overlay} ${styles.melodyAccepted}`} aria-live="assertive">
+      <div className={styles.melodyFlash} />
+      <p className={styles.melodySmall}>THE LEGENDARY MELODY HAS BEEN PLAYED</p>
+      <h1 className={styles.melodyTitle}>安 眠 の 旋 律</h1>
+      <p className={styles.melodyLine}>「……この音は……？」</p>
+    </section>
+  );
+}
+
+/**
+ * 回想の写真・文言はこの配列だけ差し替えれば素材更新できる。
+ * 現時点では既存の堀大輔写真を仮素材として使い、演出の尺と遷移を先に成立させる。
+ */
+const MEMORY_STILLS = [
+  { src: horiFrontPhoto, caption: '「彼にもかつて――」', detail: '「眠っていた頃があった。」' },
+  { src: horiGymPhoto, caption: '「あの日も――」', detail: '「この日も――」' },
+] as const;
+
+function MemoryReel(): React.JSX.Element {
+  return (
+    <section className={`${styles.overlay} ${styles.memory}`} aria-live="polite">
+      <div className={styles.memoryLightLeak} />
+      <p className={styles.memoryChapter}>MEMORY OF SLEEP</p>
+      <div className={styles.memoryStills}>
+        {MEMORY_STILLS.map((still, index) => (
+          <figure
+            className={`${styles.memoryStill} ${index === 0 ? styles.memoryStillLeft : styles.memoryStillRight}`}
+            key={still.src}
+          >
+            <img src={still.src} alt="堀大輔の過去の記憶" />
+            <figcaption>
+              <span>{still.caption}</span>
+              <strong>{still.detail}</strong>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <p className={styles.memoryRealization}>
+        「そうか……。」
+        <br />
+        「俺は……眠ることを、忘れていたのか。」
+      </p>
+    </section>
+  );
 }
 
 function SheetMusic({
