@@ -312,10 +312,6 @@ function Ending(): React.JSX.Element {
             <h1>THE END</h1>
           </div>
         </div>
-        <div className={styles.sleepResult}>
-          <span>堀大輔</span>
-          <strong>本日の睡眠時間　8時間00分</strong>
-        </div>
         <button
           className={styles.returnTitle}
           type="button"
