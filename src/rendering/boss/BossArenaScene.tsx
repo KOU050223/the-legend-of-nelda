@@ -76,7 +76,7 @@ import { LegendaryOcarina } from './LegendaryOcarina';
  * 同時操作する仕組みではなく、既存セッションとの互換用に残している。
  */
 
-const [, PLAYER_SPAWN] = SPAWN_POINTS;
+const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
 
 /**
  * ボス戦の追従カメラ。探索用より高く・遠くする。
@@ -115,9 +115,14 @@ function createBattle(): Battle {
   const battle = createBossBattle({
     clock: createRealClock(),
     events,
-    // スポーン地点は #54 のアリーナ定義をそのまま使う。ソロでは操作する
-    // オドルノだけを生成し、3人協力を前提にした結界は BossBattle 側で省略する。
-    roster: [{ id: 'odoruno', characterId: 'ODORUNO', position: PLAYER_SPAWN }],
+    // スポーン地点は #54 のアリーナ定義をそのまま使う。ソロでも3人を生成し、
+    // 1人のプレイヤーが操作対象を切り替えながら進められるようにする。
+    // 3人協力を前提にした結界は BossBattle 側で省略する。
+    roster: [
+      { id: 'odoruno', characterId: 'ODORUNO', position: PLAYER_SPAWN },
+      { id: 'pay', characterId: 'PAY', position: LEFT_SPAWN },
+      { id: 'ora', characterId: 'ORA', position: RIGHT_SPAWN },
+    ],
     solo: true,
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),

@@ -11,6 +11,7 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
@@ -126,6 +127,7 @@ export function App(): React.JSX.Element {
         <GameScene world />
         <FinalePresentation />
         <WorldTutorialGuide />
+        <PlayerSwitch />
         <MicrophoneDebugPanel />
       </div>
     );
