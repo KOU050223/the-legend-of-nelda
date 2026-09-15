@@ -276,6 +276,35 @@ export interface ZoneContext {
   readonly beamOrigin?: PlanarPosition;
 }
 
+/** スナップショットから危険区画を復元するために必要な攻撃状態だけ。 */
+interface ActiveAttackForDangerZones {
+  readonly attackId: HoriAttackId;
+  readonly startedAt: number;
+  readonly aim: AttackAim;
+  readonly beamOrigin: PlanarPosition | null;
+}
+
+/**
+ * スナップショット上の攻撃から、現在表示すべき危険区画を求める。
+ *
+ * `takenAt` と `startedAt` は同じゲームクロック上の値なので、クライアントの
+ * 時計へ依存せず、サーバーから届いた状態だけで経過時間を再現できる。
+ */
+export function dangerZonesOfActiveAttack(
+  activeAttack: ActiveAttackForDangerZones | null,
+  targets: readonly BossTarget[],
+  takenAt: number,
+): DangerZone[] {
+  if (activeAttack === null) return [];
+
+  return dangerZonesOf(activeAttack.attackId, {
+    aim: activeAttack.aim,
+    elapsedMs: takenAt - activeAttack.startedAt,
+    targets,
+    ...(activeAttack.beamOrigin === null ? {} : { beamOrigin: activeAttack.beamOrigin }),
+  });
+}
+
 /**
  * 追尾ビームの着弾点を、前の位置から1フレームぶん進める。
  *

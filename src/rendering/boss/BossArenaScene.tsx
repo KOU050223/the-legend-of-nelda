@@ -14,10 +14,13 @@ import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-ba
 import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
 import {
   createBossBattle,
+  outcomeOfSnapshot,
   type BattleOutcome,
   type BattleSnapshot,
   type BossBattle,
 } from '@/game/session/boss-battle';
+import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
+import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
@@ -102,6 +105,8 @@ function pinnedAttackId(): HoriAttackId | null {
 interface Battle {
   readonly battle: BossBattle;
   readonly events: GameEventBus;
+  /** ローカル戦闘を描画ループへ繋ぐ口。リモートと同じ経路を通す。 */
+  readonly source: BattleSource;
 }
 
 function createBattle(): Battle {
@@ -121,7 +126,9 @@ function createBattle(): Battle {
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
 
-  return { battle, events };
+  // 操作対象はストアから毎回読む。ここで固定すると、切り替え (Issue #106) が
+  // source を作り直さない限り効かなくなる。
+  return { battle, events, source: createLocalBattleSource(battle, readLocalPlayerId) };
 }
 
 /**
@@ -200,13 +207,15 @@ function isSameZones(a: readonly DangerZone[], b: readonly DangerZone[]): boolea
  */
 type SceneOutcome = BattleOutcome | 'LOCAL_DOWN';
 
-function sceneOutcome(battle: BossBattle, localPlayerId: LocalPlayerId): SceneOutcome {
-  const settled = battle.outcome();
+function sceneOutcome(snapshot: BattleSnapshot, localPlayerId: string): SceneOutcome {
+  // snapshot だけで決める。リモートは Authority の STATE しか持たないので、
+  // BossBattle のインスタンスを覗く判定にすると勝敗が出せない。
+  const settled = outcomeOfSnapshot(snapshot);
   if (settled !== 'ONGOING') return settled;
 
-  const local = battle.players.find((player) => player.snapshot().id === localPlayerId);
+  const local = snapshot.players.find((player) => player.id === localPlayerId);
   // 倒れて寝落ちのカウントが始まっている間も、操作は戻らない。
-  return local !== undefined && local.snapshot().status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
+  return local !== undefined && local.status !== 'ACTIVE' ? 'LOCAL_DOWN' : 'ONGOING';
 }
 
 /**
@@ -229,14 +238,43 @@ function publishLocalPlayerStatuses(snapshot: BattleSnapshot): void {
   if (changed) setStatuses(next);
 }
 
-export function BossArenaScene(): React.JSX.Element {
-  const worldTutorialVisible = useWorldTutorialStore((state) => state.visible);
-  const localPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
+interface BossArenaSceneProps {
+  /**
+   * Authority 権威の戦闘を描くときに渡す。省略するとローカル戦闘を作る
+   * (ワールド探索・dev用)。本番マルチプレイでは必ず渡す。
+   */
+  readonly source?: BattleSource;
+}
 
-  // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
+export function BossArenaScene({
+  source: providedSource,
+}: BossArenaSceneProps = {}): React.JSX.Element {
+  const worldTutorialVisible = useWorldTutorialStore((state) => state.visible);
+  const switchedLocalPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
+
+  // ローカル戦闘は source 未指定のときだけ作る。リモートを渡されたときに
+  // 作ってしまうと、本番なのにローカル戦闘が裏で走ることになる。
+  //
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [{ battle, events }, setBattle] = useState<Battle>(createBattle);
+  const [localBattle, setLocalBattle] = useState<Battle | null>(() =>
+    providedSource === undefined ? createBattle() : null,
+  );
+
+  const source = providedSource ?? localBattle?.source ?? null;
+  if (source === null) {
+    throw new Error('BattleSource is unavailable');
+  }
+  const activeSource = source;
+
+  // 最終演出を進められるのはローカル戦闘のときだけ。リモートでは Authority が
+  // finale を進め、こちらは snapshot を映すだけ (二重に進めない)。
+  const battle = localBattle?.battle ?? null;
+  const events = localBattle?.events ?? null;
+
+  // 操作キャラ。ローカルは画面から切り替えられ (Issue #106)、リモートは
+  // Authority が WELCOME で決めた1人に固定される。混ぜないよう分けて持つ。
+  const localPlayerId = providedSource === undefined ? switchedLocalPlayerId : source.localPlayerId;
 
   // SE。戦闘が流すイベントを購読して鳴らす。戦闘を作り直したら (やり直し)
   // 前の購読と音源を捨てて繋ぎ直す。
@@ -244,15 +282,16 @@ export function BossArenaScene(): React.JSX.Element {
   // ここで購読していなければ、戦闘がイベントを流しても誰も聞いていない
   // 状態になる。単騎PoC 側は combat-session.ts が同じ形で繋いでいる。
   useEffect(() => {
+    if (events === null) return undefined;
     const output = createHtmlAudioOutput();
     return createAudioManager({ eventBus: events, output, getSettings: readPresentationSettings });
   }, [events]);
 
   // 画面に出す決着。
   //
-  // `battle.outcome()` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
+  // `outcomeOfSnapshot` の DEFEAT は「3人全員が寝た」で、これは仕様どおり
   // (§5.5)。ただし今は操作できるのがオドルノ1人しか居ない。倒れても
-  // 仲間2人は ACTIVE のままなので `outcome()` は ONGOING から動かず、
+  // 仲間2人は ACTIVE のままなので勝敗は ONGOING から動かず、
   // 操作だけが効かない状態で止まる (蘇生は ACTIVE な仲間からしか出せない)。
   //
   // そこで画面側では「操作キャラが倒れた」もやり直せる終わりとして扱う。
@@ -279,12 +318,24 @@ export function BossArenaScene(): React.JSX.Element {
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
   const [imminent, setImminent] = useState(false);
-  const [view, setView] = useState<View>(() => ({
-    snapshot: battle.snapshot(),
-    now: performance.now(),
-    playerMotionContexts: [],
-    bossMotionContext: {},
-  }));
+  // リモートは最初の STATE が来るまで snapshot を持てないので null から始める。
+  const [view, setView] = useState<View | null>(() =>
+    localBattle === null
+      ? null
+      : {
+          snapshot: localBattle.battle.snapshot(),
+          now: performance.now(),
+          playerMotionContexts: [],
+          bossMotionContext: {},
+        },
+  );
+
+  // 描画ループが読む最新 snapshot。source から来た値をそのまま置く。
+  const snapshotRef = useRef<BattleSnapshot | null>(view?.snapshot ?? null);
+
+  // finale など「snapshot を見て動く Effect」はこれを読む。view が null の間は
+  // 演出を始めない (リモート接続直後の1瞬)。
+  const finale = view?.snapshot.finale ?? 'NONE';
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
   const [melodyStarted, setMelodyStarted] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
@@ -297,10 +348,13 @@ export function BossArenaScene(): React.JSX.Element {
   const melodyNoteSequence = useRef(0);
   const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
 
+  const bossPhase = view?.snapshot.boss.phase ?? null;
+
   useEffect(() => {
+    if (bossPhase === null) return;
     publishFinalePresentation({
-      phase: view.snapshot.boss.phase,
-      finale: view.snapshot.finale,
+      phase: bossPhase,
+      finale,
       zeroDamageSequence,
       microphoneStatus,
       playedMelodyNotes,
@@ -309,8 +363,8 @@ export function BossArenaScene(): React.JSX.Element {
       showMelodyHint,
     });
   }, [
-    view.snapshot.boss.phase,
-    view.snapshot.finale,
+    bossPhase,
+    finale,
     zeroDamageSequence,
     microphoneStatus,
     playedMelodyNotes,
@@ -321,15 +375,38 @@ export function BossArenaScene(): React.JSX.Element {
 
   useEffect(() => resetFinalePresentation, []);
 
-  useEffect(
-    () =>
-      events.subscribe((event) => {
-        if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
-          setZeroDamageSequence((current) => current + 1);
-        }
-      }),
-    [events],
-  );
+  // source が流す STATE を受ける。ローカルは tick() が、リモートは
+  // サーバーが流す。描画ループはここで置かれた snapshot を読む。
+  useEffect(() => {
+    snapshotRef.current = null;
+
+    return activeSource.onState((snapshot) => {
+      snapshotRef.current = snapshot;
+      setView((previous) => {
+        const now = performance.now();
+        const next: View = {
+          snapshot,
+          now,
+          ...motionContextsFor(
+            snapshot,
+            now,
+            previousPositions.current,
+            previousBossPosition.current,
+          ),
+        };
+        return previous !== null && isSameView(previous, next) ? previous : next;
+      });
+    });
+  }, [activeSource]);
+
+  useEffect(() => {
+    if (events === null) return undefined;
+    return events.subscribe((event) => {
+      if (event.type === 'BOSS_DAMAGE_NULLIFIED' && event.phase === 'NO_SLEEP_MODE') {
+        setZeroDamageSequence((current) => current + 1);
+      }
+    });
+  }, [events]);
 
   useEffect(() => {
     if (zeroDamageSequence === 0) return undefined;
@@ -337,8 +414,10 @@ export function BossArenaScene(): React.JSX.Element {
     return () => window.clearTimeout(timer);
   }, [zeroDamageSequence]);
 
+  // 演出の自動進行はローカル戦闘だけが行う。リモートでは Authority が
+  // finale を進めるので、クライアント側から進めると二重に進む。
   useEffect(() => {
-    const finale = view.snapshot.finale;
+    if (battle === null) return undefined;
     const delayMs =
       finale === 'FINAL_STANDOFF'
         ? 7_500
@@ -354,12 +433,15 @@ export function BossArenaScene(): React.JSX.Element {
     if (delayMs === null) return undefined;
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
-  }, [battle, view.snapshot.finale]);
+  }, [battle, finale]);
 
   useEffect(() => {
+    if (battle === null) return undefined;
+    // コールバックの中から読むので、narrow 済みの参照を掴んでおく。
+    const localBattleForMelody = battle;
     let disposed = false;
     function startMelody(): void {
-      if (microphoneStop.current !== null || view.snapshot.finale !== 'WAITING_FOR_MELODY') return;
+      if (microphoneStop.current !== null || finale !== 'WAITING_FOR_MELODY') return;
       setMelodyStarted(true);
       setMicrophoneStatus('requesting-permission');
       setMelodyExpected(melody.current.snapshot().expected);
@@ -389,7 +471,7 @@ export function BossArenaScene(): React.JSX.Element {
           if (result === 'COMPLETE') {
             microphoneStop.current?.();
             microphoneStop.current = null;
-            battle.advanceFinale();
+            localBattleForMelody.advanceFinale();
           }
         },
         { onStatusChange: setMicrophoneStatus },
@@ -407,31 +489,32 @@ export function BossArenaScene(): React.JSX.Element {
       microphoneStop.current?.();
       microphoneStop.current = null;
     };
-  }, [battle, view.snapshot.finale]);
+  }, [battle, finale]);
 
   useEffect(() => {
-    if (!melodyStarted || view.snapshot.finale !== 'WAITING_FOR_MELODY') return undefined;
+    if (!melodyStarted || finale !== 'WAITING_FOR_MELODY') return undefined;
     const timer = window.setTimeout(
       () => setShowMelodyHint(true),
       melodyActivitySequence === 0 ? 9_000 : 7_000,
     );
     return () => window.clearTimeout(timer);
-  }, [melodyActivitySequence, melodyStarted, view.snapshot.finale]);
+  }, [melodyActivitySequence, melodyStarted, finale]);
 
   useEffect(() => {
+    if (battle === null) return undefined;
     const completeEnding = () => {
-      if (view.snapshot.finale === 'ENDING') battle.advanceFinale();
+      if (finale === 'ENDING') battle.advanceFinale();
     };
     window.addEventListener('finale:ending-complete', completeEnding);
     return () => window.removeEventListener('finale:ending-complete', completeEnding);
-  }, [battle, view.snapshot.finale]);
+  }, [battle, finale]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return undefined;
+    if (!import.meta.env.DEV || battle === null) return undefined;
     const onDebugFinale = (event: KeyboardEvent) => {
       if (event.repeat) return;
       if (event.code === 'KeyZ') battle.debugEnterNoSleepMode();
-      if (event.code === 'KeyM' && view.snapshot.finale === 'WAITING_FOR_MELODY') {
+      if (event.code === 'KeyM' && finale === 'WAITING_FOR_MELODY') {
         melody.current.forceComplete();
         microphoneStop.current?.();
         microphoneStop.current = null;
@@ -440,7 +523,7 @@ export function BossArenaScene(): React.JSX.Element {
     };
     window.addEventListener('keydown', onDebugFinale);
     return () => window.removeEventListener('keydown', onDebugFinale);
-  }, [battle, view.snapshot.finale]);
+  }, [battle, finale]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の
@@ -455,11 +538,11 @@ export function BossArenaScene(): React.JSX.Element {
       // 続けて来ると、回避は前フレームの方向へ飛ぶ。回避は「移動方向 +
       // 回避入力」(§4.2) なので、方向が1フレーム古いと横へ避けたつもりが
       // 別方向へ転がる。
-      // 操作対象は毎回ストアから読む。フックの戻り値を掴んで deps へ入れると
-      // 切り替えのたびにこの Effect が張り直され、押しっぱなしの移動が切れる。
-      const activePlayerId = readLocalPlayerId();
-      if (adapter !== null) battle.submit(activePlayerId, adapter.pollMove());
-      battle.submit(activePlayerId, action);
+      // 送り先は source が決める。ローカルは送るたびにストアから操作キャラを
+      // 読み直すので (createLocalBattleSource)、切り替えてもこの Effect を
+      // 張り直さずに済む。張り直すと押しっぱなしの移動が切れる。
+      if (adapter !== null) activeSource.submit(adapter.pollMove());
+      activeSource.submit(action);
     });
     const input = adapter;
 
@@ -469,7 +552,7 @@ export function BossArenaScene(): React.JSX.Element {
       inputRef.current = null;
       input.detach();
     };
-  }, [battle]);
+  }, [activeSource]);
 
   // 決着したら R でやり直す。決着後は戦闘を進めないので、ここだけは
   // キーボードを直接見る (GameAction にやり直しは無い。やり直しは
@@ -479,9 +562,14 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
+      // やり直せるのはローカル戦闘だけ。リモートは Authority が持つ進行なので、
+      // クライアントが勝手に戦闘を作り直すことはできない。
+      if (providedSource !== undefined) return;
       previousPositions.current.clear();
       previousBossPosition.current = undefined;
-      setBattle(createBattle());
+      setLocalBattle(createBattle());
+      setView(null);
+      snapshotRef.current = null;
       setOutcome('ONGOING');
       setZones([]);
       setImminent(false);
@@ -499,7 +587,7 @@ export function BossArenaScene(): React.JSX.Element {
 
     window.addEventListener('keydown', onRestart);
     return () => window.removeEventListener('keydown', onRestart);
-  }, [outcome]);
+  }, [outcome, providedSource]);
 
   // 操作対象が変わったら、離れたキャラへ移動停止を送る。
   //
@@ -510,7 +598,7 @@ export function BossArenaScene(): React.JSX.Element {
   useEffect(() => {
     const left = previousLocalPlayerId.current;
     previousLocalPlayerId.current = localPlayerId;
-    if (left === localPlayerId) return;
+    if (left === localPlayerId || battle === null) return;
 
     battle.submit(left, { type: 'MOVE', input: { forward: 0, right: 0 } });
   }, [battle, localPlayerId]);
@@ -522,20 +610,25 @@ export function BossArenaScene(): React.JSX.Element {
       return;
     }
 
-    // 移動は押しっぱなしの状態なので毎フレーム取り出す。
     // 操作対象は毎フレーム読む。切り替えても Effect を張り直さずに追従できる。
-    const activePlayerId = readLocalPlayerId();
+    const activePlayerId = activeSource.localPlayerId;
 
     // 追従カメラの見る Root を選択中のキャラへ合わせる。ref コールバックで
     // 決めると、切り替え時に新旧どちらが先に走るかで一瞬古い Root を指す。
     localRoot.current = actorRoots.current.get(activePlayerId) ?? null;
 
+    // 移動は押しっぱなしの状態なので毎フレーム取り出す。
     const input = inputRef.current;
-    if (input !== null) battle.submit(activePlayerId, input.pollMove());
+    if (input !== null) activeSource.submit(input.pollMove());
 
-    battle.update(delta);
+    // ローカルはここで時間が進み、その場で STATE が流れる。リモートは
+    // サーバーが進めるので tick() は何もしない。
+    activeSource.tick(delta);
 
-    const snapshot = battle.snapshot();
+    // 描画は source から流れてきた snapshot だけを見る。ローカル戦闘の
+    // インスタンスを直接覗くと、リモートで同じ経路が通らなくなる。
+    const snapshot = snapshotRef.current;
+    if (snapshot === null) return;
 
     const sleeping =
       snapshot.finale === 'HORI_FALLING_ASLEEP' ||
@@ -565,23 +658,16 @@ export function BossArenaScene(): React.JSX.Element {
       if (root !== undefined) syncCharacterRoot(root, player);
     }
 
-    // HP・状態・モーションが変わったときだけ再レンダーする。位置差分は
-    // 条件の計算にだけ使い、毎フレームReactを再レンダーする理由にはしない。
-    const now = performance.now();
-    const contexts = motionContextsFor(
-      snapshot,
-      now,
-      previousPositions.current,
-      previousBossPosition.current,
-    );
-    const next: View = { snapshot, now, ...contexts };
+    // view の更新は source.onState 側で行う。ここでは次フレームの
+    // モーション判定に使う「前フレームの位置」だけを覚えておく。
     for (const player of snapshot.players)
       previousPositions.current.set(player.id, player.position);
     previousBossPosition.current = snapshot.boss.position;
-    setView((previous) => (isSameView(previous, next) ? previous : next));
 
     // 切り替えパネルへ各人の状態を渡す。寝ているキャラは選べないようにする。
-    publishLocalPlayerStatuses(snapshot);
+    // ローカルだけ。リモートの roster を切り替えストアへ流すと、別経路である
+    // はずの Authority 側の状態が混ざる (local-player-store の但し書き)。
+    if (providedSource === undefined) publishLocalPlayerStatuses(snapshot);
 
     const active = snapshot.boss.activeAttack;
     // ボスへ渡す targets と同じものを使う。描画だけ別の配列を組むと、
@@ -590,13 +676,18 @@ export function BossArenaScene(): React.JSX.Element {
       .filter((player) => player.status === 'ACTIVE')
       .map((player) => ({ id: player.id, position: player.position }));
 
-    const nextZones = battle.boss.dangerZones(targets);
+    // 危険範囲も snapshot から出す。リモートには boss オブジェクトが無い。
+    const nextZones = dangerZonesOfActiveAttack(
+      snapshot.boss.activeAttack,
+      targets,
+      snapshot.boss.takenAt,
+    );
     setZones((previous) => (isSameZones(previous, nextZones) ? previous : nextZones));
     setImminent(
-      active !== null && performance.now() - active.startedAt >= active.timing.telegraphMs,
+      active !== null && snapshot.boss.takenAt - active.startedAt >= active.timing.telegraphMs,
     );
 
-    const nextOutcome = sceneOutcome(battle, activePlayerId);
+    const nextOutcome = sceneOutcome(snapshot, activePlayerId);
     setOutcome((current) => (current === nextOutcome ? current : nextOutcome));
   });
 
@@ -618,13 +709,11 @@ export function BossArenaScene(): React.JSX.Element {
         */}
         <group ref={bossVisual}>
           <Suspense fallback={null}>
-            <HoriDaisukeModel context={view.bossMotionContext} />
+            <HoriDaisukeModel context={view?.bossMotionContext ?? {}} />
           </Suspense>
         </group>
-        {(view.snapshot.finale === 'HORI_FALLING_ASLEEP' || view.snapshot.finale === 'ENDING') && (
-          <FinaleFuton />
-        )}
-        {view.snapshot.finale === 'NONE' && (
+        {(finale === 'HORI_FALLING_ASLEEP' || finale === 'ENDING') && <FinaleFuton />}
+        {view !== null && finale === 'NONE' && (
           <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
         )}
       </group>
@@ -641,7 +730,7 @@ export function BossArenaScene(): React.JSX.Element {
         モデルとHPバーを同じRootへ持ち、位置同期はこのシーンのゲームフレームが
         Actor Rootへ反映する。
       */}
-      {view.snapshot.players.map((player) => (
+      {view?.snapshot.players.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <CharacterActor
             ref={(node) => {
@@ -675,7 +764,7 @@ export function BossArenaScene(): React.JSX.Element {
       */}
       {outcome !== 'ONGOING' && (
         <Suspense fallback={null}>
-          <OutcomeBanner outcome={outcome} />
+          <OutcomeBanner outcome={outcome} canRestart={providedSource === undefined} />
         </Suspense>
       )}
 
@@ -684,8 +773,8 @@ export function BossArenaScene(): React.JSX.Element {
         offset={BATTLE_CAMERA_OFFSET}
         lookAtHeight={BATTLE_LOOK_AT_HEIGHT}
       />
-      <SleepCamera target={bossRoot} active={view.snapshot.finale === 'HORI_FALLING_ASLEEP'} />
-      <LegendaryOcarina phase={melodyStarted ? 'NONE' : view.snapshot.finale} />
+      <SleepCamera target={bossRoot} active={finale === 'HORI_FALLING_ASLEEP'} />
+      <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} />
     </>
   );
 }
@@ -752,16 +841,26 @@ function SleepCamera({
  * カメラの前へ出さず、ボスの頭上に置く。操作キャラが倒れているときも
  * ボスは必ず画面に入っているため。
  */
-function OutcomeBanner({ outcome }: { outcome: SceneOutcome }): React.JSX.Element {
+function OutcomeBanner({
+  outcome,
+  canRestart,
+}: {
+  outcome: SceneOutcome;
+  canRestart: boolean;
+}): React.JSX.Element {
   const won = outcome === 'VICTORY';
   return (
     <Billboard position={[BOSS_ANCHOR.x, 7, BOSS_ANCHOR.z]}>
       <Text fontSize={1.1} color={won ? '#4cd964' : '#ff453a'} anchorY="bottom">
         {won ? 'WAKE UP!' : 'ZZZ...'}
       </Text>
-      <Text fontSize={0.45} color="#f2f2f7" anchorY="top" position={[0, -0.2, 0]}>
-        R でやり直す
-      </Text>
+      {/* Rでのやり直しはローカルdev経路専用。リモートでは押しても何も
+          起きないため、その場合はヒント自体を出さない (UIが嘘をつかない)。 */}
+      {canRestart && (
+        <Text fontSize={0.45} color="#f2f2f7" anchorY="top" position={[0, -0.2, 0]}>
+          R でやり直す
+        </Text>
+      )}
     </Billboard>
   );
 }

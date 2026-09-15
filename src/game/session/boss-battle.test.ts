@@ -17,7 +17,7 @@ import { DEVICE_ANCHORS } from '../arena/arena';
 import { comboStepAt } from '../player/attack-combo';
 import { BARRIER_DEVICE_IDS, type BarrierDeviceId } from '../barrier/barrier-challenge';
 import { FINALE_STATES } from '../finale/finale-state';
-import { createBossBattle, type BossBattle } from './boss-battle';
+import { createBossBattle, outcomeOfSnapshot, type BossBattle } from './boss-battle';
 
 function setup(
   options: { attack?: HoriAttackId; initialHp?: number; debugSkipBarriers?: boolean } = {},
@@ -227,6 +227,35 @@ describe('倒れた仲間の扱い', () => {
 });
 
 describe('勝敗', () => {
+  it('スナップショットのfinaleがCOMPLETEなら勝利を返す', () => {
+    expect(
+      outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ASLEEP' }], finale: 'COMPLETE' }),
+    ).toBe('VICTORY');
+  });
+
+  it('ボスHPが0でもfinaleが終わっていなければ勝利にしない', () => {
+    // HPで勝ちにすると最終局面の演出が流れないまま決着してしまう (§5.5)。
+    expect(
+      outcomeOfSnapshot({ boss: { hp: 0 }, players: [{ status: 'ACTIVE' }], finale: 'MEMORY' }),
+    ).toBe('ONGOING');
+  });
+
+  it('スナップショットのプレイヤーが1人以上かつ全員ASLEEPなら敗北を返す', () => {
+    expect(outcomeOfSnapshot({ boss: { hp: 1000 }, players: [{ status: 'ASLEEP' }] })).toBe(
+      'DEFEAT',
+    );
+  });
+
+  it('ACTIVEまたはFALLING_ASLEEPのプレイヤーがいる場合は継続を返す', () => {
+    expect(
+      outcomeOfSnapshot({
+        boss: { hp: 1000 },
+        players: [{ status: 'ASLEEP' }, { status: 'FALLING_ASLEEP' }],
+      }),
+    ).toBe('ONGOING');
+    expect(outcomeOfSnapshot({ boss: { hp: 1000 }, players: [] })).toBe('ONGOING');
+  });
+
   it('戦闘中は決着しない', () => {
     const { battle } = setup();
     expect(battle.outcome()).toBe('ONGOING');

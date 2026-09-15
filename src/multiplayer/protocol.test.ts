@@ -42,9 +42,36 @@ function createBattleSnapshot(): BattleSnapshot {
 }
 
 describe('isClientToAuthorityMessage', () => {
+  it('共有tokenのJOINではopaqueなparticipantIdだけを受理しplayerIdやroleを受理しない', () => {
+    const accepted = {
+      type: 'JOIN',
+      token: 'shared-room-token',
+      participantId: 'participant-7f4d4c8a',
+    };
+    const rejected: unknown[] = [
+      { type: 'JOIN', token: 'shared-room-token' },
+      { type: 'JOIN', token: 'shared-room-token', participantId: 'pay-player' },
+      {
+        type: 'JOIN',
+        token: 'shared-room-token',
+        participantId: 'participant-7f4d4c8a',
+        playerId: 'pay-player',
+      },
+      {
+        type: 'JOIN',
+        token: 'shared-room-token',
+        participantId: 'participant-7f4d4c8a',
+        role: 'PAY',
+      },
+    ];
+
+    expect(isClientToAuthorityMessage(accepted)).toBe(true);
+    expect(rejected.map(isClientToAuthorityMessage)).toEqual([false, false, false, false]);
+  });
+
   it('JOINとACTIONの正しいエンベロープを受理する', () => {
     const messages = [
-      { type: 'JOIN', token: 'token-pay' },
+      { type: 'JOIN', token: 'token-pay', participantId: 'participant-pay' },
       { type: 'ACTION', epoch: 1, seq: 0, action: { type: 'ATTACK' } },
       {
         type: 'ACTION',
@@ -72,14 +99,39 @@ describe('isClientToAuthorityMessage', () => {
 
     expect(result).toEqual([false, false, false, false, false]);
   });
+
+  it('SELECT_CHARACTERとSTARTは厳密なkeyだけを受理しclient identityを受け付けない', () => {
+    const accepted: unknown[] = [
+      { type: 'SELECT_CHARACTER', characterId: 'PAY' },
+      { type: 'START' },
+    ];
+    const rejected: unknown[] = [
+      { type: 'SELECT_CHARACTER', characterId: 'PAY', participantId: 'participant-pay' },
+      { type: 'SELECT_CHARACTER', role: 'PAY' },
+      { type: 'START', participantId: 'participant-pay' },
+      { type: 'SELECT_CHARACTER', characterId: 'UNKNOWN' },
+    ];
+
+    expect(accepted.map(isClientToAuthorityMessage)).toEqual([true, true]);
+    expect(rejected.map(isClientToAuthorityMessage)).toEqual([false, false, false, false]);
+  });
 });
 
 describe('isAuthorityToClientMessage', () => {
-  it('WELCOMEとSTATEとWASSHOIを正しく絞り込む', () => {
+  it('WELCOMEとSTATEとROSTERとWASSHOIを正しく絞り込む', () => {
     const messages = [
-      { type: 'WELCOME', playerId: 'pay-player', epoch: 1 },
+      { type: 'WELCOME', participantId: 'participant-pay', epoch: 1 },
       { type: 'STATE', battle: createBattleSnapshot() },
       { type: 'WASSHOI', event: { type: 'WASSHOI', intensity: 0.8, durationMs: 450 } },
+      {
+        type: 'ROSTER',
+        slots: [
+          { playerId: 'participant-odoruno', characterId: 'ODORUNO', connected: true },
+          { playerId: 'participant-pay', characterId: 'PAY', connected: true },
+          { playerId: 'participant-ora', characterId: 'ORA', connected: false },
+        ],
+        started: false,
+      },
     ];
 
     const result = messages.every(isAuthorityToClientMessage);
@@ -97,5 +149,67 @@ describe('isAuthorityToClientMessage', () => {
     const result = messages.map(isAuthorityToClientMessage);
 
     expect(result).toEqual([false, false, false]);
+  });
+
+  it('ROSTERの不明なtype、余分なフィールド、slots内の型不正を拒否する', () => {
+    const messages: unknown[] = [
+      { type: 'UNKNOWN', slots: [], started: false },
+      {
+        type: 'ROSTER',
+        slots: [],
+        started: false,
+        extra: true,
+      },
+      {
+        type: 'ROSTER',
+        slots: [{ playerId: 'participant-pay', characterId: 'UNKNOWN', connected: true }],
+        started: false,
+      },
+      {
+        type: 'ROSTER',
+        slots: [{ playerId: 'participant-pay', characterId: 'PAY', connected: 'true' }],
+        started: false,
+      },
+      {
+        type: 'ROSTER',
+        slots: [{ playerId: 1, characterId: 'PAY', connected: true }],
+        started: false,
+      },
+      {
+        type: 'ROSTER',
+        slots: [{ playerId: 'participant-pay', characterId: 'PAY', connected: true, extra: true }],
+        started: false,
+      },
+    ];
+
+    expect(messages.map(isAuthorityToClientMessage)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it('LOBBY/ROOM_FULL/REJECTEDを受理し、fullやrejectionのkey追加を拒否する', () => {
+    const slots = [
+      { participantId: 'participant-a', role: 'ODORUNO', connected: true },
+      { participantId: 'participant-b', role: 'PAY', connected: true },
+      { participantId: null, role: null, connected: false },
+    ] as const;
+    const accepted: unknown[] = [
+      { type: 'LOBBY', slots, started: false, full: false },
+      { type: 'ROOM_FULL', slots, started: false },
+      { type: 'REJECTED', reason: 'ROLE_TAKEN' },
+    ];
+    const rejected: unknown[] = [
+      { type: 'LOBBY', slots, started: false, full: false, extra: true },
+      { type: 'ROOM_FULL', slots, started: false, extra: true },
+      { type: 'REJECTED', reason: 'UNKNOWN' },
+    ];
+
+    expect(accepted.map(isAuthorityToClientMessage)).toEqual([true, true, true]);
+    expect(rejected.map(isAuthorityToClientMessage)).toEqual([false, false, false]);
   });
 });

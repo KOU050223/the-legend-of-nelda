@@ -19,7 +19,6 @@ import type { PlanarPosition } from '../movement/types';
 import type { GameEventBus } from '../events/game-event';
 import {
   createPlayer,
-  isAllAsleep,
   isWithinAttackReach,
   type Player,
   type PlayerSnapshot,
@@ -79,6 +78,31 @@ export interface BattleSnapshot {
 }
 
 export type BattleOutcome = 'ONGOING' | 'VICTORY' | 'DEFEAT';
+
+/**
+ * スナップショットだけから判定できる戦闘の勝敗。
+ *
+ * 勝利は HP ではなく finale が COMPLETE まで進んだことで決まる。HP が 0 に
+ * なった時点で勝ちにすると、NO_SLEEP_MODE から始まる最終局面の演出が
+ * 一切流れずに決着してしまう (§5.5)。
+ *
+ * リモートのクライアントは Authority の snapshot しか持たないので、勝敗も
+ * snapshot だけから出せる必要がある。そのため finale もここで見る。
+ */
+export function outcomeOfSnapshot(snapshot: {
+  readonly boss: { readonly hp: number };
+  readonly players: readonly { readonly status: PlayerSnapshot['status'] }[];
+  readonly finale?: FinaleState;
+}): BattleOutcome {
+  if (snapshot.finale === 'COMPLETE') return 'VICTORY';
+  if (
+    snapshot.players.length > 0 &&
+    snapshot.players.every((player) => player.status === 'ASLEEP')
+  ) {
+    return 'DEFEAT';
+  }
+  return 'ONGOING';
+}
 
 export interface BossBattle {
   /** 1人のプレイヤーの入力を処理する。 */
@@ -273,10 +297,13 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     },
 
     outcome() {
-      if (finale === 'COMPLETE') return 'VICTORY';
-      // 3人全員が完全に寝たら敗北 (§5.5)。
-      if (isAllAsleep(players)) return 'DEFEAT';
-      return 'ONGOING';
+      // 3人全員が完全に寝たら敗北 (§5.5)。判定そのものは
+      // outcomeOfSnapshot に一本化し、ローカルとリモートで同じ規則を通す。
+      return outcomeOfSnapshot({
+        boss: boss.snapshot(),
+        players: players.map((player) => player.snapshot()),
+        finale,
+      });
     },
 
     advanceFinale() {

@@ -10,7 +10,12 @@ import {
 } from '../../config/phase2-boss-balance';
 import type { PlanarPosition } from '../../movement/types';
 
-import { aimAttack, SAFE_ZONE_CLEARANCE } from './hori-attacks';
+import {
+  aimAttack,
+  dangerZonesOf,
+  dangerZonesOfActiveAttack,
+  SAFE_ZONE_CLEARANCE,
+} from './hori-attacks';
 
 const SPEC = DEFAULT_HORI_ATTACKS.COMPRESSION_FIELD;
 const DANGER_RADIUS = SPEC.shape.kind === 'CIRCLE' ? SPEC.shape.radius : 0;
@@ -132,5 +137,59 @@ describe('睡眠時間圧縮フィールドの危険区画', () => {
         expect(radiusOf(moved)).toBeGreaterThanOrEqual(radiusOf(candidate) - 1e-9);
       });
     }
+  });
+});
+
+describe('スナップショットから復元する危険区画', () => {
+  it('takenAtとstartedAtの差分だけでlive計算と同じ危険区画を返す', () => {
+    const aim = aimAttack('BLUE_LIGHT', {
+      bossPosition: { x: 0, z: 0 },
+      targets: [{ id: 'pay', position: { x: 5, z: 0 } }],
+      seed: 1,
+    });
+    const activeAttack = {
+      attackId: 'BLUE_LIGHT' as const,
+      startedAt: 1_000,
+      aim,
+      beamOrigin: null,
+    };
+    const targets = [{ id: 'pay', position: { x: 5, z: 0 } }];
+    const takenAt = 1_500;
+
+    expect(dangerZonesOfActiveAttack(activeAttack, targets, takenAt)).toEqual(
+      dangerZonesOf('BLUE_LIGHT', {
+        aim,
+        elapsedMs: takenAt - activeAttack.startedAt,
+        targets,
+      }),
+    );
+  });
+
+  it('スナップショットのbeamOriginをlive計算へ渡す', () => {
+    const aim = aimAttack('BLUE_LIGHT', {
+      bossPosition: { x: 0, z: 0 },
+      targets: [{ id: 'pay', position: { x: 5, z: 0 } }],
+      seed: 1,
+    });
+    const activeAttack = {
+      attackId: 'BLUE_LIGHT' as const,
+      startedAt: 1_000,
+      aim,
+      beamOrigin: { x: 1, z: 1 },
+    };
+    const targets = [{ id: 'pay', position: { x: 5, z: 0 } }];
+
+    expect(dangerZonesOfActiveAttack(activeAttack, targets, 1_500)).toEqual(
+      dangerZonesOf('BLUE_LIGHT', {
+        aim,
+        elapsedMs: 500,
+        targets,
+        beamOrigin: activeAttack.beamOrigin,
+      }),
+    );
+  });
+
+  it('activeAttackが無いときは空配列を返す', () => {
+    expect(dangerZonesOfActiveAttack(null, [], 1_500)).toEqual([]);
   });
 });

@@ -1,0 +1,295 @@
+/*
+ * 「寝るな! 三つの布団」コンセプト。このゲームの副題は
+ * 「3人の勇者と眠らない男」で、SLEEPINESS/ASLEEPが本編の中心概念なので、
+ * 参加待ちも寝床の比喩に寄せる。ただし演出はテキストの補助でしかなく、
+ * 実際のconnected/started以外の情報は一切捏造しない (未接続/接続済み/
+ * STARTEDの文字は常に本物の状態と一致させる)。
+ */
+
+.page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2b3a67 0%, #1b2440 55%, #0f1428 100%);
+  color: #f8fafc;
+  font-family: 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+}
+
+.stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 12% 22%, #ffffffb0, transparent),
+    radial-gradient(2px 2px at 78% 15%, #ffffff90, transparent),
+    radial-gradient(1.5px 1.5px at 45% 65%, #ffffff70, transparent),
+    radial-gradient(1.5px 1.5px at 88% 55%, #ffffff80, transparent),
+    radial-gradient(2px 2px at 30% 80%, #ffffff60, transparent),
+    radial-gradient(1.5px 1.5px at 60% 38%, #ffffff60, transparent);
+}
+
+.panel {
+  position: relative;
+  width: min(100%, 720px);
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+
+.title {
+  margin: 4px 0 18px;
+  font-size: clamp(26px, 5vw, 40px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  background: linear-gradient(#fff6cf 14%, #ffd964 44%, #c98a22 78%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter: drop-shadow(2px 2px 0 #2c3a3155);
+}
+
+.status {
+  display: block;
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.youLine {
+  margin: 0 0 22px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.fullNotice,
+.errorNotice {
+  margin: 0 auto 18px;
+  max-width: 560px;
+  padding: 10px 14px;
+  border: 2px solid #8b5e34;
+  border-radius: 8px;
+  background: #261f1bde;
+  color: #ffe5a6;
+  font-weight: 700;
+}
+
+.errorNotice {
+  border-color: #be4b49;
+  color: #fecaca;
+}
+
+.futons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin: 0 0 22px;
+  padding: 0;
+  list-style: none;
+}
+
+.futon {
+  position: relative;
+  width: 148px;
+  padding: 16px 10px 14px;
+  border: 3px solid #3d2b1f;
+  border-radius: 14px;
+  background: #45403a;
+  box-shadow: 0 6px 0 #201a14;
+  opacity: 0.55;
+  transition:
+    opacity 0.3s ease,
+    transform 0.2s ease;
+}
+
+.futon:hover {
+  transform: rotate(-1.5deg);
+}
+
+.futonConnected {
+  opacity: 1;
+  background: linear-gradient(180deg, #b3552f 0%, #8a3f24 100%);
+  animation: futonBreathe 2.6s ease-in-out infinite;
+}
+
+.futonStarted {
+  animation: futonJump 0.7s ease-out;
+}
+
+@keyframes futonBreathe {
+  0%,
+  100% {
+    transform: rotate(-1.2deg);
+  }
+  50% {
+    transform: rotate(1.2deg);
+  }
+}
+
+@keyframes futonJump {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-24px) rotate(-5deg);
+  }
+  55% {
+    transform: translateY(2px) rotate(4deg);
+  }
+  78% {
+    transform: translateY(-6px) rotate(-1deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+.pillow {
+  width: 48px;
+  height: 20px;
+  margin: 0 auto 8px;
+  border: 2px solid #3d2b1f;
+  border-radius: 8px;
+  background: #f4ede1;
+}
+
+.sleeper {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 10px;
+  place-items: center;
+  border: 3px solid #1f2937;
+  border-radius: 50%;
+  background: #cbd5e1;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.characterName {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ffd964;
+  color: #3d2b1f;
+  font-size: 0.62rem;
+  font-weight: 900;
+  vertical-align: middle;
+}
+
+.slotStatus {
+  margin: 4px 0 0;
+  color: #e5e7eb;
+  font-size: 0.78rem;
+}
+
+.rolePicker {
+  margin: 0 auto 16px;
+  padding: 0;
+  border: 0;
+}
+
+.rolePicker legend {
+  margin: 0 auto 8px;
+  color: #ffe7a1;
+  font-weight: 800;
+}
+
+.roleCards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.roleCard,
+.startButton {
+  border: 3px solid #3d2b1f;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #d6a64c, #9d6823);
+  box-shadow: 0 4px 0 #201a14;
+  color: #2b1b11;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.roleCard {
+  min-width: 120px;
+  padding: 8px 12px;
+}
+
+.roleCard:hover:not(:disabled),
+.roleCardSelected {
+  background: linear-gradient(180deg, #fff0a6, #e4b348);
+  transform: translateY(-2px);
+}
+
+.roleCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.startButton {
+  min-width: 180px;
+  margin: 4px auto 18px;
+  padding: 10px 22px;
+  background: linear-gradient(180deg, #8ee3a2, #2f9a58);
+  color: #102b1b;
+  font-size: 1.1rem;
+}
+
+.startButton:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.45;
+}
+
+.startedStamp {
+  margin: 4px 0 18px;
+  color: #ffd964;
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  filter: drop-shadow(2px 2px 0 #2c2016);
+  animation: stampIn 0.35s ease-out;
+}
+
+@keyframes stampIn {
+  0% {
+    transform: scale(2) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.92) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+}
+
+.button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: #38bdf8;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 700;
+}
