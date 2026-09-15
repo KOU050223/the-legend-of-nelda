@@ -40,6 +40,7 @@ import {
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { BattleThirdPersonCamera, type BattleCameraMode } from '../camera/BattleThirdPersonCamera';
+import { FirstPersonCamera } from '../camera/FirstPersonCamera';
 import { CharacterActor } from '../character/character-actor';
 import {
   bossMotionContextFor,
@@ -79,6 +80,12 @@ import { LegendaryOcarina } from './LegendaryOcarina';
  */
 
 const [LEFT_SPAWN, PLAYER_SPAWN, RIGHT_SPAWN] = SPAWN_POINTS;
+
+const NEXT_CAMERA_MODE: Readonly<Record<BattleCameraMode, BattleCameraMode>> = {
+  'third-person': 'overhead',
+  overhead: 'first-person',
+  'first-person': 'third-person',
+};
 
 /** `?attack=WAKE_UP_ALARM` のように技を固定する。動作確認用の口。 */
 function pinnedAttackId(): HoriAttackId | null {
@@ -286,7 +293,7 @@ export function BossArenaScene({
   // プレイヤーが1人だけなので、そのまま「自分が倒れたら敗北」となる。
   const [outcome, setOutcome] = useState<SceneOutcome>('ONGOING');
 
-  // 通常戦闘は3人称で始める。俯瞰は広域攻撃を確認したいときにユーザー自身が選ぶ。
+  // 通常戦闘は3人称で始める。俯瞰・一人称はそれぞれ広域確認・没入プレイ用に選べる。
   const [cameraMode, setCameraMode] = useState<BattleCameraMode>('third-person');
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
@@ -430,7 +437,7 @@ export function BossArenaScene({
     function toggleCameraMode(event: KeyboardEvent): void {
       if (event.code !== 'KeyC' || event.repeat || isFromInteractiveElement(event)) return;
       event.preventDefault();
-      setCameraMode((current) => (current === 'third-person' ? 'overhead' : 'third-person'));
+      setCameraMode((current) => NEXT_CAMERA_MODE[current]);
     }
 
     window.addEventListener('keydown', toggleCameraMode);
@@ -761,6 +768,7 @@ export function BossArenaScene({
             now={view.now}
             context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
             local={player.id === localPlayerId}
+            hidePresentation={cameraMode === 'first-person' && player.id === localPlayerId}
           />
         </Suspense>
       ))}
@@ -783,11 +791,16 @@ export function BossArenaScene({
       )}
 
       <BattleThirdPersonCamera
-        mode={cameraMode}
+        mode={cameraMode === 'first-person' ? 'third-person' : cameraMode}
         player={localRoot}
         boss={bossRoot}
         inputYawRef={cameraInputYawRef}
-        active={finale !== 'HORI_FALLING_ASLEEP'}
+        active={cameraMode !== 'first-person' && finale !== 'HORI_FALLING_ASLEEP'}
+      />
+      <FirstPersonCamera
+        player={localRoot}
+        inputYawRef={cameraInputYawRef}
+        active={cameraMode === 'first-person' && finale !== 'HORI_FALLING_ASLEEP'}
       />
       <SleepCamera target={bossRoot} active={finale === 'HORI_FALLING_ASLEEP'} />
       <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} />

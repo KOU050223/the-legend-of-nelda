@@ -3,7 +3,7 @@ import { Vector3, type Group } from 'three';
 import { useRef, type MutableRefObject, type RefObject } from 'react';
 
 /** 戦闘中にユーザーが選べる通常カメラ。ゲーム開始時は third-person。 */
-export type BattleCameraMode = 'third-person' | 'overhead';
+export type BattleCameraMode = 'third-person' | 'overhead' | 'first-person';
 
 const CAMERA_CONFIG = {
   thirdPerson: {
@@ -24,7 +24,7 @@ const CAMERA_CONFIG = {
 } as const;
 
 export interface BattleThirdPersonCameraProps {
-  mode: BattleCameraMode;
+  mode: Exclude<BattleCameraMode, 'first-person'>;
   player: RefObject<Group | null>;
   boss: RefObject<Group | null>;
   /** 入力を World Space へ直すための、演出を含まない基準CameraのYaw。 */
