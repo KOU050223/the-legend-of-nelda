@@ -15,6 +15,7 @@ import { createHandNeutralCalibrator } from './hand-calibration';
 import { createMediaPipeHandDetector, type HandDetector } from './hand-detector';
 import { createHandJoystick } from './hand-joystick';
 import { createOraActionRecognizer } from './ora-action-recognizer';
+import { createOraReviveRecognizer } from './ora-revive-recognizer';
 import {
   createOraVoiceAttackRecognizer,
   type OraUtteranceCandidate,
@@ -163,6 +164,7 @@ export async function attachOraProductionInput(
   const voiceCalibrator = createVoiceBaselineCalibrator();
   const joystick = createHandJoystick();
   const oraActionRecognizer = createOraActionRecognizer();
+  const oraReviveRecognizer = createOraReviveRecognizer();
   const voiceAttackRecognizer = createOraVoiceAttackRecognizer();
 
   let phase: OraProductionInputPhase = 'idle';
@@ -431,6 +433,7 @@ export async function attachOraProductionInput(
       if (!calibration.handComplete || !calibration.voiceComplete) {
         joystick.reset();
         oraActionRecognizer.reset();
+        oraReviveRecognizer.reset();
         voiceAttackRecognizer.reset();
         return;
       }
@@ -439,6 +442,12 @@ export async function attachOraProductionInput(
       emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
       const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
       if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });
+      const reviveState = oraReviveRecognizer.update(
+        observation.left,
+        observation.right,
+        timestamp,
+      );
+      if (reviveState.triggered) emit({ type: 'REVIVE' });
     } catch (error) {
       reportError(error);
     }

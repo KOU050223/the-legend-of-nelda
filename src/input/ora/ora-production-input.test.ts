@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AttachInputAdapter, GameAction } from '@/game/types/game-action';
+import { REVIVE_INPUT_INTERVAL_MS } from '@/game/config/phase2-player-balance';
 import type { HandObservation } from './types';
 
 type FakeTrack = { stop: () => void };
@@ -54,6 +55,7 @@ let nextFrameId: number;
 let intervalHandler: (() => void) | undefined;
 let nowMs: number;
 let rms: number;
+let detectedHands: HandObservation;
 
 class FakeSpeechRecognition {
   static readonly instances: FakeSpeechRecognition[] = [];
@@ -93,8 +95,8 @@ class FakeSpeechRecognition {
   }
 }
 
-function hand(x: number, y: number): NonNullable<HandObservation['left']> {
-  return { x, y, velocityX: 0, velocityY: 0, isOpen: true };
+function hand(x: number, y: number, isOpen = true): NonNullable<HandObservation['left']> {
+  return { x, y, velocityX: 0, velocityY: 0, isOpen };
 }
 
 function runNextFrame(timestamp: number): void {
@@ -147,15 +149,16 @@ function setupSuccessfulResources(): void {
   intervalHandler = undefined;
   nowMs = 0;
   rms = 0;
+  detectedHands = {
+    capturedAt: 0,
+    left: hand(0.2, 0.2),
+    right: hand(0.8, 0.2),
+  };
   FakeSpeechRecognition.instances.length = 0;
 
   const detector = {
     detect: vi.fn<(_video: HTMLVideoElement, capturedAt: number) => HandObservation>(
-      (_video, capturedAt) => ({
-        capturedAt,
-        left: hand(0.2, 0.2),
-        right: hand(0.8, 0.2),
-      }),
+      (_video, capturedAt) => ({ ...detectedHands, capturedAt }),
     ),
     close: vi.fn<() => void>(),
   };
@@ -266,6 +269,31 @@ describe('createOraProductionInput', () => {
     expect(actions.some((action) => action.type === 'CHARACTER_ACTION')).toBe(true);
     expect(actions.some((action) => action.type === 'ATTACK')).toBe(false);
 
+    adapter.detach();
+  });
+
+  it('合掌を保持している間は一定間隔でREVIVEを送る', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    runNextFrame(0);
+    rms = 0.2;
+    runInterval();
+    nowMs = 350;
+    rms = 0;
+    runInterval();
+    runNextFrame(1_000);
+
+    detectedHands = {
+      capturedAt: 1_001,
+      left: hand(0.44, 0.55, false),
+      right: hand(0.56, 0.55, false),
+    };
+    runNextFrame(1_001);
+    runNextFrame(1_001 + REVIVE_INPUT_INTERVAL_MS - 1);
+    runNextFrame(1_001 + REVIVE_INPUT_INTERVAL_MS);
+
+    expect(actions.filter((action) => action.type === 'REVIVE')).toHaveLength(2);
     adapter.detach();
   });
 
