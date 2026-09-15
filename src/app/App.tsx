@@ -29,6 +29,11 @@ const MicrophoneDebug = import.meta.env.DEV
   ? lazy(async () => ({ default: (await import('@/ui/debug/MicrophoneDebug')).MicrophoneDebug }))
   : null;
 
+// LiveKit SDK は通常のゲーム体験には不要なので、明示的な検証画面を開いた時だけ読む。
+const VoiceDebugPage = lazy(async () => ({
+  default: (await import('@/ui/voice-debug/VoiceDebug')).VoiceDebug,
+}));
+
 export function App(): React.JSX.Element {
   const screen = useScreenStore((state) => state.screen);
   const route = useSyncExternalStore(subscribeToRoute, currentRoute, () => 'TITLE');
@@ -54,6 +59,13 @@ export function App(): React.JSX.Element {
 
   if (new URLSearchParams(window.location.search).get('debug') === 'wasshoi') {
     return <WasshoiDebug />;
+  }
+  if (new URLSearchParams(window.location.search).get('debug') === 'voice') {
+    return (
+      <Suspense fallback={null}>
+        <VoiceDebugPage />
+      </Suspense>
+    );
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
