@@ -261,7 +261,17 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 要確認だった「audio-capture等の持続エラーで無限リトライになりうる」点は、実機のエラーコード依存のため保留（現状は許容範囲と判断）。
 
 - 検証: 全体`pnpm vitest run src`は99ファイル/1042テスト通過、`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`とも全体通過（Claudeが独立再実行して確認済み）。
-- コミット: `c3546c6`（Finding1・2・3、Claude）、`b0023eb`（Finding5、Codex）、Finding4・6・7（Codex、このセクション追記と同じコミットでコミット予定）。
+- コミット: `c3546c6`（Finding1・2・3、Claude）、`b0023eb`（Finding5、Codex）、`98ab6cb`（Finding4・6・7、Codex）。
+
+## mainの取り込み（`0e10192`）
+
+45コミット遅れていた`origin/main`を取り込んだ。コンフリクトは`src/app/App.tsx`と`src/rendering/boss/BossArenaScene.tsx`の2ファイルで、いずれも意味を確認しながら手動解決した（機械的にどちらか一方を採用していない）。
+
+- `App.tsx`: GAME画面で`<FirstPersonHealthHud />`/`<VoiceHud />`（main側、一人称HUD・LiveKitボイスチャットHUD）と`<OraStatusHud />`（こちら側）が同じ挿入位置で競合。両方無関係な機能なので両方残した。
+- `BossArenaScene.tsx`: mainが追加した「カメラ相対移動」（`cameraInputYawRef`・`toCameraRelativeMovement`、3人称/一人称カメラ向けにWASD入力をカメラ向きに合わせて回転させる機能）と、こちら側のOraアダプタ選択構造（`SceneInput`共用体、`attachKeyboard()`/Ora分岐）が同じ入力配線箇所で競合。**カメラ相対移動はKeyboard入力にだけ適用し、Ora入力（`AttachInputAdapter`経由でMOVEが既に正規化済み）には適用しない**という判断で、`attachKeyboard()`内の離散アクション時ポーリングと`useFrame`内の毎フレームポーリングの両方に`toCameraRelativeMovement`を適用する形へ統合した。Oraのアダプタ選択構造自体（`inputRef`の型、`abortController`等）はそのまま維持。
+- 検証: マージ後に全体`pnpm vitest run src`（108ファイル/1121テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`を実行し、すべて通過を確認した。
+- **重要な副次情報**: mainの取り込みにより、LiveKitボイスチャットが`?debug=voice`の検証専用ページだけでなく、**通常のGAME/WORLD画面へ本番導線として統合された**（`MultiplayerVoiceSessionProvider`, `VoiceHud`）。以前ユーザーへ「LiveKitは本番未統合なので競合しない」と回答したが、この状況は変わった。オラ大輔選択中に音声チャットも同時に有効な場合、マイク二重使用・スピーカー再生の回り込みによる誤発話判定への影響を今後検証する必要がある（未検証、要フォローアップ）。
+- push・PR作成は未実施。
 
 ### 保留
 
