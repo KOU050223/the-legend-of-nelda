@@ -11,7 +11,6 @@ import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
-import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
