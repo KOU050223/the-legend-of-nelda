@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useWorldTutorialStore } from './world-tutorial-store';
 import styles from './TutorialGuide.module.css';
 
-const WORLD_TUTORIAL_DURATION_MS = 30_000;
+const WORLD_TUTORIAL_DURATION_MS = 15_000;
 
 /** ワールド探索中に常時表示する操作案内。 */
 export function WorldTutorialGuide(): React.JSX.Element | null {
