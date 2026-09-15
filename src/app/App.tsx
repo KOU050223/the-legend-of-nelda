@@ -129,6 +129,9 @@ export function App(): React.JSX.Element {
         <WorldTutorialGuide />
         <PlayerSwitch />
         <MicrophoneDebugPanel />
+        <ResultOverlay
+          onRestart={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }))}
+        />
       </div>
     );
   }
