@@ -208,3 +208,13 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/75テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過。
 - ユーザーへ、フルリロード後にオラ大輔を選び直し、画面右上のDEVパネルで`hand`/`voice`/`speech`/`candidate`の実値を見ながら再テストするよう依頼中。ATTACKが依然発火しない場合、この表示から原因（Calibration待ちか、キーワード判定棄却か）を直接特定できる。
 - コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
+
+**訂正（ユーザー実機フィードバックで判明）**: 「オラ」自体はATTACK発火するようになったが、上記3で追加したHUD（Calibration案内/Air Joystick/デバッグパネル）は実機で画面上を意図せず動いた。原因は`drei`の`<Html fullscreen>`がCanvas（`BossArenaScene`はCanvas内）のDOM座標に追従する実装であるのに対し、既存の`PlayerSwitch`/`MicrophoneDebug`（`src/ui/player-switch/`, `src/ui/debug/MicrophoneDebug.tsx`）はCanvasの外側（`App.tsx`の兄弟要素）に素のCSS `position: absolute`で置かれた別コンポーネントであるため。`Html`ベースの実装をやめ、同じ「Canvas外の兄弟コンポーネント＋共有ストア」パターンへ作り直す（Phase5後続タスクとして着手）。
+
+## Phase6 レビュー
+
+- `src/ui/ora-debug/OraDebugPage.tsx`に2行だけ追記（`MarkerlessVoiceDebugPanel`のimportとレンダー）。既存のARuco PoC部分・`OraDebugPage.tsx`本体のロジックは変更していない。
+- 新規`src/ui/ora-debug/MarkerlessVoiceDebugPanel.tsx`（792行）で、Phase1〜4の既存純粋ロジック（`hand-calibration`, `hand-detector`, `hand-joystick`, `ora-action-recognizer`, `voice-attack-recognizer`, `voice-calibration`）を独自にカメラ/マイク/SpeechRecognitionへ配線し、Camera/Mic状態・両手位置・Voice combo・ORA_ACTION進行度を表示する。Production Adapter（`ora-production-input.ts`）とは別配線（Debug専用、意図的な重複を許容する方針どおり）。
+- 新規`src/ui/ora-debug/markerless-debug-helpers.ts`（表示用フォーマット・エラー分類・RMS計算の純粋関数）とそのテスト。
+- 検証結果: `pnpm vitest run src/input/ora src/ui/ora-debug` は11ファイル/65テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/ui/ora-debug` 通過（Claudeが独立再実行して確認済み）。
+- `BossArenaScene.tsx`・`ora-production-input.ts`（Phase5側）には触れていない。
