@@ -43,9 +43,10 @@ REPO = Path(__file__).resolve().parent.parent
 # モーションFBXではなく**キャラ側のリグ**を基準にする。モーションは後から
 # 差し替わる (実際 walking.fbx が41ボーンの版に入れ替わった) ので、基準に
 # すると自分自身を基準にできなくなる。キャラのリグは動かない。
-REFERENCE_FBX = (
-    REPO / 'assets/character/dance-daisuke/export/dance-daisuke-for-mixamo.fbx'
-)
+# `*-for-mixamo.fbx` は古い FBX 形式 (7400) で Blender 5.2 では
+# アーマチュアを復元できない。ビルド側が実際に使う 7700 のベース FBX を
+# 基準にして、変換スクリプトとGLBビルドで同じ33ボーン集合を読む。
+REFERENCE_FBX = REPO / 'assets/character/dance-daisuke/export/dance-daisuke.fbx'
 
 FBX_IMPORT_KWARGS = {
     'global_scale': 1.0,

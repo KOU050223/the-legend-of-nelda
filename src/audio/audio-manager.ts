@@ -55,6 +55,11 @@ export function soundForEvent(event: GameEvent): SoundId | null {
     case 'BOSS_DOWN_FOLLOW_UP_HIT':
       return 'counter-success';
 
+    // ボスの技が出た瞬間。技ごとに音を持つのは絶対起床アラームだけなので、
+    // Cue 文字列の表は挟まず技IDで直接引く (ボス側に Cue ID が無いため)。
+    case 'BOSS_ATTACK_ACTIVE':
+      return event.attackId === 'WAKE_UP_ALARM' ? 'alarm-burst' : null;
+
     default:
       return null;
   }

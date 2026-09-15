@@ -1,5 +1,8 @@
 import { comboPhaseAt, comboStepAt } from '@/game/player/attack-combo';
+import type { BossSnapshot } from '@/game/boss/hori-boss';
 import type { PlayerSnapshot } from '@/game/player/player-state';
+import { phaseAt } from '@/game/boss/attack-scheduler';
+import type { PlanarPosition } from '@/game/movement/types';
 
 import { MOTION_CONDITIONS, type MotionContext } from './motion-manifest';
 
@@ -15,12 +18,51 @@ import { MOTION_CONDITIONS, type MotionContext } from './motion-manifest';
  *
  * @param now 現在時刻 (GameClock の now)。連撃の局面を測るために要る。
  */
-export function motionContextFor(player: PlayerSnapshot, now: number): MotionContext {
+export function motionContextFor(
+  player: PlayerSnapshot,
+  now: number,
+  previousPosition?: PlanarPosition,
+): MotionContext {
   return {
     attacking: isSwinging(player, now),
     fallingAsleep: player.status === 'FALLING_ASLEEP',
     asleep: player.status === 'ASLEEP',
+    moving:
+      player.status === 'ACTIVE' &&
+      (isMoving(player.position, previousPosition) || hasMovementInput(player.moveInput)),
+    dodging: isDodging(player, now),
   };
+}
+
+/** ボスの状態から、ボス用のモーション条件を組み立てる。 */
+export function bossMotionContextFor(
+  boss: BossSnapshot,
+  now: number,
+  previousPosition?: PlanarPosition,
+): MotionContext {
+  return {
+    attacking:
+      boss.activeAttack !== null &&
+      phaseAt(now - boss.activeAttack.startedAt, boss.activeAttack.timing) !== 'DONE',
+    moving: isMoving(boss.position, previousPosition),
+  };
+}
+
+function isMoving(current: PlanarPosition, previous: PlanarPosition | undefined): boolean {
+  return previous !== undefined && (current.x !== previous.x || current.z !== previous.z);
+}
+
+function hasMovementInput(input: { forward: number; right: number }): boolean {
+  return input.forward !== 0 || input.right !== 0;
+}
+
+/** 回避は短い無敵時間としてスナップショットへ表れる。復帰直後は除外する。 */
+function isDodging(player: PlayerSnapshot, now: number): boolean {
+  return (
+    player.status === 'ACTIVE' &&
+    player.invulnerableUntil !== null &&
+    now < player.invulnerableUntil
+  );
 }
 
 /**

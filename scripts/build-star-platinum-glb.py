@@ -53,10 +53,12 @@ MODEL = load_model('star-platinum')
 BASE_CLIP: str = MODEL['build']['baseClip']
 
 """モーションFBXのファイル名 -> GLB内のクリップ名。
-モーションを追加したら export/motions/ へ置き、マニフェストへ足す。"""
+モーションを追加したら export/motions/ または共有ディレクトリへ置き、
+マニフェストへ足す。"""
 MOTIONS: dict[str, str] = MODEL['build']['sources']
 
 MOTION_DIR = CHARACTER / 'export' / 'motions'
+SHARED_MOTION_DIR = REPO / 'assets' / 'motions'
 
 """FBXインポート設定。ベースとモーションで必ず同じ値を使う。異なるスケールで
 読むと Hips の location チャンネルだけ桁がずれ、キャラが沈む・飛ぶ。"""
@@ -108,12 +110,13 @@ def load_motion(base: bpy.types.Object, path: Path, clip_name: str) -> None:
         raise RuntimeError(f'{path.name}: expected 1 armature, got {len(armatures)}')
     source = armatures[0]
 
-    # ボーン名は両方向で一致させる。モーション側に余分があるとそのチャンネルが
-    # 無視され、逆にベースのボーンが欠けていると、そのボーンだけバインドポーズの
-    # まま取り残されて姿勢が壊れる。どちらも黙って通さない。
+    # モーション側の余分なボーンは無視できる。逆にベース側の追加指ボーンは
+    # 共有33ボーン素材に含まれないため、残りはバインドポーズのままになる。
+    # 体幹・四肢のチャンネルは一致しているので、共有ロコモーションを
+    # 65ボーンの星へ載せるためにここだけ部分集合を許可する。
     base_bones = {b.name for b in base.data.bones}
     source_bones = {b.name for b in source.data.bones}
-    if source_bones != base_bones:
+    if not source_bones.issubset(base_bones):
         unknown = sorted(source_bones - base_bones)
         missing = sorted(base_bones - source_bones)
         raise RuntimeError(
@@ -193,9 +196,16 @@ def main() -> None:
     stash(armature, base_action)
 
     for filename, clip_name in MOTIONS.items():
-        path = MOTION_DIR / filename
-        if not path.exists():
-            raise FileNotFoundError(f'motion fbx not found: {path.relative_to(REPO)}')
+        path = next(
+            (
+                directory / filename
+                for directory in (MOTION_DIR, SHARED_MOTION_DIR)
+                if (directory / filename).exists()
+            ),
+            None,
+        )
+        if path is None:
+            raise FileNotFoundError(f'motion fbx not found: {filename}')
         load_motion(armature, path, clip_name)
 
     for material in bpy.data.materials:

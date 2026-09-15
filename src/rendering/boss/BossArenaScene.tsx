@@ -1,14 +1,17 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
+
 import { Billboard, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { Vector3, type Group } from 'three';
 
+import { createAudioManager } from '@/audio/audio-manager';
+import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
 import { HORI_ATTACK_IDS, type HoriAttackId } from '@/game/config/phase2-boss-balance';
-import { createGameEventBus } from '@/game/events/game-event';
+import { createGameEventBus, type GameEventBus } from '@/game/events/game-event';
 import {
   createBossBattle,
   type BattleOutcome,
@@ -16,17 +19,24 @@ import {
   type BossBattle,
 } from '@/game/session/boss-battle';
 import { attachKeyboardGameActions } from '@/input/keyboard/game-action-adapter';
+import type { PlanarPosition } from '@/game/movement/types';
+import { readPresentationSettings } from '@/presentation/presentation-store';
 import { useWorldTutorialStore } from '@/ui/tutorial/world-tutorial-store';
 
 import { FollowCamera } from '../camera/FollowCamera';
 import { CharacterActor } from '../character/character-actor';
-import { isSameMotionContext, motionContextFor } from '../character/motion-context';
+import {
+  bossMotionContextFor,
+  isSameMotionContext,
+  motionContextFor,
+} from '../character/motion-context';
 import { syncCharacterRoot } from '../character/character-root';
 import { TutorialFairy } from '../character/TutorialFairy';
 import {
   DISPLAY_HEIGHT as BOSS_DISPLAY_HEIGHT,
   HoriDaisukeModel,
 } from '../character/HoriDaisukeModel';
+import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
 import { DangerZoneMarks } from './DangerZoneMarks';
 
@@ -67,11 +77,23 @@ function pinnedAttackId(): HoriAttackId | null {
   return HORI_ATTACK_IDS.find((id) => id === requested) ?? null;
 }
 
-function createBattle(): BossBattle {
+/**
+ * 戦闘と、そのイベントバス。
+ *
+ * バスを戦闘の中へ閉じ込めると購読者を足せない (`BossBattle` はバスを
+ * 公開していない)。SE を鳴らすには購読が要るので、作った側が持っておく。
+ */
+interface Battle {
+  readonly battle: BossBattle;
+  readonly events: GameEventBus;
+}
+
+function createBattle(): Battle {
   const pinned = pinnedAttackId();
-  return createBossBattle({
+  const events = createGameEventBus();
+  const battle = createBossBattle({
     clock: createRealClock(),
-    events: createGameEventBus(),
+    events,
     // スポーン地点は #54 のアリーナ定義をそのまま使う。見た目のアリーナと
     // 戦闘の初期配置がずれないよう、座標は1箇所 (arena.ts) に置く。
     roster: [
@@ -82,6 +104,8 @@ function createBattle(): BossBattle {
     createBoss: (options) =>
       createHoriBoss(pinned === null ? options : { ...options, pickAttack: () => pinned }),
   });
+
+  return { battle, events };
 }
 
 /**
@@ -100,12 +124,29 @@ function createBattle(): BossBattle {
 interface View {
   readonly snapshot: BattleSnapshot;
   readonly now: number;
+  readonly playerMotionContexts: readonly MotionContext[];
+  readonly bossMotionContext: MotionContext;
+}
+
+function motionContextsFor(
+  snapshot: BattleSnapshot,
+  now: number,
+  previousPositions: ReadonlyMap<string, PlanarPosition>,
+  previousBossPosition: PlanarPosition | undefined,
+): Pick<View, 'playerMotionContexts' | 'bossMotionContext'> {
+  return {
+    playerMotionContexts: snapshot.players.map((player) =>
+      motionContextFor(player, now, previousPositions.get(player.id)),
+    ),
+    bossMotionContext: bossMotionContextFor(snapshot.boss, now, previousBossPosition),
+  };
 }
 
 function isSameView(a: View, b: View): boolean {
   if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
   if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
   if (a.snapshot.players.length !== b.snapshot.players.length) return false;
+  if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
 
   return a.snapshot.players.every((player, index) => {
     const other = b.snapshot.players[index];
@@ -117,7 +158,7 @@ function isSameView(a: View, b: View): boolean {
       // モーションが変わるときは作り直す。`swing` をそのまま比べると、
       // 同じ振りの最中に時刻が進むだけで毎フレーム「変わった」ことになる。
       // 解決後の条件で比べると、変わるのは1回の振りにつき2回で済む。
-      isSameMotionContext(motionContextFor(player, a.now), motionContextFor(other, b.now))
+      isSameMotionContext(a.playerMotionContexts[index] ?? {}, b.playerMotionContexts[index] ?? {})
     );
   });
 }
@@ -157,7 +198,17 @@ export function BossArenaScene(): React.JSX.Element {
   // 戦闘は1度だけ作る。レンダー中に ref を読まないよう state の遅延初期化で持つ。
   // 決着後のやり直しでは作り直す (戦闘の状態を部分的に巻き戻すより、
   // 同じ初期化を通す方が「途中の状態が残っている」事故が無い)。
-  const [battle, setBattle] = useState<BossBattle>(createBattle);
+  const [{ battle, events }, setBattle] = useState<Battle>(createBattle);
+
+  // SE。戦闘が流すイベントを購読して鳴らす。戦闘を作り直したら (やり直し)
+  // 前の購読と音源を捨てて繋ぎ直す。
+  //
+  // ここで購読していなければ、戦闘がイベントを流しても誰も聞いていない
+  // 状態になる。単騎PoC 側は combat-session.ts が同じ形で繋いでいる。
+  useEffect(() => {
+    const output = createHtmlAudioOutput();
+    return createAudioManager({ eventBus: events, output, getSettings: readPresentationSettings });
+  }, [events]);
 
   // 画面に出す決着。
   //
@@ -182,6 +233,8 @@ export function BossArenaScene(): React.JSX.Element {
   // 動かす。state にすると1フレームごとに React の再レンダーが走る。
   const bossRoot = useRef<Group>(null);
   const actorRoots = useRef(new Map<string, Group>());
+  const previousPositions = useRef(new Map<string, PlanarPosition>());
+  const previousBossPosition = useRef<PlanarPosition | undefined>(undefined);
   // 危険範囲・HP・状態は、変わったときだけ更新する。毎フレーム同じ値で
   // set しても再レンダーが走るので、中身を比べてから入れる。
   const [zones, setZones] = useState<readonly DangerZone[]>([]);
@@ -189,6 +242,8 @@ export function BossArenaScene(): React.JSX.Element {
   const [view, setView] = useState<View>(() => ({
     snapshot: battle.snapshot(),
     now: performance.now(),
+    playerMotionContexts: [],
+    bossMotionContext: {},
   }));
 
   useEffect(() => {
@@ -225,6 +280,8 @@ export function BossArenaScene(): React.JSX.Element {
 
     function onRestart(event: KeyboardEvent): void {
       if (event.code !== 'KeyR') return;
+      previousPositions.current.clear();
+      previousBossPosition.current = undefined;
       setBattle(createBattle());
       setOutcome('ONGOING');
       setZones([]);
@@ -259,8 +316,19 @@ export function BossArenaScene(): React.JSX.Element {
       if (root !== undefined) syncCharacterRoot(root, player);
     }
 
-    // HP・状態・モーションが変わったときだけ再レンダーする。
-    const next: View = { snapshot, now: performance.now() };
+    // HP・状態・モーションが変わったときだけ再レンダーする。位置差分は
+    // 条件の計算にだけ使い、毎フレームReactを再レンダーする理由にはしない。
+    const now = performance.now();
+    const contexts = motionContextsFor(
+      snapshot,
+      now,
+      previousPositions.current,
+      previousBossPosition.current,
+    );
+    const next: View = { snapshot, now, ...contexts };
+    for (const player of snapshot.players)
+      previousPositions.current.set(player.id, player.position);
+    previousBossPosition.current = snapshot.boss.position;
     setView((previous) => (isSameView(previous, next) ? previous : next));
 
     const active = snapshot.boss.activeAttack;
@@ -298,11 +366,10 @@ export function BossArenaScene(): React.JSX.Element {
         */}
         <Suspense fallback={null}>
           {/*
-            モーションは状態から決める。ボスの条件 (フェーズ・攻撃の局面) に
-            対応するクリップがまだ無いので、いまは既定の `stand-up` のまま。
-            マニフェストへルールを足せばここを通って反映される。
+            モーションはボスのスナップショットから決める。条件とクリップの
+            対応はマニフェストへ閉じ込め、ここは状態を渡すだけにする。
           */}
-          <HoriDaisukeModel context={{}} />
+          <HoriDaisukeModel context={view.bossMotionContext} />
         </Suspense>
         <BossNameplate hp={view.snapshot.boss.hp} hpMax={view.snapshot.boss.hpMax} />
       </group>
@@ -333,6 +400,7 @@ export function BossArenaScene(): React.JSX.Element {
             }}
             player={player}
             now={view.now}
+            context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
             local={player.id === LOCAL_PLAYER_ID}
           />
         </Suspense>

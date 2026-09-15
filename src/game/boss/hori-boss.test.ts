@@ -310,6 +310,40 @@ describe('通常攻撃の予兆と被弾', () => {
     expect(hits).toEqual([{ targetId: 'oddoruno', amount: spec.damage }]);
   });
 
+  it('判定が出た瞬間に BOSS_ATTACK_ACTIVE を1回だけ流す', () => {
+    const { boss, clock, emitted } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+
+    boss.update(targets);
+    // 予兆の間は流れない。技が「出る」瞬間の音なので、予兆で鳴ると早い。
+    expect(emitted.filter((event) => event.type === 'BOSS_ATTACK_ACTIVE')).toEqual([]);
+
+    clock.advance(spec.telegraphMs + 1);
+    boss.update(targets);
+    // 判定中は毎フレーム update が来るが、通知は最初の1回だけ。
+    clock.advance(100);
+    boss.update(targets);
+
+    expect(emitted.filter((event) => event.type === 'BOSS_ATTACK_ACTIVE')).toEqual([
+      { type: 'BOSS_ATTACK_ACTIVE', attackId: 'WAKE_UP_ALARM' },
+    ]);
+  });
+
+  it('処理落ちで判定の尺をまたいでも BOSS_ATTACK_ACTIVE が1回流れる', () => {
+    const { boss, clock, emitted } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
+    const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;
+
+    boss.update(targets);
+    clock.advance(spec.telegraphMs + spec.activeMs + spec.recoverMs);
+    boss.update(targets);
+
+    // 被弾と同じ基準で1回だけ。音だけ鳴って当たらない・当たったのに無音、
+    // のどちらも起きないようにするため。
+    expect(emitted.filter((event) => event.type === 'BOSS_ATTACK_ACTIVE')).toEqual([
+      { type: 'BOSS_ATTACK_ACTIVE', attackId: 'WAKE_UP_ALARM' },
+    ]);
+  });
+
   it('1つの技で同じ相手に二重に当たらない', () => {
     const { boss, clock, hits } = setup({ pickAttack: () => 'WAKE_UP_ALARM' });
     const spec = DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM;

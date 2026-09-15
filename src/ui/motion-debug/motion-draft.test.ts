@@ -18,6 +18,8 @@ describe('GUIの下書き', () => {
       { when: 'attacking', clip: 'x' },
       { when: 'fallingAsleep', clip: 'x' },
       { when: 'asleep', clip: 'x' },
+      { when: 'moving', clip: 'x' },
+      { when: 'dodging', clip: 'x' },
     ] as const;
 
     expect(nextUnusedCondition(all)).toBeNull();

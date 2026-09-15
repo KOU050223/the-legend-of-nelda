@@ -46,6 +46,23 @@ describe('音源マニフェスト', () => {
     expect(gain).toBeLessThanOrEqual(1);
   });
 
+  it('爆発音のあとに「やめてもらっていいですか」が続く', () => {
+    // 尺はコードではなく素材が持つ。ここで繋ぎ先だけを固定しておけば、
+    // 録り直しても順番は保たれる。
+    expect(SOUND_MANIFEST['alarm-burst'].followedBy).toBe('hori-complaint');
+  });
+
+  it('続きの音が定義されていれば実在するSEを指す', () => {
+    for (const soundId of SOUND_IDS) {
+      const { followedBy } = SOUND_MANIFEST[soundId];
+      if (followedBy === undefined) continue;
+
+      expect(SOUND_IDS).toContain(followedBy);
+      // 自分自身へ繋ぐと鳴り止まなくなる。
+      expect(followedBy).not.toBe(soundId);
+    }
+  });
+
   it('未知の Cue ID ではSEを引かない', () => {
     expect(soundIdForAudioCue('unknown-cue')).toBeNull();
   });

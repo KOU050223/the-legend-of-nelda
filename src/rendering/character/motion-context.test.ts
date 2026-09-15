@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { COMBO_STEPS } from '@/game/config/phase2-player-balance';
 import type { PlayerSnapshot } from '@/game/player/player-state';
+import type { BossSnapshot } from '@/game/boss/hori-boss';
 
 import { MOTION_MODELS, resolveClip } from './motion-manifest';
-import { isSameMotionContext, motionContextFor } from './motion-context';
+import { bossMotionContextFor, isSameMotionContext, motionContextFor } from './motion-context';
 
 const FIRST_STEP = COMBO_STEPS[0] ?? { windupMs: 0, activeMs: 0, recoverMs: 0, damageScale: 1 };
 const SWING_MS = FIRST_STEP.windupMs + FIRST_STEP.activeMs + FIRST_STEP.recoverMs;
@@ -26,6 +27,22 @@ function snapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     lastReviveAt: null,
     moveInput: { forward: 0, right: 0 },
     takenAt: 0,
+    ...overrides,
+  };
+}
+
+function bossSnapshot(overrides: Partial<BossSnapshot> = {}): BossSnapshot {
+  return {
+    hp: 100,
+    hpMax: 100,
+    phase: 'INTRO',
+    position: { x: 2, z: 0 },
+    rotationY: 0,
+    attackCount: 0,
+    activeAttack: null,
+    bossDownUntil: null,
+    nextAttackAt: 0,
+    takenAt: 1000,
     ...overrides,
   };
 }
@@ -58,6 +75,52 @@ describe('プレイヤーの状態からモーションの条件を作る', () =
   it('寝落ちかけ・就寝はそのまま条件になる', () => {
     expect(motionContextFor(snapshot({ status: 'FALLING_ASLEEP' }), 0).fallingAsleep).toBe(true);
     expect(motionContextFor(snapshot({ status: 'ASLEEP' }), 0).asleep).toBe(true);
+  });
+
+  it('前フレームから位置が変わると moving が立つ', () => {
+    const player = snapshot({ position: { x: 2, z: 0 } });
+
+    expect(motionContextFor(player, 1000, { x: 1, z: 0 }).moving).toBe(true);
+    expect(motionContextFor(player, 1000, player.position).moving).toBe(false);
+  });
+
+  it('移動入力を保持している間は位置差分がなくても moving が立つ', () => {
+    const player = snapshot({ moveInput: { forward: 1, right: 0 } });
+
+    expect(motionContextFor(player, 1000, player.position).moving).toBe(true);
+  });
+
+  it('回避中は dodging が立つ', () => {
+    const player = snapshot({ invulnerableUntil: 1100 });
+
+    expect(motionContextFor(player, 1000).dodging).toBe(true);
+    expect(motionContextFor(player, 1100).dodging).toBe(false);
+  });
+});
+
+describe('ボスの状態からモーションの条件を作る', () => {
+  it('前フレームから位置が変わると moving が立つ', () => {
+    expect(bossMotionContextFor(bossSnapshot(), 1000, { x: 1, z: 0 }).moving).toBe(true);
+    expect(bossMotionContextFor(bossSnapshot(), 1000, { x: 2, z: 0 }).moving).toBe(false);
+  });
+
+  it('進行中の攻撃があると attacking が立つ', () => {
+    expect(
+      bossMotionContextFor(
+        bossSnapshot({
+          activeAttack: {
+            attackId: 'WAKE_UP_ALARM',
+            startedAt: 1000,
+            timing: { telegraphMs: 100, activeMs: 200, recoverMs: 100, damage: 0 },
+            aim: { origin: { x: 0, z: 0 }, rotationY: 0, points: [] },
+            hitTargetIds: [],
+            beamOrigin: null,
+            resolvedDuringActive: false,
+          },
+        }),
+        1000,
+      ).attacking,
+    ).toBe(true);
   });
 });
 
@@ -103,14 +166,17 @@ describe('状態から再生クリップまで', () => {
     expect(resolveClip(ora, motionContextFor(snapshot(), 1000))).toBe('idle');
   });
 
-  /**
-   * 攻撃モーションをまだ持たないモデルは、振っていても既定のクリップのまま。
-   * ルールが空なので条件は素通りする。
-   */
-  it('当てるクリップが無いモデルは既定のまま', () => {
+  it('オドルノが振っている間は攻撃クリップになる', () => {
     const dance = MOTION_MODELS['dance-daisuke'];
     const player = snapshot({ swing: { stepIndex: 0, startedAt: 1000, hasHit: false } });
 
-    expect(resolveClip(dance, motionContextFor(player, 1000))).toBe(dance.defaultClip);
+    expect(resolveClip(dance, motionContextFor(player, 1000))).toBe('punch');
+  });
+
+  it('歩行中は歩行クリップになる', () => {
+    const dance = MOTION_MODELS['dance-daisuke'];
+    const player = snapshot({ position: { x: 1, z: 0 } });
+
+    expect(resolveClip(dance, motionContextFor(player, 1000, { x: 0, z: 0 }))).toBe('walk');
   });
 });

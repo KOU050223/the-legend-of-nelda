@@ -7,12 +7,15 @@ import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 import { CharacterModel } from './CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from './character-models';
 import { motionContextFor } from './motion-context';
+import type { MotionContext } from './motion-manifest';
 
 export interface CharacterActorProps {
   /** 再レンダー対象の表示状態。HPバーとモデル選択がこの値を使う。 */
   player: PlayerSnapshot;
   /** 現在時刻 (GameClock の now)。連撃の局面を測ってモーションを決める。 */
   now: number;
+  /** 親が前フレーム差分を計算済みなら、その条件をそのまま使う。 */
+  context?: MotionContext | undefined;
   local?: boolean;
 }
 
@@ -28,12 +31,15 @@ export interface CharacterActorProps {
  * ここは結果を読むだけにする (docs/technical-design.md §13)。
  */
 export const CharacterActor = forwardRef<Group, CharacterActorProps>(function CharacterActor(
-  { player, now, local = false },
+  { player, now, context, local = false },
   ref,
 ): React.JSX.Element {
   return (
     <group ref={ref}>
-      <CharacterModel characterId={player.characterId} context={motionContextFor(player, now)} />
+      <CharacterModel
+        characterId={player.characterId}
+        context={context ?? motionContextFor(player, now)}
+      />
       <StatusBar player={player} local={local} />
     </group>
   );

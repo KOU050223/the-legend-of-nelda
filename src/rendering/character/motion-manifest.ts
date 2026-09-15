@@ -46,10 +46,16 @@ export interface MotionRule {
  *
  * ここに無い状態はGUIの選択肢にも出ない。判定が無い条件を並べておくと、
  * 絶対に当たらないルールを組めてしまい、なぜモーションが変わらないのかが
- * 分からなくなる。「移動中」は位置がスナップショットに出てこない都合で
- * まだ判定できないため、対応するまで置かない (docs/motion-manifest.md)。
+ * 分からなくなる。「移動中」は表示層が前フレームの位置との差分から組み立て、
+ * 「回避中」はプレイヤーの無敵時間から組み立てる。
  */
-export const MOTION_CONDITIONS = ['attacking', 'fallingAsleep', 'asleep'] as const;
+export const MOTION_CONDITIONS = [
+  'attacking',
+  'fallingAsleep',
+  'asleep',
+  'moving',
+  'dodging',
+] as const;
 
 export type MotionCondition = (typeof MOTION_CONDITIONS)[number];
 
