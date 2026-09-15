@@ -13,6 +13,7 @@ import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { HoriDebugPage } from '@/ui/hori-debug/HoriDebugPage';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
+import { IntroCutscene } from '@/intro/IntroCutscene';
 
 import { useScreenStore } from './screen';
 import { currentRoute, subscribeToRoute } from './route';
@@ -40,7 +41,7 @@ export function App(): React.JSX.Element {
   const route = useSyncExternalStore(subscribeToRoute, currentRoute, () => 'TITLE');
 
   useEffect(() => {
-    if (route === 'BATTLE' || route === 'WORLD') {
+    if (route === 'INTRO' || route === 'BATTLE' || route === 'WORLD') {
       useScreenStore.setState({ screen: route });
     } else if (route === 'TITLE') {
       useScreenStore.setState({ screen: 'TITLE' });
@@ -70,6 +71,10 @@ export function App(): React.JSX.Element {
   }
 
   if (screen === 'TITLE') return <TitleScreen />;
+
+  if (screen === 'INTRO') {
+    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('WORLD')} />;
+  }
 
   // ワールドは Phase 1 の戦闘一式を起動しない。あちらは PlayerAction 前提で、
   // WASD が移動と同時に DODGE/GUARD としても解釈され、戦闘の時計・入力ロックが
