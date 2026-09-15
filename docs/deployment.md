@@ -41,9 +41,10 @@ GitHub Actions からはデプロイしない。既存の [`.github/workflows/ci
 | `package.json`         | `wrangler` を devDependency に追加。`pnpm deploy` はローカルデプロイ用      |
 | `.gitignore`           | `.wrangler/` を無視                                                        |
 
-`wrangler.jsonc` は Worker スクリプト（`main`）を持たない **静的アセットのみの Worker** として構成する。
-`assets.directory` は Vite の出力先 `./dist`、`assets.not_found_handling` は
-`single-page-application`（SPAフォールバック）とする。
+`wrangler.jsonc` はViteの静的アセット配信に加え、`/api/livekit/token` のToken発行を
+同一Workerで処理する。`assets.directory` はViteの出力先 `./dist`、
+`assets.not_found_handling` は `single-page-application`（SPAフォールバック）とする。
+`/api/*` だけをWorker-firstにし、それ以外の静的アセットは通常どおり配信する。
 `vite.config.ts` の `base` / `build.outDir` は変更しない。
 
 `pnpm build` は `tsc -b` を含むため、**型エラーがあるとデプロイも失敗する**。
@@ -91,6 +92,31 @@ CIと同じ基準で落ちる仕様として扱う。
 | --------------- | --------- | -------------------------------------------------------------------- |
 | `PNPM_VERSION`  | `11.25.0` | `package.json` の `packageManager` と合わせる。build image の既定は pnpm 10.11.1 のため、明示して固定する。 |
 | `NODE_VERSION`  | `24.19.0` | `package.json` の `engines` と `.node-version` に合わせる（通常は `.node-version` が読まれる。揃えておくと確実）。 |
+
+### 3.5 LiveKit Token EndpointのSecret
+
+Issue #114のVoice Chatを有効にする場合、**Workers & Pages → `nelda` → Settings → Variables and Secrets**
+へ以下をSecretとして登録する。値をGit、`VITE_*`、ブラウザ、PR本文へ入れてはならない。
+
+| Secret | 内容 |
+| --- | --- |
+| `LIVEKIT_URL` | `wss://...livekit.cloud` のProject URL |
+| `LIVEKIT_API_KEY` | LiveKit CloudのAPI Key |
+| `LIVEKIT_API_SECRET` | LiveKit CloudのAPI Secret |
+
+ローカルViteからデプロイ済みWorkerを呼ぶ場合だけ、許可する開発Originを
+`LIVEKIT_TOKEN_ALLOWED_ORIGINS`（通常の環境変数）へカンマ区切りで設定する。
+例: `https://localhost:5173`。本番で同一Workerの `/api/livekit/token` を使う場合は不要。
+
+設定後、フロントエンドの `VITE_LIVEKIT_TOKEN_ENDPOINT` は同一Originの
+`/api/livekit/token` にする。Workerは `POST` に `{ roomName, playerId, role }` を受け、
+`{ url, token }` を返す。Tokenは15分で失効し、`PAY`にはData、`ODORUNO`/`ORA`には
+MicrophoneとDataのpublish権限だけを与える。
+
+> 現在のMVP AuthorityはToken Endpointへ参加者Roleの署名付き証明を渡していない。
+> API Secretの保護とは別に、本番ではCloudflare Access等でEndpointへの利用者認証を行うか、
+> Authorityが発行する短命のRole証明をWorkerが検証する実装を追加する。クライアントが送る
+> `role` だけを本番認可の根拠にしてはならない。
 
 ---
 
