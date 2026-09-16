@@ -27,6 +27,9 @@ const RMS_HISTORY_MS = 15_000;
 // わっしょい用の大声前提スケールでは、通常発話がATTACKの下限へ届かない。
 const ORA_SPEECH_INTENSITY_CEILING_RMS = 0.06;
 const VOICE_ATTACK_HIT_SPACING_MS = 140;
+// 「おらおらおら…」の合間の無音を1つの発話としてまとめて扱う上限。これを
+// 超えた無音の後に始まる発話は、別物として開始時刻を仕切り直す。
+const MAX_UTTERANCE_GAP_MS = 800;
 const AUDIO_CONSTRAINTS: MediaStreamConstraints = {
   audio: {
     autoGainControl: true,
@@ -239,8 +242,17 @@ export async function attachOraProductionInput(
 
   const rmsHistory: Array<{ at: number; rms: number }> = [];
   let speechStartedAt: number | null = null;
+  // 直近で有声だった時刻。無音になっても(speechStartedAtと違い)クリアしない。
+  // 次に有声が再開したときの無音の長さを測る基準として使う。
   let lastVoicedAt: number | null = null;
-  let previousSpeechStartedAt: number | null = null;
+  // 「おらおらおら…」のように短い無音(hangoverMs)を挟んで連呼すると、
+  // speechStartedAtは無音のたびに区切り直る一方、SpeechRecognitionはまとめて
+  // 1つのfinal結果を返す。区切り直っても、まだhandleSpeechResultが消費して
+  // いない発話ぶんの「本当の開始時刻」をここで覚えておき、音量ピーク検出の
+  // 取りこぼし(=言い終わりの1区間だけを見て過小評価する)を防ぐ。ただし
+  // MAX_UTTERANCE_GAP_MSを超える無音を挟んだら、無関係な過去の発話(例えば
+  // Calibration中に拾った音)を引きずらないよう、新しい開始点として仕切り直す。
+  let earliestPendingSpeechAt: number | null = null;
 
   const notifyStatus = (nextPhase: OraProductionInputPhase): void => {
     phase = nextPhase;
@@ -410,7 +422,17 @@ export async function attachOraProductionInput(
     voiceCalibrator.observeRms(rms, timestamp);
     const threshold = DEFAULT_VOICE_ACTIVITY_CONFIG.threshold;
     if (rms >= threshold) {
+      if (
+        earliestPendingSpeechAt !== null &&
+        lastVoicedAt !== null &&
+        timestamp - lastVoicedAt > MAX_UTTERANCE_GAP_MS
+      ) {
+        // 無音が長すぎた。前の発話 (Calibration中の音等) の名残りを引きずらず、
+        // ここを新しい開始点として仕切り直す。
+        earliestPendingSpeechAt = null;
+      }
       speechStartedAt ??= timestamp;
+      earliestPendingSpeechAt ??= timestamp;
       lastVoicedAt = timestamp;
       return;
     }
@@ -420,9 +442,10 @@ export async function attachOraProductionInput(
       lastVoicedAt !== null &&
       timestamp - lastVoicedAt >= DEFAULT_VOICE_ACTIVITY_CONFIG.hangoverMs
     ) {
-      previousSpeechStartedAt = speechStartedAt;
+      // 短い無音区間の始まりを記録するだけで、earliestPendingSpeechAtは
+      // 消さない。次の短い発話区間が続くかもしれず、消すと「本当の開始時刻」
+      // を見失う。handleSpeechResultがfinal結果を消費した時点で初めてリセットする。
       speechStartedAt = null;
-      lastVoicedAt = null;
     }
   };
 
@@ -443,10 +466,10 @@ export async function attachOraProductionInput(
       const transcript = result[0]?.transcript?.trim();
       if (!transcript) continue;
 
-      const startedAt = Math.min(
-        endedAt,
-        speechStartedAt ?? previousSpeechStartedAt ?? Math.max(0, endedAt - 1_000),
-      );
+      const startedAt = Math.min(endedAt, earliestPendingSpeechAt ?? Math.max(0, endedAt - 1_000));
+      // このfinal結果で発話区間を消費した。次のオラのために「本当の開始時刻」
+      // の追跡をやり直す。
+      earliestPendingSpeechAt = null;
       const candidate: OraUtteranceCandidate = {
         transcript,
         startedAt,

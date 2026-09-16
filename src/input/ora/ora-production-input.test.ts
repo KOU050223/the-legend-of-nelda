@@ -403,11 +403,50 @@ describe('createOraProductionInput', () => {
     const adapter = await createTestAttach()((action) => actions.push(action));
 
     completeCalibration();
-    submitUtterance('オラ', 0.02);
+
+    // Calibrationの大声(0.2, t=0〜350)から現実的な間隔を空けてから発話する。
+    // MAX_UTTERANCE_GAP_MSを超える無音を挟むので、古い音量ピークを引きずらない。
+    nowMs = 3_000;
+    rms = 0.02;
+    runInterval();
+    nowMs = 3_100;
+    runInterval();
+    FakeSpeechRecognition.instances.at(-1)?.emitFinal('オラ');
     runNextTimeout();
 
     expect(attackActions(actions)).toHaveLength(1);
     expect(attackActions(actions)[0]?.intensity).toBeCloseTo(3 / 13, 6);
+
+    adapter.detach();
+  });
+
+  it('hangoverを超える無音で区切り直っても、連呼全体のピーク音量で判定する', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+
+    // 「おら」を大声(0.2)で始める。
+    nowMs = 3_000;
+    rms = 0.2;
+    runInterval();
+    // hangoverMs(300ms)を超える無音を挟み、speechStartedAtが一度区切り直る。
+    nowMs = 3_350;
+    rms = 0;
+    runInterval();
+    // 続けて、閾値ぎりぎりの小声(0.01)で言い終える。
+    nowMs = 3_500;
+    rms = 0.01;
+    runInterval();
+    nowMs = 3_600;
+    runInterval();
+    FakeSpeechRecognition.instances.at(-1)?.emitFinal('おらおら');
+    runNextTimeout();
+
+    // 言い終わりの小声(0.01)だけで判定すればintensityは閾値未満で棄却される
+    // (normalizeOraSpeechIntensity(0.01)は0.05を下回る)。連呼全体のピーク
+    // (0.2)を見ているので通る。
+    expect(attackActions(actions).length).toBeGreaterThan(0);
 
     adapter.detach();
   });
