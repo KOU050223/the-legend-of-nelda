@@ -23,6 +23,11 @@ export interface StartMessage {
   readonly type: 'START';
 }
 
+/** タイトル復帰・room移動時に、再接続猶予を待たず参加枠を解放する。 */
+export interface LeaveMessage {
+  readonly type: 'LEAVE';
+}
+
 export interface WelcomeMessage {
   readonly type: 'WELCOME';
   readonly participantId: ParticipantId;
@@ -114,6 +119,7 @@ export type ClientToAuthorityMessage =
   | JoinMessage
   | SelectCharacterMessage
   | StartMessage
+  | LeaveMessage
   | ActionMessage;
 export type AuthorityToClientMessage =
   | WelcomeMessage
@@ -244,6 +250,10 @@ export function isClientToAuthorityMessage(value: unknown): value is ClientToAut
   }
 
   if (value.type === 'START') {
+    return hasOnlyKeys(value, ['type']);
+  }
+
+  if (value.type === 'LEAVE') {
     return hasOnlyKeys(value, ['type']);
   }
 

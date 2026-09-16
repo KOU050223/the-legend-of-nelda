@@ -10,6 +10,7 @@ import horiMemory3 from '../../../assets/character/hori-daisuke-v1/source/daisuk
 import horiMemory4 from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori4.png';
 import horiSleepingMovie from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori_SleepingMovie.mov';
 import { useScreenStore } from '@/app/screen';
+import { useMultiplayerSessionStore } from '@/multiplayer/session-store';
 
 import {
   notifyMelodyAudioComplete,
@@ -372,6 +373,7 @@ function Ending(): React.JSX.Element {
           className={styles.returnTitle}
           type="button"
           onClick={() => {
+            useMultiplayerSessionStore.getState().leave();
             goTo('TITLE');
           }}
         >

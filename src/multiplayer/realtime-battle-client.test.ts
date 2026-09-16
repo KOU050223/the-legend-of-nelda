@@ -107,6 +107,17 @@ describe('createRealtimeBattleClient', () => {
     expect(harness.sent).toEqual([{ type: 'JOIN', token: 'token-pay' }]);
   });
 
+  it('leaveはLEAVEを送って以後のACTIONを止める', () => {
+    const harness = createClientTransportHarness();
+    const client = createRealtimeBattleClient({ transport: harness.transport, token: 'token-pay' });
+
+    harness.receive({ type: 'WELCOME', playerId: 'pay-player', epoch: 1 });
+    client.leave?.();
+    client.submit(attack);
+
+    expect(harness.sent).toEqual([{ type: 'JOIN', token: 'token-pay' }, { type: 'LEAVE' }]);
+  });
+
   it('STATEとWASSHOIを購読者へ配送し解除後は配送しない', () => {
     const harness = createClientTransportHarness();
     const client = createRealtimeBattleClient({ transport: harness.transport, token: 'token-pay' });

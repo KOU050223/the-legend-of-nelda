@@ -7,6 +7,7 @@ import type {
   AuthorityToClientMessage,
   ClientToAuthorityMessage,
   JoinMessage,
+  LeaveMessage,
   LobbyMessage,
   LobbySlot,
   RejectionReason,
@@ -461,6 +462,17 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     publishLobby();
   }
 
+  function handleLeave(connectionId: string, _message: LeaveMessage): void {
+    const participant = participantForConnection(connectionId);
+    if (participant === undefined) return;
+    removeParticipant(participant.participantId);
+    try {
+      transport.disconnectClient(connectionId);
+    } catch (error) {
+      reportRoomError(error);
+    }
+  }
+
   function handleAction(connectionId: string, message: ActionMessage): void {
     if (!started || battle === null) return;
     const participant = participantForConnection(connectionId);
@@ -481,6 +493,8 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
         handleSelectCharacter(connectionId, message);
       } else if (message.type === 'START') {
         handleStart(connectionId, message);
+      } else if (message.type === 'LEAVE') {
+        handleLeave(connectionId, message);
       } else {
         handleAction(connectionId, message);
       }

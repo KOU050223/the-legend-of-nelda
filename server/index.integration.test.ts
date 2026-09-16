@@ -244,6 +244,31 @@ describe('createAuthorityServer', () => {
     expect(stateMessages(odoruno).at(-1)?.battle.boss.hp).toBeLessThan(1000);
   });
 
+  it('開始済みroomのLEAVEは参加者を外し、残りのclientをMATCHINGへ戻す', async () => {
+    const server = createAuthorityServer({
+      port: 0,
+      stateBroadcastIntervalMs: 10_000,
+      tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID,
+    });
+    servers.push(server);
+    const odoruno = await connectClient(server, 'token-odoruno');
+    const pay = await connectClient(server, 'token-pay');
+    const ora = await connectClient(server, 'token-ora');
+    await selectAndStart(odoruno, pay, ora);
+    await waitFor(() => lobbyMessages(odoruno).some(({ started }) => started));
+
+    pay.socket.send(JSON.stringify({ type: 'LEAVE' }));
+
+    await waitFor(() => {
+      const lobby = lobbyMessages(odoruno).at(-1);
+      return (
+        lobby?.started === false &&
+        lobby.slots.every((slot) => slot.participantId !== 'participant-token-pay')
+      );
+    });
+    expect(lobbyMessages(odoruno).at(-1)).toMatchObject({ started: false });
+  });
+
   it('3クライアントが同じBattleRoomのSTATEを共有しPAY以外へWASSHOIを配送する', async () => {
     const server = createAuthorityServer({
       port: 0,
