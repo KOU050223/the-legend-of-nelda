@@ -6,6 +6,7 @@ import { DEFAULT_HORI_ATTACKS, type HoriAttackId } from '../config/phase2-boss-b
 import { ATTACK_REACH, DEFAULT_REVIVAL } from '../config/phase2-player-balance';
 import { createGameEventBus } from '../events/game-event';
 import { createBossBattle, type BattleSnapshot } from '../session/boss-battle';
+import { comboStepAt } from '../player/attack-combo';
 import { decide } from './utility-policy';
 import { distanceBetween } from './considerations';
 
@@ -41,6 +42,20 @@ function setup(
   });
 
   return { battle, clock };
+}
+
+/**
+ * 回避を封じた snapshot を作る。
+ *
+ * 危険度が高い状況では回避のほうがスコアで勝つため、そのままでは
+ * 「3段目を我慢したのか、回避を選んだだけか」が区別できない。
+ */
+function withDodgeBlocked(snapshot: BattleSnapshot, playerId: string): BattleSnapshot {
+  const players = snapshot.players.map((player) => {
+    if (player.id !== playerId) return player;
+    return Object.assign({}, player, { dodgeReadyAt: snapshot.boss.takenAt + 5_000 });
+  });
+  return { ...snapshot, players };
 }
 
 describe('NPCの判断', () => {
@@ -254,5 +269,67 @@ describe('キャラごとの性格', () => {
     for (const id of ['odoruno', 'pay', 'ora']) {
       expect(decide(snapshot, { selfId: id }).movement.forward).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('連撃の3段目を入れるかどうか', () => {
+  /**
+   * 予兆が出ている最中に、2段目を振り終えた状態を作る。
+   *
+   * `danger * selfPreservation` がしきい値を超えると3段目へ入らない。
+   * 慎重なキャラほど低い危険度で止めるので、同じ状況でも判断が割れる。
+   */
+  function readyForFinalStep(playerId: string) {
+    const context = setup({
+      attack: 'WAKE_UP_ALARM',
+      // 全員ボスの射程内かつ RING の危険域に入る位置へ置く。
+      positions: {
+        odoruno: { x: 0, z: 3 },
+        pay: { x: 0, z: 3 },
+        ora: { x: 0, z: 3 },
+      },
+    });
+
+    for (let elapsed = 0; elapsed < 10_000; elapsed += 100) {
+      context.clock.advance(100);
+      context.battle.update(0.1);
+      if (context.battle.snapshot().boss.activeAttack !== null) break;
+    }
+    // 予兆の半ばまで進める。ここでの危険度 (0.5) は、重みを掛けると
+    // PAY (1.2) が 0.6 でしきい値を超え、ODORUNO (0.6) は 0.3 で超えない。
+    // 終盤まで進めると両者とも超えてしまい、性格差が出ない。
+    context.clock.advance(DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM.telegraphMs / 2);
+    context.battle.update(DEFAULT_HORI_ATTACKS.WAKE_UP_ALARM.telegraphMs / 2000);
+
+    const snapshot = context.battle.snapshot();
+    const secondStep = comboStepAt(1);
+    // 2段目を振り終えた直後 (硬直が明けた) 状態にする。
+    const players = snapshot.players.map((player) => {
+      if (player.id !== playerId) return player;
+      return Object.assign({}, player, {
+        swing: {
+          stepIndex: 1,
+          startedAt:
+            snapshot.boss.takenAt -
+            (secondStep.windupMs + secondStep.activeMs + secondStep.recoverMs),
+          hasHit: true,
+        },
+      });
+    });
+
+    return { ...snapshot, players };
+  }
+
+  it('慎重なPay大輔は、危険が迫っていると3段目へ入らない', () => {
+    const snapshot = withDodgeBlocked(readyForFinalStep('pay'), 'pay');
+
+    expect(decide(snapshot, { selfId: 'pay' }).action).not.toEqual({ type: 'ATTACK' });
+  });
+
+  it('前線に立つオドルノは、同じ危険度でも3段目を振り切る', () => {
+    const snapshot = withDodgeBlocked(readyForFinalStep('odoruno'), 'odoruno');
+
+    // 同じ状況でも selfPreservation が低いぶん、振り切る側に倒れる。
+    expect(decide(snapshot, { selfId: 'odoruno' }).action).toEqual({ type: 'ATTACK' });
   });
 });

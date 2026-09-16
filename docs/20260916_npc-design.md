@@ -62,8 +62,6 @@ export type NpcPolicy = (snapshot: BattleSnapshot, context: NpcContext) => NpcDe
 export interface NpcContext {
   /** このポリシーが動かすプレイヤーの roster ID。 */
   readonly selfId: string;
-  readonly deltaSeconds: number;
-  readonly now: number;
 }
 ```
 
@@ -98,9 +96,17 @@ NPC 側だけの都合ではない。
 **方向だけを出して大きさは `CHARACTER_STATS.moveSpeed` に任せる**。
 重み (aggression 等) でベクトルを伸縮させても速さは変わらないため、意味がない。
 
-純関数 + 時刻は注入、にしておくと `boss-battle.test.ts` と同じ fake clock で
+純関数にしておくと `boss-battle.test.ts` と同じ fake clock で
 ヘッドレスにテストできる。「この snapshot ならこの行動が選ばれる」という
 単体テストがそのまま書ける。
+
+### 時刻は `snapshot.boss.takenAt` から取る
+
+`NpcContext` に時刻を持たせない。`dangerZonesOfActiveAttack` が
+「`takenAt` と `startedAt` は同じゲームクロック上の値」であることを前提に
+経過時間を出しているので、ポリシー側が別の時計 (`performance.now()` など) を
+混ぜると、fake clock のテストは通るのに実フレームではズレる、という
+一番厄介な壊れ方をする。snapshot から導ける時刻はすべて `takenAt` へ揃える。
 
 ---
 
@@ -173,6 +179,28 @@ export const NPC_WEIGHTS: Readonly<Record<CharacterId, NpcWeights>> = {
 LLM 駆動はリアルタイムのボス戦には向かない (レイテンシ・非決定性・コスト)。
 LLM を使うなら Pay 大輔の「わっしょーい」台詞の**事前生成**であって、毎フレームの判断ではない。
 
+### 実装して分かったこと: 救助のスコアを距離で下げすぎない
+
+当初は救助を「近いほど高い」で書いていた。これは**仲間を見殺しにする**。
+
+実測すると、15 ユニット離れて倒れている仲間に対して
+救助 0.105 / 攻撃 0.333 となり、NPC は仲間を放置してボスを殴り続けた。
+アリーナ半径が 24 あるのに対して距離の減衰が急すぎ、一方 `attackScore` は
+射程外でも緩やかにしか下がらないため、競り負ける。
+
+考え方が逆だった。倒れた仲間は「近いときだけ拾う用事」ではなく、
+**起きている限り最優先で向かう用事**で、距離は *向かうかどうか* ではなく
+*到着までどれだけかかるか* を決めるだけ。そこで距離の減衰に下限
+(`DISTANT_RESCUE_FLOOR = 0.55`) を置き、アリーナの端から端でも
+その値を下回らないようにした。
+
+急ぎ (`urgency`) は上乗せに留める。`sleepCountdownMs` は 30 秒と長く、
+倒れた直後は urgency がほぼ 0 になるため、これを主にすると
+「倒れてしばらく放置してから向かう」挙動になる。
+
+この種の取り違えはコードを読んでも気づきにくく、
+**実際の数値を出して初めて分かった**。
+
 ### 回避が成立する根拠
 
 `BossSnapshot.activeAttack` に `attackId` / `startedAt` / `aim` が入っており、
@@ -215,14 +243,15 @@ NPC が入ると、この子守りが要らなくなる。そして敗北条件�
 `BossArenaScene.tsx` の既存の tick に 1 箇所だけ足す。
 
 ```ts
-// L925 付近。activeSource.tick(delta) と同じ場所。
-activeSource.tick(delta);
+// 人間が操作していないキャラへ NPC の入力を流す。時間を進める前に
+// 送るので、人間の入力と同じフレームで処理される。
+if (battle !== null && npcDriver !== null) npcDriver.tick(battle);
 
-// ローカルのときだけ NPC を動かす。リモートは Authority が持つ。
-if (activeSource.kind === 'LOCAL') {
-  npcDriver.tick(battle, delta);
-}
+activeSource.tick(delta);
 ```
+
+`battle` はローカル戦闘のときだけ非 null (`localBattle?.battle ?? null`) なので、
+この条件がそのまま「リモートでは NPC を走らせない」になる。
 
 `npcDriver` は所有の解決 (人間が操作していない ID) と、各 NPC の Policy 呼び出し、
 `battle.submit(npcId, action)` への受け渡しだけを行う薄い層にする。
@@ -258,12 +287,22 @@ src/game/npc/
 
 ---
 
-## 検証したいこと
+## 検証状況
 
-- 操作キャラを切り替えても、NPC と人間が同じキャラを奪い合わない
-- 操作キャラが倒れたとき、NPC が蘇生に来てソロで復帰できる
-- NPC の蘇生が `REVIVE_INPUT_INTERVAL_MS` を超えて速くならない
-- 3 キャラの動き方が目に見えて違う (重みテーブルが効いている)
+単体テスト (21 件, `src/game/npc/*.test.ts`) で確認済み。
+
+- 操作キャラを切り替えると担当が入れ替わる (同じキャラを奪い合わない)
+- 倒れた仲間へ向かい、届いたら止まって蘇生する
+- `ASLEEP` の仲間へは向かわない (もう起こせないため)
+- 危険範囲を踏んだら回避し、回避が使えなければ移動で抜ける
+- 追尾ビームに狙われている間は回避せず走って逃げる
+- 3 段目を振るかどうかがキャラの慎重さで割れる
+
+実機 (`/world`) でも確認した。操作キャラを放置したまま、
+NPC 2 人がボスを最終演出まで削り切る。
+
+残り: **蘇生の実機確認**。単体テストでは押さえているが、
+画面上で「倒れた操作キャラへ NPC が駆け寄って起こす」までは見ていない。
 
 ---
 

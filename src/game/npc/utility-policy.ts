@@ -39,22 +39,21 @@ import { NPC_WEIGHTS, type NpcWeights } from './npc-weights';
  */
 const ACTION_THRESHOLD = 0.35;
 
+/** 最終段 (3段目) の番号。 */
+const FINAL_COMBO_STEP_INDEX = COMBO_STEPS.length - 1;
+
 /**
- * 3段目を我慢する危険度のしきい値。
+ * 最終段へ入るのをやめる、重み付き危険度のしきい値。
  *
  * `COMBO_STEPS` の3段目は `recoverMs: 550` と硬直が飛び抜けて長く、
  * 振り切ると予兆へ反応できない。「3段入れるか、2段で止めて回避するか」
- * (phase2-player-balance.ts) の判断をここで表す。`selfPreservation` が
- * 高いほど早く止める。
+ * (phase2-player-balance.ts) の判断をここで表す。
+ *
+ * 判定は `danger * selfPreservation` なので、慎重なキャラほど低い危険度で
+ * 止める。PAY (1.2) は danger > 0.33、ORA (0.9) は > 0.44、
+ * ODORUNO (0.6) は > 0.67 で最終段を諦める。
  */
-const FINAL_COMBO_STEP_INDEX = COMBO_STEPS.length - 1;
-
-export function createUtilityNpcPolicy(): (
-  snapshot: BattleSnapshot,
-  context: NpcContext,
-) => NpcDecision {
-  return (snapshot, context) => decide(snapshot, context);
-}
+const FINAL_COMBO_STEP_VETO = 0.4;
 
 export function decide(snapshot: BattleSnapshot, context: NpcContext): NpcDecision {
   const self = snapshot.players.find((player) => player.id === context.selfId);
@@ -144,7 +143,9 @@ function canStartAttack(
 
   // 次が3段目にあたるなら、危険度と慎重さを見て止める判断をする。
   const nextIsFinalStep = swing.stepIndex + 1 === FINAL_COMBO_STEP_INDEX;
-  if (nextIsFinalStep && scores.danger * weights.selfPreservation > 0.4) return false;
+  if (nextIsFinalStep && scores.danger * weights.selfPreservation > FINAL_COMBO_STEP_VETO) {
+    return false;
+  }
 
   return true;
 }
