@@ -11,8 +11,6 @@ import {
   type BarrierChallenge,
   type BarrierChallengeSnapshot,
   type BarrierParticipant,
-  type BarrierPayView,
-  isBarrierAction,
 } from '../barrier/barrier-challenge';
 import { DEFAULT_REVIVAL, type CharacterId } from '../config/phase2-player-balance';
 import type { PlanarPosition } from '../movement/types';
@@ -133,8 +131,6 @@ export interface BossBattle {
   readonly boss: HoriBoss;
   readonly players: readonly Player[];
   snapshot(): BattleSnapshot;
-  /** ACTIVE な PAY だけが結界の正解情報を取得する。 */
-  barrierViewFor(playerId: string): BarrierPayView | null;
 }
 
 function toBarrierParticipant(player: Player): BarrierParticipant {
@@ -273,6 +269,22 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     }
   }
 
+  /**
+   * 立ち位置からサークルの埋まり具合を測り、揃っていれば結界を解く。
+   *
+   * 解除条件が「3人が別々のサークルへ同時に入る」なので、判定は入力ではなく
+   * 毎フレームの位置で決まる。読み取り専用の snapshot() ではなく update() から
+   * 呼ぶ。snapshot() は配信間隔で回るので、そちらで判定すると解除の瞬間が
+   * 配信の都合に引きずられる。
+   */
+  function evaluateBarrier(): void {
+    if (barrierChallenge === null) return;
+    const result = barrierChallenge.evaluate(players.map(toBarrierParticipant));
+    if (!result.completed) return;
+    boss.breakBarrier();
+    syncBarrierChallenge();
+  }
+
   function findReviveTarget(rescuer: Player): Player | null {
     const from = rescuer.snapshot().position;
     let nearest: Player | null = null;
@@ -337,18 +349,6 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         return;
       }
 
-      if (isBarrierAction(action)) {
-        syncBarrierChallenge();
-        if (barrierChallenge !== null) {
-          const result = barrierChallenge.submit(toBarrierParticipant(player), action);
-          if (result.completed) {
-            boss.breakBarrier();
-            syncBarrierChallenge();
-          }
-          return;
-        }
-      }
-
       player.submit(action);
     },
 
@@ -359,6 +359,7 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
 
       for (const player of players) player.update(deltaSeconds);
       syncBarrierChallenge();
+      evaluateBarrier();
       boss.update(activeTargets(players, clock.now()));
       syncBarrierChallenge();
       syncFinale();
@@ -411,13 +412,6 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         finale,
         ocarinaPerformerId,
       };
-    },
-
-    barrierViewFor(playerId) {
-      syncBarrierChallenge();
-      const player = byId.get(playerId);
-      if (player === undefined || barrierChallenge === null) return null;
-      return barrierChallenge.viewFor(toBarrierParticipant(player));
     },
   };
 }

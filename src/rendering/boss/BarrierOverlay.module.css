@@ -1,0 +1,282 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  color: #eaf4ff;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+  text-align: center;
+  text-shadow:
+    3px 3px 0 #06182f,
+    -2px -2px 0 #06182f,
+    0 0 18px #4fa8ff;
+}
+
+/* 発動演出。結界なので寒色で、最終局面 (赤) と取り違えないようにする。 */
+.cutscene {
+  display: grid;
+  place-content: center;
+}
+
+.cutsceneInner {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vw, 48px);
+  background:
+    linear-gradient(90deg, #00000022 50%, transparent 50%) 0 0 / 38px 38px,
+    repeating-linear-gradient(-45deg, #123a63 0 13px, #17508c 13px 26px),
+    radial-gradient(ellipse at 50% 48%, #7fd7ff 0 4%, #12457d 35%, #04101f 78%);
+  animation: barrierIn 0.6s ease-out both;
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  opacity: 0.38;
+  background: repeating-linear-gradient(0deg, transparent 0 4px, #02121f66 4px 6px);
+  mix-blend-mode: multiply;
+}
+
+.shout {
+  margin: 0 0 14px;
+  padding: 7px 18px;
+  color: #ffffff;
+  background: #07203c;
+  border: 3px ridge #8fd4ff;
+  box-shadow: 0 4px 0 #04121f;
+  font:
+    900 clamp(14px, 2vw, 26px) / 1.3 Impact,
+    sans-serif;
+}
+
+.titleCard {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+}
+
+.katakana {
+  margin: 0;
+  color: #b8e4ff;
+  font:
+    900 clamp(12px, 1.6vw, 20px) / 1 Impact,
+    sans-serif;
+  letter-spacing: 0.32em;
+}
+
+.invincible {
+  margin: 0;
+  font:
+    900 clamp(30px, 7vw, 92px) / 1 Impact,
+    sans-serif;
+  letter-spacing: 0.06em;
+  animation: barrierPulse 1.4s ease-in-out infinite;
+}
+
+.lead {
+  margin: 4px 0 0;
+  font: 700 clamp(12px, 1.5vw, 19px) / 1.5 sans-serif;
+  text-shadow: 2px 2px 0 #06182f;
+}
+
+.callToAction {
+  margin: 18px 0 0;
+  padding: 6px 16px;
+  color: #04101f;
+  background: #8fd4ff;
+  font:
+    900 clamp(14px, 2.1vw, 28px) / 1 Impact,
+    sans-serif;
+  letter-spacing: 0.08em;
+  /* 明るい下地へ載せるので、.overlay の暗い影は打ち消す。 */
+  text-shadow: none;
+}
+
+/* 解除中ずっと出し続ける案内。視界を塞がないよう画面下へ寄せる。 */
+.guide {
+  position: absolute;
+  inset: auto 0 clamp(14px, 3vh, 34px);
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 0 16px;
+}
+
+.guideHeader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.badge {
+  padding: 3px 10px;
+  color: #04101f;
+  background: #8fd4ff;
+  font:
+    900 clamp(10px, 1.1vw, 14px) / 1 Impact,
+    sans-serif;
+  letter-spacing: 0.1em;
+  text-shadow: none;
+}
+
+.guideTitle {
+  font:
+    900 clamp(14px, 1.9vw, 24px) / 1 Impact,
+    sans-serif;
+}
+
+.progress {
+  padding: 3px 10px;
+  background: #07203c99;
+  border: 2px solid #4fa8ff;
+  font:
+    900 clamp(11px, 1.2vw, 16px) / 1 Impact,
+    sans-serif;
+}
+
+.role {
+  display: grid;
+  gap: 2px;
+  padding: 8px 18px;
+  background: #04101fcc;
+  border: 2px solid #4fa8ff;
+  max-width: min(680px, 92vw);
+}
+
+.roleName {
+  color: #8fd4ff;
+  font:
+    900 clamp(10px, 1.1vw, 14px) / 1 Impact,
+    sans-serif;
+  letter-spacing: 0.18em;
+}
+
+.roleAction {
+  font:
+    900 clamp(13px, 1.6vw, 21px) / 1.35 Impact,
+    sans-serif;
+}
+
+.roleDetail {
+  font: 600 clamp(11px, 1.2vw, 15px) / 1.45 sans-serif;
+  color: #c9e4ff;
+  text-shadow: 2px 2px 0 #06182f;
+}
+
+.devices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  display: grid;
+  gap: 1px;
+  padding: 5px 12px;
+  background: #04101fcc;
+  border: 2px solid #35618f;
+  opacity: 0.75;
+}
+
+.deviceSecured {
+  border-color: #ffd166;
+  opacity: 1;
+}
+
+.deviceActivated {
+  border-color: #7dffb0;
+  opacity: 1;
+}
+
+.deviceName {
+  font:
+    900 clamp(11px, 1.2vw, 16px) / 1 Impact,
+    sans-serif;
+}
+
+.deviceStatus {
+  font: 600 clamp(9px, 1vw, 12px) / 1.3 sans-serif;
+  color: #c9e4ff;
+  text-shadow: none;
+}
+
+/* 間違えたときだけ、画面中央で短く出す。 */
+.reset {
+  position: absolute;
+  inset: 38% 0 auto;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  color: #ffd7d7;
+  font:
+    900 clamp(22px, 4.4vw, 56px) / 1 Impact,
+    sans-serif;
+  text-shadow:
+    3px 3px 0 #3d0509,
+    0 0 20px #ff5d5d;
+  animation: resetShake 0.42s ease-out both;
+}
+
+.reset small {
+  font: 700 clamp(11px, 1.3vw, 16px) / 1.4 sans-serif;
+  color: #ffeaea;
+}
+
+@keyframes barrierIn {
+  from {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes barrierPulse {
+  0%,
+  100% {
+    text-shadow:
+      3px 3px 0 #06182f,
+      0 0 18px #4fa8ff;
+  }
+  50% {
+    text-shadow:
+      3px 3px 0 #06182f,
+      0 0 34px #b8e4ff;
+  }
+}
+
+@keyframes resetShake {
+  0% {
+    transform: translateX(0) scale(1.2);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(-10px) scale(1);
+    opacity: 1;
+  }
+  55% {
+    transform: translateX(8px);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cutsceneInner,
+  .invincible,
+  .reset {
+    animation: none;
+  }
+}

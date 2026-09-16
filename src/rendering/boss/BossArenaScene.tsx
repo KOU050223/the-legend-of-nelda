@@ -7,6 +7,7 @@ import { MathUtils, Vector3, type Group } from 'three';
 import { createAudioManager } from '@/audio/audio-manager';
 import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
+import type { BarrierChallengeSnapshot } from '@/game/barrier/barrier-challenge';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
@@ -73,8 +74,10 @@ import {
 } from '../character/HoriDaisukeModel';
 import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
+import { BarrierCircles } from './BarrierCircles';
 import { DangerZoneMarks } from './DangerZoneMarks';
 import { DumbbellSlam, type DumbbellSlamFrame } from './DumbbellSlam';
+import { publishBarrierPresentation, resetBarrierPresentation } from './barrier-presentation-store';
 import {
   publishFinalePresentation,
   resetFinalePresentation,
@@ -219,6 +222,9 @@ function isSameView(a: View, b: View): boolean {
   if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
   if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
   if (a.snapshot.finale !== b.snapshot.finale) return false;
+  // 結界の進行はフェーズを変えずに進む。ここで比べないと、円を埋めても
+  // View が作り直されず、表示が発動時のまま止まる。
+  if (!isSameBarrier(a.snapshot.barrier, b.snapshot.barrier)) return false;
   if (a.snapshot.ocarinaPerformerId !== b.snapshot.ocarinaPerformerId) return false;
   if (a.snapshot.players.length !== b.snapshot.players.length) return false;
   if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
@@ -235,6 +241,22 @@ function isSameView(a: View, b: View): boolean {
       // 解決後の条件で比べると、変わるのは1回の振りにつき2回で済む。
       isSameMotionContext(a.playerMotionContexts[index] ?? {}, b.playerMotionContexts[index] ?? {})
     );
+  });
+}
+
+/** 結界の進行が前フレームと同じか。 */
+function isSameBarrier(
+  a: BarrierChallengeSnapshot | null,
+  b: BarrierChallengeSnapshot | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.phase !== b.phase) return false;
+  if (a.occupiedCount !== b.occupiedCount) return false;
+  if (a.devices.length !== b.devices.length) return false;
+
+  return a.devices.every((device, index) => {
+    const other = b.devices[index];
+    return other !== undefined && device.id === other.id && device.status === other.status;
   });
 }
 
@@ -520,6 +542,19 @@ export function BossArenaScene({
   ]);
 
   useEffect(() => resetFinalePresentation, []);
+
+  // 結界の表示。ソロでは BossBattle が結界を自動解除するので barrier は常に
+  // null になり、ここから何も出ない (GAME でだけ動く)。
+  const barrier = view?.snapshot.barrier ?? null;
+
+  useEffect(() => {
+    publishBarrierPresentation({
+      challenge: barrier,
+      localCharacterId: localPlayer?.characterId ?? null,
+    });
+  }, [barrier, localPlayer]);
+
+  useEffect(() => resetBarrierPresentation, []);
 
   // source が流す STATE を受ける。ローカルは tick() が、リモートは
   // サーバーが流す。描画ループはここで置かれた snapshot を読む。
@@ -989,6 +1024,8 @@ export function BossArenaScene({
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
+      {/* 結界の解除サークル。判定と同じ半径を描き、入る場所を地面で示す。 */}
+      <BarrierCircles barrier={barrier} />
 
       {/* 絶対起床アラームのダンベル投げと衝撃波 (#122)。判定は持たない飾りなので
           演出強度 0 では消える。危険範囲そのものは上の DangerZoneMarks が描く。 */}

@@ -3,15 +3,21 @@ import { isBarrierPhase, type BossPhase } from '../boss/boss-phase';
 import type { CharacterId } from '../config/phase2-player-balance';
 import type { PlanarPosition } from '../movement/types';
 import type { PlayerStatus } from '../player/player-state';
-import type { GameAction } from '../types/game-action';
 
 export type BarrierPhase = Extract<BossPhase, 'BARRIER_1' | 'BARRIER_2'>;
 
 export const BARRIER_DEVICE_IDS = ['DEVICE_0', 'DEVICE_1', 'DEVICE_2'] as const;
 export type BarrierDeviceId = (typeof BARRIER_DEVICE_IDS)[number];
-export type BarrierDeviceStatus = 'IDLE' | 'SECURED' | 'ACTIVATED';
 
-/** 結界装置の操作を受け付ける平面距離。境界値は有効とする。 */
+/** 装置のサークル。空か、誰かが入っているか。 */
+export type BarrierDeviceStatus = 'IDLE' | 'OCCUPIED';
+
+/**
+ * サークルの半径。中に入ったと見なす平面距離で、境界値は有効とする。
+ *
+ * 判定と見た目が同じ数を読む。地面に描く円 (BarrierCircles) もこれを使うので、
+ * 「光っている円の中に入れば入ったことになる」が常に成り立つ。
+ */
 export const DEVICE_INTERACT_RANGE = 3;
 
 export interface BarrierParticipant {
@@ -19,16 +25,6 @@ export interface BarrierParticipant {
   readonly characterId: CharacterId;
   readonly status: PlayerStatus;
   readonly position: PlanarPosition;
-}
-
-type BarrierActionType = Extract<GameAction['type'], 'INTERACT' | 'CHARACTER_ACTION'>;
-
-export type BarrierAction = { readonly type: BarrierActionType };
-
-export interface BarrierActionResult {
-  readonly accepted: boolean;
-  readonly completed: boolean;
-  readonly reset: boolean;
 }
 
 export interface BarrierDeviceSnapshot {
@@ -40,45 +36,26 @@ export interface BarrierDeviceSnapshot {
 export interface BarrierChallengeSnapshot {
   readonly phase: BarrierPhase;
   readonly devices: readonly BarrierDeviceSnapshot[];
-  readonly nextStepIndex: number;
-  readonly securedDeviceId: BarrierDeviceId | null;
-}
-
-export interface BarrierPayView extends BarrierChallengeSnapshot {
-  readonly solutionDeviceIds: readonly BarrierDeviceId[];
-  readonly nextDeviceId: BarrierDeviceId | null;
+  /** 今まさに埋まっているサークルの数。 */
+  readonly occupiedCount: number;
 }
 
 export interface BarrierChallenge {
-  submit(participant: BarrierParticipant, action: BarrierAction): BarrierActionResult;
+  /**
+   * 今の立ち位置から、サークルの埋まり具合を測り直す。
+   *
+   * 位置は毎フレーム動くので、判定は行動 (ボタン) ではなく時間で回す。
+   *
+   * @returns 全サークルが埋まり、結界が解除されたか。
+   */
+  evaluate(participants: readonly BarrierParticipant[]): { readonly completed: boolean };
   snapshot(): BarrierChallengeSnapshot;
-  viewFor(participant: BarrierParticipant): BarrierPayView | null;
-}
-
-export function isBarrierAction(action: GameAction): action is BarrierAction {
-  return action.type === 'INTERACT' || action.type === 'CHARACTER_ACTION';
 }
 
 interface MutableBarrierDevice {
   readonly id: BarrierDeviceId;
   readonly anchor: ArenaAnchor;
   status: BarrierDeviceStatus;
-}
-
-const IGNORED_RESULT: BarrierActionResult = {
-  accepted: false,
-  completed: false,
-  reset: false,
-};
-
-const RESET_RESULT: BarrierActionResult = {
-  accepted: false,
-  completed: false,
-  reset: true,
-};
-
-function solutionFor(phase: BarrierPhase): readonly BarrierDeviceId[] {
-  return phase === 'BARRIER_1' ? ['DEVICE_1'] : ['DEVICE_2', 'DEVICE_0', 'DEVICE_1'];
 }
 
 function copyAnchor(anchor: ArenaAnchor): ArenaAnchor {
@@ -99,71 +76,26 @@ function createDevices(): MutableBarrierDevice[] {
   });
 }
 
-function validateSolution(
-  phase: BarrierPhase,
-  solutionDeviceIds: readonly BarrierDeviceId[],
-): void {
-  if (phase === 'BARRIER_1' && solutionDeviceIds.length !== 1) {
-    throw new RangeError('BARRIER_1 の正解列は1台でなければなりません');
-  }
-  if (phase !== 'BARRIER_2') return;
-
-  if (solutionDeviceIds.length !== BARRIER_DEVICE_IDS.length) {
-    throw new RangeError('BARRIER_2 の正解列は3台でなければなりません');
-  }
-  if (new Set(solutionDeviceIds).size !== solutionDeviceIds.length) {
-    throw new RangeError('BARRIER_2 の正解列に重複があります');
-  }
-}
-
-function isBarrierActionForCharacter(
-  participant: BarrierParticipant,
-  action: BarrierAction,
-): boolean {
+function isInside(device: MutableBarrierDevice, position: PlanarPosition): boolean {
   return (
-    (participant.characterId === 'ODORUNO' && action.type === 'INTERACT') ||
-    (participant.characterId === 'ORA' && action.type === 'CHARACTER_ACTION')
+    Math.hypot(device.anchor.x - position.x, device.anchor.z - position.z) <= DEVICE_INTERACT_RANGE
   );
 }
 
+/**
+ * ショートスリーパー結界 (docs/phase2-gameplay-spec.md §11)。
+ *
+ * 解除条件は「3人が別々のサークルへ同時に入る」。順番も専用操作も要らず、
+ * 立ち位置だけで決まる。3つのサークルは離れているので、3人が散って同時に
+ * 埋める必要があり、協力の形 (§11.1) は保たれる。
+ */
 export function createBarrierChallenge(phase: BarrierPhase): BarrierChallenge {
   if (!isBarrierPhase(phase)) {
     throw new RangeError('結界フェーズではありません');
   }
 
   const devices = createDevices();
-  const solutionDeviceIds = [...solutionFor(phase)];
-  validateSolution(phase, solutionDeviceIds);
-
-  let nextStepIndex = 0;
-  let securedDeviceId: BarrierDeviceId | null = null;
   let completed = false;
-
-  function resetProgress(): void {
-    for (const device of devices) device.status = 'IDLE';
-    nextStepIndex = 0;
-    securedDeviceId = null;
-  }
-
-  function nearestDeviceId(position: PlanarPosition): BarrierDeviceId | null {
-    let nearest: BarrierDeviceId | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    for (const device of devices) {
-      const distance = Math.hypot(device.anchor.x - position.x, device.anchor.z - position.z);
-      if (distance > DEVICE_INTERACT_RANGE || distance >= nearestDistance) continue;
-      nearest = device.id;
-      nearestDistance = distance;
-    }
-
-    return nearest;
-  }
-
-  function deviceById(id: BarrierDeviceId): MutableBarrierDevice {
-    const device = devices.find((candidate) => candidate.id === id);
-    if (device === undefined) throw new Error(`装置がありません: ${id}`);
-    return device;
-  }
 
   function snapshot(): BarrierChallengeSnapshot {
     return {
@@ -173,70 +105,40 @@ export function createBarrierChallenge(phase: BarrierPhase): BarrierChallenge {
         anchor: copyAnchor(device.anchor),
         status: device.status,
       })),
-      nextStepIndex,
-      securedDeviceId,
+      occupiedCount: devices.filter((device) => device.status === 'OCCUPIED').length,
     };
   }
 
   return {
-    submit(participant, action) {
-      if (completed || participant.status !== 'ACTIVE') return IGNORED_RESULT;
-      if (!isBarrierActionForCharacter(participant, action)) return IGNORED_RESULT;
+    evaluate(participants) {
+      if (completed) return { completed: false };
 
-      const nearbyDeviceId = nearestDeviceId(participant.position);
-      if (nearbyDeviceId === null) return IGNORED_RESULT;
+      const active = participants.filter((participant) => participant.status === 'ACTIVE');
 
-      const expectedDeviceId = solutionDeviceIds[nextStepIndex];
-      if (expectedDeviceId === undefined) return IGNORED_RESULT;
-
-      if (action.type === 'INTERACT') {
-        const device = deviceById(nearbyDeviceId);
-        if (
-          nearbyDeviceId !== expectedDeviceId ||
-          securedDeviceId !== null ||
-          device.status !== 'IDLE'
-        ) {
-          resetProgress();
-          return RESET_RESULT;
+      // 1人が2つのサークルを兼ねないよう、埋めた人を使い切りで割り当てる。
+      // 装置同士は約29ユニット離れており実際には起こらないが、
+      // 「3人が別々のサークルへ」というルールを判定の形でも表す。
+      const claimed = new Set<string>();
+      for (const device of devices) {
+        const occupant = active.find(
+          (participant) => !claimed.has(participant.id) && isInside(device, participant.position),
+        );
+        if (occupant === undefined) {
+          device.status = 'IDLE';
+          continue;
         }
-
-        device.status = 'SECURED';
-        securedDeviceId = device.id;
-        return { accepted: true, completed: false, reset: false };
+        claimed.add(occupant.id);
+        device.status = 'OCCUPIED';
       }
 
-      const device = deviceById(nearbyDeviceId);
-      if (
-        nearbyDeviceId !== expectedDeviceId ||
-        securedDeviceId !== expectedDeviceId ||
-        device.status !== 'SECURED'
-      ) {
-        resetProgress();
-        return RESET_RESULT;
-      }
-
-      device.status = 'ACTIVATED';
-      securedDeviceId = null;
-      nextStepIndex += 1;
-
-      if (nextStepIndex >= solutionDeviceIds.length) {
+      if (devices.every((device) => device.status === 'OCCUPIED')) {
         completed = true;
-        return { accepted: true, completed: true, reset: false };
+        return { completed: true };
       }
 
-      return { accepted: true, completed: false, reset: false };
+      return { completed: false };
     },
 
     snapshot,
-
-    viewFor(participant) {
-      if (participant.status !== 'ACTIVE' || participant.characterId !== 'PAY') return null;
-
-      return {
-        ...snapshot(),
-        solutionDeviceIds: [...solutionDeviceIds],
-        nextDeviceId: solutionDeviceIds[nextStepIndex] ?? null,
-      };
-    },
   };
 }
