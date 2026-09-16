@@ -72,7 +72,7 @@ export type GameEvent =
   | { type: 'INPUT_REJECTED'; action: PlayerAction; reason: InputRejectionReason }
   /**
    * Intentional Bug。ふかふか布団の被弾が「布団に入る」ではなく
-   * 「吹き飛ぶ」に化けた (docs/testing-guide.md §16 / Issue #140 / #42)。
+   * 「吹き飛ぶ」に化けた (docs/testing-strategy.md §12.1 / Issue #140 / #42)。
    *
    * 被弾そのものが無かったことになるので SLEEPINESS は増えない。HIT State へは
    * 通常どおり進むため、この周回が飛ばされたわけではない。演出だけを

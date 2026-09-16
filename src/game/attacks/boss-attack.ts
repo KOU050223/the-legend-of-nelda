@@ -89,7 +89,7 @@ export interface BossAttack extends CombatAttack {
   };
   /**
    * Intentional Bug。この一手の被弾が「吹き飛び」に化けるか
-   * (docs/testing-guide.md §16 / Issue #140 / #42)。
+   * (docs/testing-strategy.md §12.1 / Issue #140 / #42)。
    *
    * true なら HIT State で SLEEPINESS を足さず、代わりに PLAYER_BLOWN_AWAY を
    * 出す。抽選は技を生成する側が済ませてここへ結果だけを渡す。State Machine の
