@@ -326,47 +326,6 @@ describe('共通ボス攻撃基盤', () => {
   // 受付ウィンドウ・硬直の長さ自体は player-input.test.ts / judge.test.ts で
   // 単体で押さえているので、ここでは配線が効いていることだけを見る。
   describe('プレイヤー入力の受付と入力ミス処理', () => {
-    it('着弾より早すぎる入力は早押しとして弾き、判定へ回さない', () => {
-      const { advance, controller, events, machine } = setup();
-
-      controller.start(dummyAttack);
-      // TELEGRAPH 中。着弾予定はまだ 2400ms 先で、受付開始 (着弾-600ms) より前。
-      advance(1000);
-      const tooEarly = controller.submitAction('DODGE_LEFT');
-
-      expect(tooEarly).toBe('TOO_EARLY');
-      expect(events).toContainEqual({
-        type: 'INPUT_REJECTED',
-        action: 'DODGE_LEFT',
-        reason: 'TOO_EARLY',
-      });
-
-      // 早押しは被弾もさせない。判定は「入力なし」として進む。
-      advance(1000);
-      advance(500);
-
-      expect(machine.state).toBe('HIT');
-    });
-
-    it('早押しの硬直中は受付ウィンドウへ入っても入力できない', () => {
-      const { advance, controller, machine } = setup();
-
-      controller.start(dummyAttack);
-      advance(1000);
-      controller.submitAction('DODGE_LEFT');
-
-      // 硬直 400ms より手前で受付ウィンドウへ入る時刻を選ぶ。
-      advance(300);
-      const duringLock = controller.submitAction('DODGE_LEFT');
-
-      expect(duringLock).toBe('LOCKED');
-
-      advance(700);
-      advance(500);
-
-      expect(machine.state).toBe('HIT');
-    });
-
     it('受付ウィンドウ内の最初の入力だけを判定へ渡す', () => {
       const { advance, controller, machine } = setup();
 

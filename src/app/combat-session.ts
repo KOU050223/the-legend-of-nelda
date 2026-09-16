@@ -49,6 +49,14 @@ export interface CombatSessionOptions {
   frameLoop?: FrameLoop;
   /** 技の出し分けに使う乱数。テストから固定する。 */
   random?: () => number;
+  /**
+   * Intentional Bug「布団に入らず吹き飛ぶ」の抽選 (Issue #140 / #42)。
+   *
+   * 既定は「抽選しない」。本番の抽選は合成点 (`App.tsx`) が
+   * `createFutonBlowAway()` を渡して入れる。ここを既定で有効にすると、
+   * 乱数を固定しただけの既存テストまで確率へ巻き込まれる。
+   */
+  blowAway?: () => boolean;
   /** チュートリアル順の差し替え。空配列を渡せばチュートリアルを飛ばせる。 */
   tutorialSequence?: readonly SequenceStepDefinition[];
   /** 本戦の攻撃順の差し替え (完了条件「本戦の攻撃順を設定から調整できる」)。 */
@@ -85,6 +93,7 @@ export function createCombatSession({
   clock = createRealClock(),
   frameLoop = requestAnimationFrameLoop,
   random = Math.random,
+  blowAway,
   tutorialSequence,
   mainSequence,
   sequence,
@@ -110,6 +119,7 @@ export function createCombatSession({
     createAttackSequence({
       random,
       // exactOptionalPropertyTypes のため、未指定のキーは渡さずに既定へ任せる。
+      ...(blowAway ? { blowAway } : {}),
       ...(tutorialSequence ? { tutorial: tutorialSequence } : {}),
       ...(mainSequence ? { mainBattle: mainSequence } : {}),
     });

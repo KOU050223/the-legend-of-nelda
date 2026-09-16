@@ -70,9 +70,31 @@ function futonVisualCue(direction: 'LEFT' | 'RIGHT'): string {
   return direction === 'LEFT' ? 'futon-summon-left' : 'futon-summon-right';
 }
 
+/**
+ * Intentional Bug「布団に入らず吹き飛ぶ」の発生率。
+ *
+ * 4回に1回。毎回だと仕様に見え、10回に1回だと配信で一度も出ない。
+ * 「たまに起きる」と分かる程度に高く、回避の練習が成立する程度に低い値。
+ */
+export const FUTON_BLOW_AWAY_CHANCE = 0.25;
+
+/** 本番で使う抽選。`App.tsx` が組み立て、ゲームロジック側は既定で抽選しない。 */
+export function createFutonBlowAway(random: RandomSource = Math.random): () => boolean {
+  return () => random() < FUTON_BLOW_AWAY_CHANCE;
+}
+
 export interface FluffyFutonOptions {
   /** 省略時は Math.random。左右の構えを決めるためだけに使う。 */
   random?: RandomSource;
+  /**
+   * Intentional Bug「布団に入らず吹き飛ぶ」の抽選 (Issue #140 / #42)。
+   *
+   * 既定は「抽選しない」。`random` へ相乗りさせると、左右を決め打ちした
+   * 既存テストの固定値が吹き飛びの有無まで決めてしまい、関係の無いテストが
+   * この Intentional Bug の確率に巻き込まれる。本番の配線は `App.tsx` が
+   * `createFutonBlowAway()` を渡して行う。
+   */
+  blowAway?: () => boolean;
 }
 
 /**
@@ -83,6 +105,7 @@ export interface FluffyFutonOptions {
  */
 export function createFluffyFutonAttack({
   random = Math.random,
+  blowAway = () => false,
 }: FluffyFutonOptions = {}): BossAttack {
   const direction: Extract<AttackDirection, 'LEFT' | 'RIGHT'> = random() < 0.5 ? 'LEFT' : 'RIGHT';
 
@@ -116,6 +139,9 @@ export function createFluffyFutonAttack({
     counterWindowFromCorrectInput: true,
     damage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.bossDamage,
     sleepinessDamage: DEFAULT_ATTACK_DAMAGE.FLUFFY_FUTON.sleepinessDamage,
+    // Intentional Bug。布団を出した時点で抽選を終える。着弾の瞬間に引くと、
+    // 同じ一手の中で結果が揺れてマルチプレイの同期が壊れる (#42 の禁止事項)。
+    blowsAway: blowAway(),
     // 大ダウンは DAMAGE の上書きではなく専用の State で表す。
     // §15 の共通ステート時間は DAMAGE を「約0.4秒」と定めており、
     // ここを伸ばすと反撃が入ったことを示す State の意味が変わってしまう。

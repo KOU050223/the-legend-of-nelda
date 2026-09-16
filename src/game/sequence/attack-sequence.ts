@@ -167,6 +167,13 @@ export interface AttackSequenceOptions {
   tutorial?: readonly SequenceStepDefinition[];
   /** 本戦の攻撃順の差し替え (完了条件「本戦の攻撃順を設定から調整できる」)。 */
   mainBattle?: readonly SequenceStepDefinition[];
+  /**
+   * Intentional Bug「布団に入らず吹き飛ぶ」の抽選 (Issue #140 / #42)。
+   *
+   * 既定は「抽選しない」。`random` へ相乗りさせないのは fluffy-futon.ts と
+   * 同じ理由で、出題順を固定しただけのテストを確率へ巻き込まないため。
+   */
+  blowAway?: () => boolean;
 }
 
 export interface AttackSequence {
@@ -210,12 +217,13 @@ function createAttack(
   attackId: AttackId,
   random: () => number,
   damageScale: SequenceStepDefinition['damageScale'],
+  blowAway: () => boolean,
 ): BossAttack {
   const base =
     attackId === 'PILLOW_SWEEP'
       ? createPillowSweep({ random })
       : attackId === 'FLUFFY_FUTON'
-        ? createFluffyFutonAttack({ random })
+        ? createFluffyFutonAttack({ random, blowAway })
         : // あくび衝撃波は正面技で方向を持たないため、定義を使い回せる。
           yawnWave;
 
@@ -234,6 +242,7 @@ export function createAttackSequence({
   random = Math.random,
   tutorial = DEFAULT_TUTORIAL_SEQUENCE,
   mainBattle = DEFAULT_MAIN_SEQUENCE,
+  blowAway = () => false,
 }: AttackSequenceOptions = {}): AttackSequence {
   // 本戦が空だと、チュートリアルを出し切ったあとに繰り返す手が
   // チュートリアル側のものしか無くなり、本戦へ入れないまま止まる (SEQ-002)。
@@ -281,7 +290,7 @@ export function createAttackSequence({
         phase,
         assist: definition.assist,
         attackId,
-        attack: createAttack(attackId, random, definition.damageScale),
+        attack: createAttack(attackId, random, definition.damageScale, blowAway),
       };
 
       index += 1;

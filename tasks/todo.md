@@ -1,299 +1,121 @@
-# Issue #113: オラ大輔「せざる」本番入力統合
+# Issue #140: 意図的に残している既知バグを `*.bug.test.ts` へ分離する
 
-元Issue: https://github.com/KOU050223/the-legend-of-nelda/issues/113
+元Issue: https://github.com/KOU050223/the-legend-of-nelda/issues/140
 
-## 既存資産（調査済み）
+## ゴール
 
-- `src/input/ora/hand-detector.ts`: MediaPipe HandLandmarker、現状は右手首のみ返す
-- `src/input/ora/ora-gesture-recognizer.ts`: ARマーカー座標ベース。MOVEは離散LEFT/RIGHT、ATTACKは右手振り速度、ORA_ACTIONはマーカーy座標
-- `src/input/ora/ora-input-adapter.ts`: 現状Debug UI表示専用、Game Logicに未接続と明記
-- `src/input/wasshoi/`: VAD (`voice-activity-detector.ts`) + `adaptive-noise-gate.ts` で発話区間/RMS/基準音量のパターンが既にある → ORA音声判定の土台に転用（ただしVAD単体を「オラ」判定に使わない。キーワード検出と組み合わせる）
-- `src/input/keyboard/game-action-adapter.ts`: `AttachInputAdapter`契約を満たす本番入力の実装パターン
-- `src/rendering/boss/BossArenaScene.tsx` L528-555: キーボードアダプタを`activeSource.submit()`へ繋ぐ唯一の配線点。ここをアダプタ選択構造へ組み替える
-- `src/store/local-player-store.ts`: `localPlayerId === 'ora'`で選択中かどうかを判定できる
-- `src/game/types/game-action.ts`: `GameAction`は`MOVE`(連続) / `ATTACK,DODGE,INTERACT,REVIVE,CHARACTER_ACTION`(離散、payload無し)。ORA_ACTIONは`CHARACTER_ACTION`にマップする
-- `docs/phase2-ora-input-spec.md`: 現行はARマーカー方式の記述。本Issue実装後に更新要
+`*.bug.test.ts` / `*.bug.test.tsx` を読むだけで「このプロダクトに現在どんな
+意図的に残しているバグがあるか」が分かる状態にする。単なるリネームではなく
+**実行可能なバグ仕様書**にすることが目的。
 
-## 方針（ユーザー確認済み）
+最重要制約: **バグを推測で分類しない**。Issue / PR / docs / コードコメント /
+Git履歴などの明示的な根拠で「既知・意図的」と確認できたものだけを移す。
+曖昧なものは通常テストのまま残す。
 
-- #49のARマーカーPoCコードは削除しない（fallback/experimentとして残す）
-- Web Speech API (SpeechRecognition) はブラウザ内蔵エンジン利用時に音声が外部サービスへ送られる場合があるが許容する。Issueの「Raw音声をサーバーへ送らない」は自前のGame Authorityへの話と解釈
-- ATTACKは 3A（オラ検出→hit/rush判定）と 3B（intensity→威力/演出反映）に分割し、3Bはvertical slice成立後に着手
-- 3B着手前に、声量→ダメージ倍率が現行`GameAction`契約で運べるかを確認する（運べない場合は`GameAction` / multiplayer protocol / Authority側の変更範囲を洗い出してから実装）。完了条件からは外さない
-- 本番配線は「Keyboardに Ora入力を足す」のではなく、**Ora Production Input と Keyboard Input が同じGameAction境界へ落ちるアダプタ選択構造**にする。オラ選択中の通常プレイではKeyboard/Mouseをattachしない。Debug KeyboardはDEV/fallback用途のみ残す
+## 調査（3エージェント並列、独立実施）
 
-## フェーズ計画（ゲート分割・この順で最短距離を通す）
+| 担当     | 範囲                                                                          | 状態 |
+| -------- | ----------------------------------------------------------------------------- | ---- |
+| Claude A | `src/**/*.test.*`, `server/**/*.test.ts` 全111ファイル + 本番コードのコメント | 完了 |
+| Claude B | `docs/`, `tasks/`, `AGENTS.md`, `CLAUDE.md`, `.github/`                       | 完了 |
+| Claude C | GitHub Issue / PR / Git履歴                                                   | 完了 |
+| 本体     | 上記の突き合わせ・再検証・実装                                                | 完了 |
 
-| #   | フェーズ                           | 完了条件 (DoD)                                                                                                                                                  | 状態                                           |
-| --- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| 1   | 両手トラッキング基盤 + Calibration | 左右手の位置がリアルタイムで取れる、左手Neutral位置と音量基準をCalibrationで取得できる                                                                          | 完了                                           |
-| 2   | MOVE 左手Air Joystick              | Dead Zone/Smoothing/Hysteresis/Clamp込みで連続MOVEが出る、Hand LostでNeutral復帰                                                                                | 完了                                           |
-| 3A  | ATTACK Voice「オラ」検出           | 「オラ」発話でATTACK発火、連続発話が複数hitへ展開、3回以上でORA RUSH、通常会話の誤発火防止（VAD単体に頼らない）、右手振りfallback維持                           | 完了（純粋ロジックのみ。ブラウザ配線はPhase5） |
-| 4   | ORA_ACTION 両手パー                | 両手OPEN+上側+Spread+700ms HoldでCHARACTER_ACTION発火、進行度UI、Cooldown                                                                                       | 完了（純粋ロジックのみ。UI/配線はPhase5/6）    |
-| 5   | 本番配線 + Multiplayer疎通         | アダプタ選択構造でOra Production/Keyboardを切替、オラ選択中はKeyboard/Mouse非attach、Debug Keyboardのみdev fallback、Raw映像/音声非送信でGameActionのみ同期確認 | 完了（コミット未実施）                         |
-| 6   | Debug UI拡張 (`?debug=ora`)        | Camera/Mic状態、両手位置、Voice combo、ORA_ACTION進行度を表示                                                                                                   | 着手中（Codex並列委譲）                        |
-| 3B  | intensity → 威力/演出反映          | GameAction等の変更範囲調査 → Damage Multiplier 0.85〜1.30 clampで反映、VFX/SE/CameraShakeが音量で変化                                                           | 未着手                                         |
-| 7   | Docs更新                           | `docs/phase2-ora-input-spec.md`をProduction方針(Markerless + Voice)へ更新、#49はfallback注記                                                                    | 未着手                                         |
-| 8   | 品質まとめ                         | lint/typecheck/test/build、実機WebCam+Mic手動確認                                                                                                               | 未着手                                         |
+## ベースライン（分離前）
 
-各フェーズ完了時にClaudeが差分確認してコミット。push/PRは許可が出るまで行わない。
+| 項目                               | 値                                                |
+| ---------------------------------- | ------------------------------------------------- |
+| client テスト (`pnpm test`)        | 303 suite / **1135 件** 全パス                    |
+| server テスト (`pnpm test:server`) | **14 件** 全パス                                  |
+| 合計                               | **1149 件**                                       |
+| `pnpm typecheck`                   | パス                                              |
+| `pnpm lint`                        | パス                                              |
+| `pnpm format:check`                | **ベースラインで失敗**（後述、本Issueとは無関係） |
+
+テスト件数の増減検証は `fullName` の多重集合比較スクリプトで行う。
+
+## テストランナーの確認（完了・設定変更不要）
+
+`vite.config.ts` の `include: ['src/**/*.{test,spec}.{ts,tsx}']` と
+`vitest.server.config.ts` の `include: ['server/**/*.test.ts']` は、
+`*` が `foo.bug` を吸収するため `foo.bug.test.ts` を**そのまま拾う**。
+
+実証: 一時ファイル `src/__probe140.bug.test.ts` / `server/__probe140.bug.test.ts`
+を置いて `vitest list` と `vitest run` で収集・実行されることを確認し、削除済み。
+CI (`pnpm test:coverage` / `pnpm test:server`) と lefthook の
+`vitest related` も同じ include を通るため、**設定変更は不要**。
+
+## 既知の環境問題（本Issueのスコープ外）
+
+`pnpm format:check` はベースラインで失敗する。原因は2つで、どちらも本Issueの
+変更とは無関係:
+
+1. `core.autocrlf=true` の Windows チェックアウトで作業ファイルが CRLF になり、
+   `.oxfmtrc.json` の `"endOfLine": "lf"` と食い違う。
+2. `CLAUDE.md` は git 上 symlink (mode 120000) だが Windows では中身
+   `AGENTS.md` の平文ファイルとして展開され、oxfmt が markdown として整形対象にする。
+
+→ **`pnpm format`（引数なし）は実行しない**。`CLAUDE.md` の symlink を壊すため。
+整形が要る場合は変更したファイルのみを対象にする。
+
+## 前提の訂正（ユーザーより）
+
+当初は「既存バグの回帰テストを整理する」と解釈したが、ユーザーから訂正があった。
+
+`*.bug.test.ts` は **意図的に実装・維持しているバグっぽい挙動を仕様として固定する**
+テストである。通常なら誤動作と判断される結果をそのまま `expect` してよい。
+ファイナルソード的なB級3DアクションRPGへのオマージュという、この作品の狙い
+（Issue #42）の一部だからである。
+
+この前提で調べ直した結果、Issue #42 が実装規約の宿題として
+「『バグ風演出』と本物の不具合の境界を実装規約として整理する」を未完了で
+持っていることが分かった。本Issueはその回答でもある。
+
+## 採用した Intentional Bug（ユーザー決定）
+
+| #   | 挙動                                                 | 由来         | 置き場所                                           |
+| --- | ---------------------------------------------------- | ------------ | -------------------------------------------------- |
+| 1   | ボスが出題を使い切ると最後の技を無限リピート         | 既存         | `attack-sequence.bug.test.ts`                      |
+| 2   | 早押しは判定も出ないまま被弾し、硬直で回避もできない | 既存         | `boss-attack.bug.test.ts`                          |
+| 3   | 確率で布団に入らず吹き飛ぶ                           | **新規実装** | `fluffy-futon.bug.test.ts` / `vfx-cue.bug.test.ts` |
+
+Issue #100 / #143（結界・保護サークル）は別の担当者が対応中のため触っていない。
+
+## 結果
+
+| 項目             | 分離前 | 分離後          |
+| ---------------- | ------ | --------------- |
+| client テスト    | 1135   | **1144** 全パス |
+| server テスト    | 14     | **14** 全パス   |
+| `pnpm typecheck` | パス   | パス            |
+| `pnpm lint`      | パス   | パス            |
+
+テスト名の多重集合を比較し、消えた4件が移動した4件（`describe` 名変更）と
+1:1 対応することを確認済み。保証範囲は減っていない。
+
+## 残課題
+
+| 項目                                 | 完了条件                                                                                     | 優先度 | 依存                   |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- | ------ | ---------------------- |
+| オラ大輔の歩行モーションが床へ埋まる | 再現条件（シーン・視点・タイミング）が分かり、`*.bug.test.ts` で固定できる形の機構を特定する | 中     | ユーザーからの再現手順 |
+| 端でカメラががくがくする             | 同上。現状 `BattleThirdPersonCamera` の `useFrame` 内に直書きで、純関数の抽出が要る          | 中     | ユーザーからの再現手順 |
+| 開幕スライディング                   | 同上                                                                                         | 中     | ユーザーからの再現手順 |
+| 吹き飛びの3D表現                     | キャラが実際に回転して吹き飛ぶ描画を入れる（現在は画面揺れとヒットストップのみ）             | 低     | なし                   |
+
+上3件は静的なコード読解では発生機構を特定できなかった。
+推測で「これが原因」と決めて bug test を書くと、実際には別の箇所が原因だった
+場合に「バグ仕様書」が嘘になるため、通常挙動のまま残した。
 
 ## レビュー
 
-- Phase1の対象だけを実装。AR Marker PoC、UI、本番配線、MOVE/キーワード/パー判定には変更なし。
-- `pnpm vitest run src/input/ora`: 6ファイル / 17テスト通過。
-- `pnpm tsc -b --noEmit`: 通過。
-- lint/formatはIssue #113 Phase1の指示どおり未実施。
-- コミット・push・PR作成は未実施。
-
-## Phase2 レビュー
-
-- `src/input/ora/hand-joystick.ts` と対応テストだけを追加。UI、配線、Voice、ORA_ACTION、Phase1ファイルは変更なし。
-- `pnpm vitest run src/input/ora`: 7ファイル / 26テスト通過。
-- `pnpm tsc -b --noEmit`: 通過。
-- `pnpm oxlint --type-aware src/input/ora`: 通過。
-- コミット・push・PR作成は未実施。
-
-## Phase3A 実装計画: ATTACK Voice「オラ」検出
-
-### 目的と対象範囲
-
-- `src/input/ora/voice-attack-recognizer.ts` にブラウザAPI非依存の純粋ロジックを追加する。
-- `src/input/ora/voice-attack-recognizer.test.ts` をTDDで先に作成する。
-- `ora-gesture-recognizer.ts`、`ora-input-adapter.ts`、UI、SpeechRecognition、Web Audio、getUserMedia、ORA_ACTIONには触れない。
-
-### ゲート分割
-
-- [ ] Gate 1: 入出力型、正規化・主要部分判定、音量/Cooldownの期待挙動をテストとして追加し、未実装によるREDを確認する。
-- [ ] Gate 2: 最小実装でhit展開、Rush window、Clamp、resetをGREENにする。
-- [ ] Gate 3: 指定テスト・型チェック・対象ディレクトリlintを実行し、差分とスコープを確認する。
-
-### 実装手順
-
-1. `OraUtteranceCandidate`、`OraVoiceAttackEvent`、`OraVoiceAttackRecognizerOptions`、Recognizer契約をテストから参照する。
-2. `transcript` を装飾除去して「オラ」「おら」を順次カウントし、マッチ文字数と残り文字数で主要部分を判定する。
-3. 音量ゲートと、直前に受理した発話の `endedAt` から候補の `startedAt` までのCooldownを適用する。
-4. 受理した出現回数を `maxHitsPerUtterance` でClampし、`startedAt + index * hitSpacingMs` のhitを生成する。
-5. 生成済みhitを `rushWindowMs` で期限切れ削除しながら数え、閾値到達時点のイベントだけ `isRush: true` にする。
-6. `reset()` でCooldownとhit履歴を初期化する。
-7. コメントは非自明な主要部分判定と状態保持の理由に限定し、日本語で記述する。
-
-### 検証コマンド
-
-- `pnpm vitest run src/input/ora`
-- `pnpm tsc -b --noEmit`
-- `pnpm oxlint --type-aware src/input/ora`
-
-コミットは作成せず、完了時に `## レビュー` を追記する。
-
-## Phase3A レビュー
-
-- `src/input/ora/voice-attack-recognizer.ts` + テスト + 設計docだけを追加。UI、配線、ORA_ACTION、Phase1/2ファイルは変更なし。
-- `pnpm vitest run src/input/ora`: 8ファイル / 35テスト通過。
-- `pnpm tsc -b --noEmit`: 通過。
-- `pnpm oxlint --type-aware src/input/ora`: 通過。
-- Codexが起動した独立レビューサブエージェントが長時間応答しなかったため、Claudeが直接コード・テストを読んでレビューし、コミット（f222c0b）まで実施。
-- コミット済み。push・PR作成は未実施。
-
-## Phase4 実装計画: ORA_ACTION 両手パー
-
-### 目的と対象範囲
-
-- `HandObservation`へ任意の`isOpen`を追加し、MediaPipeの手首・4本指のPIP/TIPから開いた手を判定する。
-- `ora-action-recognizer.ts`へ、両手Open・上側・Spread・700ms Hold・Cooldown・解除必須を持つ純粋ロジックを追加する。
-- `hand-detector.test.ts`と新規`ora-action-recognizer.test.ts`をTDDで先に作成する。
-- `ora-gesture-recognizer.ts`、`ora-input-adapter.ts`、`BossArenaScene.tsx`、`OraDebugPage.tsx`、`CHARACTER_ACTION`へのマッピング、Voice ATTACK配線は変更しない。
-
-### ゲート分割
-
-- [x] Gate 1: 開いた手/閉じた手とORA_ACTIONの必須ケースをテストに追加し、未実装によるREDを確認する。
-- [x] Gate 2: `types.ts`、`hand-detector.ts`、`ora-action-recognizer.ts`を最小実装してGREENにする。
-- [x] Gate 3: 指定テスト・型チェック・対象ディレクトリlintを実行し、差分とスコープを確認する。
-
-### 実装手順
-
-1. MediaPipeランドマークの`0`、`6/8`、`10/12`、`14/16`、`18/20`を検証するテスト用fixtureを作り、4本すべてで`distance(wrist, tip) > distance(wrist, pip) + margin`となる場合だけ`isOpen: true`にする。
-2. `HandObservation.left/right`へ`isOpen?: boolean`を追加し、ランドマーク配列とMediaPipe固有の型は`hand-detector.ts`内へ閉じ込める。
-3. `OraActionRecognizer`を、ポーズ解除時のHold/発動済み状態リセット、700ms到達時の1回発動、Cooldown中に到達したHoldの消費、`reset()`初期化まで含めて実装する。
-4. コメントは非自明な「解除必須」と「指姿勢を距離比較にする」理由に限定し、日本語で記述する。
-5. 指定3コマンドと差分確認を実行し、Phase4対象外ファイルが変更されていないことを確認する。
-
-### 検証コマンド
-
-- `pnpm vitest run src/input/ora`
-- `pnpm tsc -b --noEmit`
-- `pnpm oxlint --type-aware src/input/ora`
-
-コミット・push・PR作成は行わない。完了後にこのファイルへ`## Phase4 レビュー`を追記する。
-
-## Phase4 レビュー
-
-- `src/input/ora/types.ts`で`HandObservation.left/right`へ`isOpen?: boolean`を追加し、既存の`isOpen`なしfixtureを維持した。
-- `src/input/ora/hand-detector.ts`で手首と親指を除く4本のPIP/TIPを使い、距離差マージン`0.02`を超える場合に`isOpen: true`を返すようにした。MediaPipeのランドマーク配列・インデックスは同ファイル内に限定した。
-- `src/input/ora/ora-action-recognizer.ts`で既定値`maxY=0.45`、`minSpread=0.35`、`holdMs=700`、`cooldownMs=1000`を実装した。ポーズ解除でHold状態をリセットし、Cooldown中に閾値到達したHoldも消費扱いにして、解除なしの再発動を防いだ。
-- `src/input/ora/hand-detector.test.ts`と`src/input/ora/ora-action-recognizer.test.ts`を追加・拡張し、TDDのRED確認後にGREENを確認した。
-- `pnpm vitest run src/input/ora`: 9ファイル / 48テスト通過。
-- `pnpm tsc -b --noEmit`: 通過。
-- `pnpm oxlint --type-aware src/input/ora`: 通過。
-- `ora-gesture-recognizer.ts`、`ora-input-adapter.ts`、UI、`CHARACTER_ACTION`マッピング、Voice ATTACK配線は変更していない。
-- コミット・push・PR作成は未実施。
-
-## Phase3B 調査結果（実装はPhase5完了後に着手）
-
-- `src/multiplayer/protocol.ts` L197-203 `isGameAction`は、離散GameAction（ATTACK等）に対し`hasOnlyKeys(value, ['type'])`のみを許可しており、`intensity`等の追加フィールドは現状拒否される。3B実装時はここも合わせて変更が必要。
-- 同ファイル L205-213 `isWasshoiEvent`に`intensity: isFiniteNumber`という同型の前例パターンが既にあり、型追加時はこれを踏襲できる。
-- VFX/CameraShakeの受け皿は未実装。演出反映は別途調査・実装が必要（3B着手時に改めてスコープを切る）。
-- `GameAction`型自体（`src/game/types/game-action.ts`）へ`ATTACK`用のoptional `intensity`フィールドを足す方向が有力候補（`MOVE`の`input`同様、型を壊さず拡張できる）。
-
-## Phase5・Phase6 実装計画（並列実行）
-
-Phase4完了・コミット（a591aa1）により、Phase1〜4の純粋ロジックが揃った。Phase5（本番配線+Multiplayer疎通）とPhase6（Debug UI拡張）はファイルが重ならないため、2つのCodexエージェントへ並列委譲する。
-
-- Phase5対象: 新規`src/input/ora/ora-production-input.ts`、`src/rendering/boss/BossArenaScene.tsx`（アダプタ選択構造への書き換え）、`src/multiplayer/`配下の疎通確認（grepのみ、変更は原則なし）
-- Phase6対象: `src/ui/ora-debug/OraDebugPage.tsx`（既存ARuco PoC部分は変更せず新セクション追加）、必要なら同ディレクトリのCSS/新規ヘルパー
-
-相互不可侵: Phase5は`OraDebugPage.tsx`に触れない。Phase6は`BossArenaScene.tsx`・`ora-production-input.ts`に触れない。両者とも`src/input/ora/`の既存純粋ロジックファイル（Phase1〜4）は変更せず呼び出すだけ。
-
-完了後、それぞれこのファイルへ`## Phase5 レビュー`/`## Phase6 レビュー`を追記する。コミット・push・PR作成は行わない（Claudeがレビュー後にコミット）。
-
-## Phase5 実装計画: Production Input 配線
-
-### 設計判断
-
-- 新規`ora-production-input.ts`にカメラ、手検出、RMS解析、SpeechRecognition、Calibration、既存純粋Recognizerの接続を閉じ込める。外へ出すのは`GameAction`、Calibration状態、ステータスだけにする。
-- マイク解析は既存のWeb Audio解析セッションを再利用し、Analyserの時間波形から50ms間隔でRMSを計算する。音声候補の強度は発話区間の最大RMSを基準音量で正規化し、SpeechRecognition非対応時はVoice ATTACKだけ無効化して手入力を継続する。
-- `BossArenaScene.tsx`は`isOra`の値が変わる境界だけでEffectを張り直す。Keyboardは`kind: 'keyboard'`として`pollMove()`し、Oraは検出フレームpushの`kind: 'ora'`として扱う。リモートはsnapshotの`characterId`でORAを判定し、Multiplayer protocolは変更しない。
-- 初期化失敗はAdapterがステータス通知後にPromiseをrejectし、Sceneが必ずcatchする。DEVだけKeyboardへfallbackし、本番では入力をattachせずエラー表示に留める。
-
-### ゲート分割
-
-- [x] Gate 1: Production AdapterのCalibration前抑止、MOVE/ATTACK/CHARACTER_ACTION変換、SpeechRecognition非対応、detach解放のテストを追加し、未実装REDを確認する。
-- [x] Gate 2: `ora-production-input.ts`を実装し、AdapterテストをGREENにする。
-- [x] Gate 3: BossArenaSceneの`isOra`境界選択、Keyboard限定poll、DEV fallback、Calibration表示を実装し、型検査で確認する。
-- [x] Gate 4: 指定テスト・型チェック・対象lint・Multiplayer経路grep・差分範囲確認を行う。
-
-### 対象外
-
-- `src/ui/ora-debug/`配下は変更しない。
-- 既存の`src/input/ora/*recognizer.ts`、`ora-input-adapter.ts`、`GameAction`、`src/multiplayer/`の同期スキーマは変更しない。
-- コミット・push・PR作成は行わない。
-
-## Phase5 レビュー
-
-- `src/input/ora/ora-production-input.ts`を追加し、Webcam、MediaPipe、Web Audio RMS、SpeechRecognition、Calibration、既存Recognizerを境界層へ接続した。Calibration完了まではGameActionを発火せず、状態と進捗をコールバックで公開する。
-- `src/rendering/boss/BossArenaScene.tsx`をKeyboard/Oraのアダプタ選択構造へ変更した。ローカルは`ora`、リモートはsnapshotの`characterId === 'ORA'`で判定し、Keyboardの`pollMove()`はKeyboardモードだけで呼ぶ。DEVのみ初期化失敗時にKeyboardへfallbackし、本番ではエラー表示に留める。
-- `src/input/ora/ora-production-input.test.ts`と`src/rendering/boss/BossArenaScene.test.tsx`を追加した。Calibration前抑止、GameAction変換、SpeechRecognition非対応、リソース解放、ローカル/リモートのORA判定を確認した。
-- Multiplayer経路をgrep・確認した結果、Production Adapterから渡るのは既存の`GameAction`のみ。`remote-battle-source`→`RealtimeBattleClient`→`ACTION`→`protocol.isGameAction`の経路にMediaStream、PCM、カメラ画像を渡す箇所はなく、`src/multiplayer/`の変更は不要だった。
-- 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/71テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過。`git diff --check`も空白エラーなし。
-- Phase6の`src/ui/ora-debug/`配下の並列作業ファイルは変更していない。コミット・push・PR作成は未実施。
-
-## Phase5 実機バグ修正（PR #125 レビュー指摘）
-
-PR #125をpushした後の実機確認で3件の不具合が判明したため修正した。
-
-1. **Calibration UXに発声指示がない**: `BossArenaScene.tsx`のオーバーレイが「両手を自然な位置に構えてください…{進捗%}」の1文のみで、声量Calibrationのために発声が要ることを一切示していなかった。`OraCalibrationState`の`handComplete`/`voiceComplete`を個別に見て、未完了の項目だけ「両手を画面下寄りの自然な位置に構えてください」「「オラ！」と一度声に出してください」を出し分けるよう修正。
-2. **「オラ！」でATTACKが発火しない**: `ora-production-input.ts`の`intensityBetween()`が、わっしょい用（シャウト前提、threshold〜RMS1.0を線形正規化）の`toIntensity`をそのまま流用し、さらにCalibration中にたまたま拾った1回の音量（baseline）で割っていた。通常会話のRMS(0.01〜0.03程度)は`baseline`次第で`voiceAttackRecognizer`の`minIntensity: 0.2`を安定して超えられず、ほとんどの発話が棄却されていた。baseline比をやめ、`normalizeOraSpeechIntensity()`（RMS 0.06を天井とする発話向けの絶対スケール）に置き換えた。Calibration用の`voiceCalibrator`（Phase3B用に温存）自体は変更していない。
-3. **「オラオラ」で連続攻撃にならない**: `handleSpeechResult`が1発話から生成された複数hitを、タイムスタンプを無視して同一フレームで同期的に一括emitしていた。`attack-combo.ts`の`nextComboStep`は直前の段が`DONE`（最短500ms）になるまで次の入力を拒否するため、実質1発しか通らなかった。`scheduleAttack()`で`attackIndex * 140ms`ずつ`setTimeout`により分散発火するよう修正し、`detach()`で未発火タイマーを全解除するようにした（同一発話内の連呼が高速コンボにならないのはキーボード連打と同じ制約として許容し、`attack-combo.ts`側は変更していない）。
-
-- 追加テスト: 通常音量がbaselineに左右されずATTACKを通す回帰テスト、複数hitの140ms間隔分散emitの確認、detach後に予約済みATTACKが発火しないことの確認。
-- 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/74テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過（Claudeが独立再実行して確認済み）。
-- `src/ui/ora-debug/`配下（Phase6並列作業）には触れていない。コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
-
-## Phase5 UX修正 + 実機調査ツール（PR #125 レビュー指摘つづき）
-
-追加の実機フィードバック（左手のAir Joystick可視化がない、Calibration案内が3Dワールド内・マップ中央に表示されて邪魔、「オラ」のRMSが0.1程度までしか出ないが依然ATTACKが発火しない）に対応した。
-
-1. **Calibration案内・エラー表示を3D Billboardから画面固定2D HUDへ移動**（Codex実装）: `<Billboard>`（`BOSS_ANCHOR`=マップ中央付近に描画）をやめ、`@react-three/drei`の`<Html fullscreen>`で画面上部固定に変更。
-2. **左手Air Joystickインジケータを新規追加**（Codex実装）: `ora-production-input.ts`に`onHandTrackingFrame`コールバックを追加し、`processFrame`から毎フレーム（Calibration中も含め）手位置とNeutralを公開。`BossArenaScene.tsx`側はReact stateを使わず`useRef`でDOM要素のstyleを直接書き換える設計（既存の「位置はstateへ入れない」方針を踏襲）。クランプ半径は`hand-joystick.ts`から新規exportした`DEFAULT_HAND_JOYSTICK_OPTIONS`を再利用し、UI側で定数を複製していない。
-3. **実機調査用のデバッグ状態パネルを追加**（Claude実装）: Claudeがブラウザ自動操作（Claude in Chrome）で実機を直接操作し、SpeechRecognitionの実際の動作を切り分け調査した。孤立したWeb Speech APIテストでは正常動作を確認したが、アプリの実`handleSpeechResult`へ合成「オラ」resultを注入するテストでは、Calibration完了ゲート（`!handCalibrator.isComplete() || !voiceCalibrator.isComplete()`）が音声処理そのものを止めていることを確認した（手のCalibrationが完了していないとATTACKは一切評価されない）。この切り分けをDevToolsなしで実機でも追えるよう、`onVoiceCandidate`コールバックを追加し、`candidate`計算をCalibration完了ゲートより前へ移動（Calibration未完了でも直近の認識結果・intensity・hit数を公開するように変更）。`BossArenaScene.tsx`の新HUDへ、DEV限定で`hand`/`voice`/`speech`/`candidate`/`intensity`/`hits`を表示する小さな状態パネルを追加した。
-
-- 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/75テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過。
-- ユーザーへ、フルリロード後にオラ大輔を選び直し、画面右上のDEVパネルで`hand`/`voice`/`speech`/`candidate`の実値を見ながら再テストするよう依頼中。ATTACKが依然発火しない場合、この表示から原因（Calibration待ちか、キーワード判定棄却か）を直接特定できる。
-- コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
-
-**訂正（ユーザー実機フィードバックで判明）**: 「オラ」自体はATTACK発火するようになったが、上記3で追加したHUD（Calibration案内/Air Joystick/デバッグパネル）は実機で画面上を意図せず動いた。原因は`drei`の`<Html fullscreen>`がCanvas（`BossArenaScene`はCanvas内）のDOM座標に追従する実装であるのに対し、既存の`PlayerSwitch`/`MicrophoneDebug`（`src/ui/player-switch/`, `src/ui/debug/MicrophoneDebug.tsx`）はCanvasの外側（`App.tsx`の兄弟要素）に素のCSS `position: absolute`で置かれた別コンポーネントであるため。`Html`ベースの実装をやめ、同じ「Canvas外の兄弟コンポーネント＋共有ストア」パターンへ作り直す（Phase5後続タスクとして着手）。
-
-## Phase6 レビュー
-
-- `src/ui/ora-debug/OraDebugPage.tsx`に2行だけ追記（`MarkerlessVoiceDebugPanel`のimportとレンダー）。既存のARuco PoC部分・`OraDebugPage.tsx`本体のロジックは変更していない。
-- 新規`src/ui/ora-debug/MarkerlessVoiceDebugPanel.tsx`（792行）で、Phase1〜4の既存純粋ロジック（`hand-calibration`, `hand-detector`, `hand-joystick`, `ora-action-recognizer`, `voice-attack-recognizer`, `voice-calibration`）を独自にカメラ/マイク/SpeechRecognitionへ配線し、Camera/Mic状態・両手位置・Voice combo・ORA_ACTION進行度を表示する。Production Adapter（`ora-production-input.ts`）とは別配線（Debug専用、意図的な重複を許容する方針どおり）。
-- 新規`src/ui/ora-debug/markerless-debug-helpers.ts`（表示用フォーマット・エラー分類・RMS計算の純粋関数）とそのテスト。
-- 検証結果: `pnpm vitest run src/input/ora src/ui/ora-debug` は11ファイル/65テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/ui/ora-debug` 通過（Claudeが独立再実行して確認済み）。
-- `BossArenaScene.tsx`・`ora-production-input.ts`（Phase5側）には触れていない。
-
-## Phase5 HUD配置修正 + Phase3B（音量→ダメージ倍率）
-
-実機フィードバック2件（HUDがCanvasスクロールに引っ張られてズレる、カメラの左右が反転している）と、ユーザー承認済みの選択肢1・2に対応した。並列で2タスクをCodexへ委譲。
-
-### HUD配置修正（Codex実装）
-
-- 原因: `BossArenaScene.tsx`（Canvas内）の`<Html fullscreen>`がCanvasのDOM座標に追従する実装だったため、既存の`PlayerSwitch`/`MicrophoneDebug`（Canvas外、素のCSS `position: absolute`）と挙動が異なりズレていた。
-- 新規`src/store/ora-status-store.ts`（Zustand + `subscribeWithSelector`）で`active`/`calibration`/`status`/`voiceCandidate`/`handTrackingFrame`を保持。`BossArenaScene.tsx`は各コールバックでこのストアのsetterを呼ぶだけになり、`<Html>`・ローカルstate・`airJoystickDot`ref一式を削除した。
-- 新規`src/ui/ora-status/OraStatusHud.tsx`（Canvas外、`PlayerSwitch`と同じ配置パターン）。高頻度更新の`handTrackingFrame`だけは`useOraStatusStore.subscribe(selector, callback)`のtransient updatesパターンでDOM直接更新し、React再レンダーを起こさない。他の低頻度項目は通常の`useStore(selector)`。
-- `src/app/App.tsx`の`WORLD`・`GAME`（本番マルチプレイ）両画面へ`<OraStatusHud />`を追加。
-- 検証: 全体`pnpm vitest run src`は98ファイル/1032テスト通過、`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`とも全体通過（Claudeが独立再実行して確認済み）。
-
-### 選択肢1・2（Codex実装）
-
-- Gate1: `voice-attack-recognizer.ts`の`minIntensity`既定値を`0.2`→`0.05`へ。キーワード一致（オラ/おらが発話の主要部分）を主な誤発火防止とし、音量ゲートは無音・環境ノイズの除外だけに役割を絞った。
-- Gate2 (Phase3B): `GameAction`の`ATTACK`だけに任意の`intensity?: number`を追加（他の離散アクションは不変）。`protocol.ts`の`isGameAction`をATTACK用に拡張（`isWasshoiEvent`と同型パターン）。`attack-combo.ts`に`damageMultiplierForIntensity()`を追加し、`phase2-player-balance.ts`の`ORA_VOICE_DAMAGE_MULTIPLIER_MIN/MAX`（0.85/1.30）へ線形マッピング、**受信値を`Math.min/Math.max`でクランプ**（Authority側でネットワーク越しの値を信用しない設計、コメントで明記）。`ComboSwing`へ`damageMultiplier?`を追加し、`player-state.ts`の`startAttack(intensity)`→`swing`→ダメージ計算（`damageScale * (damageMultiplier ?? 1)`）まで通した。`ora-production-input.ts`は`{type:'ATTACK', intensity: attack.intensity}`を送るよう変更。
-- VFX/SE/カメラシェイクは今回もスコープ外のまま（インフラ未整備、指示どおり）。
-- 検証: 上記HUD修正と合わせて全体テストスイートで確認済み。
-
-### Claude側の追加修正（レビュー中に発見）
-
-- **カメラの左右反転**: `hand-detector.ts`の`createHandPosition`で、フロントカメラの生フレームxをそのまま使っていたため、鏡を見る感覚と逆方向に手を動かした扱いになっていた（プレイヤーが自分の左へ手を動かすと`right > 0`になり、キャラが右へ動く逆転現象）。`mirroredX = 1 - wrist.x`を導入して修正。`hand-detector.test.ts`の期待値をミラー後の値へ更新。ORA_ACTIONの`abs(left.x - right.x)`は両手とも同じミラーを受けるため symmetric、影響なし。
-
-### 別Issue切り出し
-
-- 合掌ジェスチャーでのREVIVE（蘇生）は#113のスコープ外として [#134](https://github.com/KOU050223/the-legend-of-nelda/issues/134) を新規作成した。
-
-## 独立バグレビュー（Claude + Codex）と修正
-
-`speech: error (error)`のまま固まる実機報告をきっかけに、Claude自身の修正（no-speechを致命的エラー扱いしていた不具合）に加えて、Codexへ独立したバグ探しレビューを依頼した。Claudeの発見を伏せた状態でCodexにレビューさせ、7件（Major 5 / Minor 2）+ 要確認1件を検出。全件Claudeが該当コードを読んで独立に再検証し、事実と確認した。
-
-1. **[Major] 手を見失うとMOVEが残り続ける**: Calibration未完了時にMOVE自体を送らずreturnしていたため、`player-state.ts`に残った直前の移動入力が更新されずキャラが走り続けた（Phase2 DoD「Hand LostでNeutral復帰」違反）。MOVEを手のCalibrationだけに依存させ、Calibration中も含め毎フレーム送るよう修正（Claude修正、`c3546c6`）。
-2. **[Major] 手を見失った後も予約済みATTACKが発火する**: 複数hitの遅延emit用タイマーがdetach()でしか解除されず、Calibration崩壊後も発火し得た。Calibration崩壊時に`clearPendingAttacks()`するよう修正（Claude修正、`c3546c6`）。
-3. **[Major] 許可待ち中のキャラ切替・StrictModeで初期化を中断できない**: `AbortController`/`signal`を`ora-production-input.ts`・`BossArenaScene.tsx`へ導入し、各await直後で中断を検知して取得済みリソースを解放するよう修正（Claude修正、`c3546c6`）。**ただしgetUserMediaの許可ダイアログ自体はブラウザ側の制約でページから中断できないため、ダイアログを放置され続けるケースは残存する（保持時間の短縮であり完全な解決ではない）**。
-4. **[Major] SpeechRecognition非対応/致命的エラーが本番HUDで見えなくなる**: Calibration完了で`phase`が`'active'`になり、`status.phase==='error'`だけを見ていたHUDのエラー表示条件から漏れていた。`speechRecognition`が`unavailable`/`error`のときの非DEV限定通知を追加（Codex修正）。
-5. **[Major] 非オラ大輔プレイヤーも音声ダメージ倍率を悪用できる**: `protocol.ts`はキャラ種別を見ずintensityを受理し、`player-state.ts`もcharacterIdを見ず倍率を適用していたため、細工したクライアントで全キャラが最大1.30倍を得られた。`characterId === 'ORA'`のときだけintensityを`startAttack`へ渡すよう修正（Codex修正、`b0023eb`）。
-6. **[Minor] Debug UIの音量スケールが本番と食い違う**: `MarkerlessVoiceDebugPanel.tsx`がわっしょい用の`toIntensity`（RMS 1.0天井）を使っており、本番で通る発話がDebug上ではhits 0に見えていた。`ora-production-input.ts`の`normalizeOraSpeechIntensity`をexportし再利用するよう修正（Codex修正）。
-7. **[Minor] Debug UIの検出ループ例外でカメラ資源が残る**: rAFループ本体にtry/catchが無かった。追加した（Codex修正）。
-
-要確認だった「audio-capture等の持続エラーで無限リトライになりうる」点は、実機のエラーコード依存のため保留（現状は許容範囲と判断）。
-
-- 検証: 全体`pnpm vitest run src`は99ファイル/1042テスト通過、`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`とも全体通過（Claudeが独立再実行して確認済み）。
-- コミット: `c3546c6`（Finding1・2・3、Claude）、`b0023eb`（Finding5、Codex）、`98ab6cb`（Finding4・6・7、Codex）。
-
-## mainの取り込み（`0e10192`）
-
-45コミット遅れていた`origin/main`を取り込んだ。コンフリクトは`src/app/App.tsx`と`src/rendering/boss/BossArenaScene.tsx`の2ファイルで、いずれも意味を確認しながら手動解決した（機械的にどちらか一方を採用していない）。
-
-- `App.tsx`: GAME画面で`<FirstPersonHealthHud />`/`<VoiceHud />`（main側、一人称HUD・LiveKitボイスチャットHUD）と`<OraStatusHud />`（こちら側）が同じ挿入位置で競合。両方無関係な機能なので両方残した。
-- `BossArenaScene.tsx`: mainが追加した「カメラ相対移動」（`cameraInputYawRef`・`toCameraRelativeMovement`、3人称/一人称カメラ向けにWASD入力をカメラ向きに合わせて回転させる機能）と、こちら側のOraアダプタ選択構造（`SceneInput`共用体、`attachKeyboard()`/Ora分岐）が同じ入力配線箇所で競合。**カメラ相対移動はKeyboard入力にだけ適用し、Ora入力（`AttachInputAdapter`経由でMOVEが既に正規化済み）には適用しない**という判断で、`attachKeyboard()`内の離散アクション時ポーリングと`useFrame`内の毎フレームポーリングの両方に`toCameraRelativeMovement`を適用する形へ統合した。Oraのアダプタ選択構造自体（`inputRef`の型、`abortController`等）はそのまま維持。
-- 検証: マージ後に全体`pnpm vitest run src`（108ファイル/1121テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`を実行し、すべて通過を確認した。
-- **重要な副次情報**: mainの取り込みにより、LiveKitボイスチャットが`?debug=voice`の検証専用ページだけでなく、**通常のGAME/WORLD画面へ本番導線として統合された**（`MultiplayerVoiceSessionProvider`, `VoiceHud`）。以前ユーザーへ「LiveKitは本番未統合なので競合しない」と回答したが、この状況は変わった。オラ大輔選択中に音声チャットも同時に有効な場合、マイク二重使用・スピーカー再生の回り込みによる誤発話判定への影響を今後検証する必要がある（未検証、要フォローアップ）。
-- push・PR作成は未実施。
-
-## main取り込み後の実機フィードバック対応
-
-1. **Oraの移動がカメラ相対になっていなかった**: main取り込みで導入されたカメラ相対移動（`toCameraRelativeMovement`）はKeyboard入力にしか適用しておらず、Oraの手検出MOVEは画面座標系のまま出ていたため、カメラを回すとKeyboardとOraで移動方向の感覚が食い違っていた。`submitFromOra`という薄いラッパーを追加し、Ora由来のMOVEアクションにも同じ`toCameraRelativeMovement(input, cameraInputYawRef.current)`を適用するよう修正した。
-2. **ATTACKが手のCalibration状態に引きずられて頻繁に失敗する**: `handleSpeechResult`が`handCalibrator.isComplete() && voiceCalibrator.isComplete()`の両方を見ており、実プレイ中に手が一瞬フレーム外へ出ただけで（移動やORA_ACTIONの合間によく起きる）、その瞬間に発話した「オラ」がまるごと評価されずに消えていた。ATTACKは音声だけの入力なので、声のCalibration（`voiceCalibrator.isComplete()`）だけをゲートにするよう変更。合わせて`processFrame`側の手Calibration崩れ時のリセットも、ORA_ACTION（両手が要る）だけを対象にし、`voiceAttackRecognizer.reset()`/`clearPendingAttacks()`を手の状態から切り離した（声のCalibrationは一度完了すると崩れないため、これらの呼び出しは実質不要だった）。「ボイスでの攻撃がなかなか成功しない」というユーザー報告の主要因と見ている。
-
-- 検証: `pnpm vitest run src`（108ファイル/1122テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。既存の「手を見失うと予約済みATTACKも発火しない」テストは新しい正しい仕様（ATTACKは手の状態と無関係に発火する）に合わせて書き換えた。
-
-## 実機フィードバック追加対応（candidateは正しいがhits:0）
-
-3. **連呼発話の音量ピーク検出漏れ**: 「おらおらおら…」のように短い無音(hangoverMs=300ms超)を挟んで連呼すると、独自の発話区間トラッキング(`speechStartedAt`)が無音のたびに区切り直り、SpeechRecognitionがまとめて返す1つのfinal結果に対して、言い終わりの最後の1区間だけを見て音量ピークを過小評価していた（言い終わりで声が小さくなると`hits: 0`になる）。`earliestPendingSpeechAt`を追加し、`handleSpeechResult`が消費するか`MAX_UTTERANCE_GAP_MS`(800ms、自然な連呼の間隔より長いがCalibration時の音量等の無関係な過去を引きずらない値)を超える無音があるまでは「本当の発話開始時刻」を覚えておくよう修正。「candidateは正しく認識できているのにhitsが0」というユーザー報告と一致する不具合だった。
-4. **オラ大輔のATTACKを連呼するたびに必ず1回当てる（ユーザーの明示的な設計判断）**: 従来はキーボードと同じコンボの受付判定(`nextComboStep`、直前の振りがDONEになるまで次を弾く、1段あたり500〜950ms)を全キャラ共通で通しており、オラ大輔の音声ATTACKも連呼すると大半が物理的に弾かれていた。「オラオラ言うたびに1攻撃でいい」という明示的な要望を受け、`player-state.ts`にオラ大輔専用の`startVoiceAttack()`を新設し、コンボの受付判定を通さず常に新しいswingへ差し替えて即座に命中させるよう変更。見た目の「振っている」扱い（`isSwinging`/`isBusy`、移動ロック）はstep0のタイミングをそのまま流用する。キーボード操作の他キャラ（オドルノ/Pay）は従来どおりコンボ制限を受ける。
-5. **マイクパネルの誤解を招くUI**: ワールド画面に常時表示される「MICROPHONE」パネル（Pay大輔のオカリナ/わっしょい調整用、Issue #43、`MicrophoneDebug.tsx`）はオラ大輔の音声入力とは完全に無関係だが、同じ「マイク入力を有効にする」ボタンが常に見えているため「オラを使う前に毎回これを押す必要がある」という誤解を招いていた。オラ大輔選択中は`MicrophoneDebugPanel`を非表示にするよう`App.tsx`を修正。
-
-- 検証: `pnpm vitest run src`（108ファイル/1126テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。`player-state.test.ts`の「攻撃の途中で復元しても、同じ時刻に判定が出る」テストは、オラ大輔専用の即時命中設計により意味が変わったため、汎用キャラ（PAY）でのテストに戻し、オラ大輔向けには別途「復元しても二重に判定しない」テストを追加した。
-
-## 「オラって言った瞬間に攻撃したい」への対応
-
-6. **SpeechRecognitionの確定(isFinal)を待たない**: `recognition.interimResults`を`false`から`true`へ変更し、`handleSpeechResult`がisFinalを問わず暫定結果の時点でキーワード判定・ATTACK発火まで行うよう変更した。Chromeの確定結果はSTT処理の都合で数百ms〜1〜2秒程度遅れることがあり、「オラと言ってから攻撃が出るまでの体感遅延」の主因だったため。同じ発話（同じSpeechRecognitionの`resultIndex`）への後続のinterim更新やfinal確定で二重に発火しないよう、マッチした時点のindexを`firedResultIndex`として記録し、それ以下のindexは無視する。まだ何にもマッチしていない発話（インデックスは同じだが内容が育っていく途中）は、確定を待たず毎回の更新で再評価する。SpeechRecognitionが再起動すると内部の結果indexは0から数え直されるため、再起動のたびに`firedResultIndex`もリセットする。
-
-- トレードオフ: 暫定結果は最終確定より認識精度がやや落ちる（後で内容が変わる可能性がある）が、「オラ」のような短い単語では実害が小さいと判断した。キーワード一致（「オラ」が発話の主要部分）という既存の誤発火防止はそのまま効く。
-- 検証: `pnpm vitest run src`（108ファイル/1129テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。interim反応・二重発火防止・未マッチ時の再評価継続を検証する新規テストを追加した。
-- コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
+- **既存テストを1件も書き換えずに済ませた**。新規 Intentional Bug の抽選を
+  `fluffy-futon` が既に持つ `random` へ相乗りさせると、`random: () => 0` の
+  ように乱数を固定しただけの無関係なテスト（`combat-session` 系など）が
+  まるごとこの確率へ巻き込まれる。`blowAway` を別の述語として分け、
+  ライブラリ側の既定を「抽選しない」にして合成点の `App.tsx` で有効化した。
+- **進行不能を作らないことを設計で担保した**。抽選は布団の生成時に1回だけ引き、
+  着弾時には引き直さない（同期破綻の防止）。HIT State へは通常どおり進む
+  （サイクル停止の防止）。眠気が増えない方向にしか倒れない（詰みの防止）。
+- `pnpm format:check` はベースラインから失敗している（Windows の CRLF と
+  `CLAUDE.md` の symlink）。本Issueとは無関係。`pnpm format` を引数なしで
+  走らせると `CLAUDE.md` を壊すため、変更したファイルのみを対象にした。
