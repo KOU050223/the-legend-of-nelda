@@ -16,9 +16,11 @@ export const PHASE2_KEY_BINDINGS: Readonly<Record<string, DiscreteGameActionType
   KeyJ: 'ATTACK',
   ShiftLeft: 'DODGE',
   KeyK: 'DODGE',
-  KeyE: 'INTERACT',
-  /** 蘇生は連打する入力なので、押しやすい位置に置く (§5.3)。 */
+  /** 蘇生は連打する入力なので、押しやすい位置に置く (§5.3)。E/Fどちらでも可。 */
+  KeyE: 'REVIVE',
   KeyF: 'REVIVE',
+  /** Eを蘇生へ譲るため、インタラクトはRへ割り当てる。 */
+  KeyR: 'INTERACT',
   KeyQ: 'CHARACTER_ACTION',
 };
 

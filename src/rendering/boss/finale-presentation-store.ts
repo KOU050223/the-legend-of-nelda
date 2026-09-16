@@ -12,6 +12,8 @@ export interface PlayedMelodyNote {
 export interface FinalePresentationSnapshot {
   readonly phase: BossPhase;
   readonly finale: FinaleState;
+  readonly localPlayerId: string;
+  readonly ocarinaPerformerId: string | null;
   readonly zeroDamageSequence: number;
   readonly microphoneStatus: MicrophoneInputStatus;
   /** 実際にマイクから確定した音だけを、五線譜へ表示する。 */
@@ -27,6 +29,8 @@ export interface FinalePresentationSnapshot {
 const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
   phase: 'INTRO',
   finale: 'NONE',
+  localPlayerId: '',
+  ocarinaPerformerId: null,
   zeroDamageSequence: 0,
   microphoneStatus: 'idle',
   playedMelodyNotes: [],
@@ -37,6 +41,33 @@ const INITIAL_SNAPSHOT: FinalePresentationSnapshot = {
 
 let snapshot = INITIAL_SNAPSHOT;
 const listeners = new Set<() => void>();
+let claimOcarina: (() => void) | null = null;
+let melodyAudioComplete: (() => void) | null = null;
+let finalStandoffAudioComplete: (() => void) | null = null;
+
+export function setOcarinaClaimHandler(handler: (() => void) | null): void {
+  claimOcarina = handler;
+}
+
+export function requestOcarinaClaim(): void {
+  claimOcarina?.();
+}
+
+export function setMelodyAudioCompleteHandler(handler: (() => void) | null): void {
+  melodyAudioComplete = handler;
+}
+
+export function notifyMelodyAudioComplete(): void {
+  melodyAudioComplete?.();
+}
+
+export function setFinalStandoffAudioCompleteHandler(handler: (() => void) | null): void {
+  finalStandoffAudioComplete = handler;
+}
+
+export function notifyFinalStandoffAudioComplete(): void {
+  finalStandoffAudioComplete?.();
+}
 
 export function getFinalePresentationSnapshot(): FinalePresentationSnapshot {
   return snapshot;
@@ -51,6 +82,8 @@ export function publishFinalePresentation(next: FinalePresentationSnapshot): voi
   if (
     snapshot.phase === next.phase &&
     snapshot.finale === next.finale &&
+    snapshot.localPlayerId === next.localPlayerId &&
+    snapshot.ocarinaPerformerId === next.ocarinaPerformerId &&
     snapshot.zeroDamageSequence === next.zeroDamageSequence &&
     snapshot.microphoneStatus === next.microphoneStatus &&
     snapshot.playedMelodyNotes === next.playedMelodyNotes &&

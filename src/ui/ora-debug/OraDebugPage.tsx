@@ -12,6 +12,7 @@ import type {
 } from '@/input/ora/types';
 import { requestWebcam, stopWebcam } from '@/input/ora/webcam';
 
+import { MarkerlessVoiceDebugPanel } from './MarkerlessVoiceDebugPanel';
 import styles from './OraDebugPage.module.css';
 
 const emptyObservation: MarkerObservation = { capturedAt: 0 };
@@ -232,6 +233,7 @@ export function OraDebugPage(): React.JSX.Element {
           </div>
         </dl>
       </section>
+      <MarkerlessVoiceDebugPanel />
     </main>
   );
 }

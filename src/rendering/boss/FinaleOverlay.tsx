@@ -11,12 +11,19 @@ import horiMemory4 from '../../../assets/character/hori-daisuke-v1/source/daisuk
 import horiSleepingMovie from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori_SleepingMovie.mov';
 import { useScreenStore } from '@/app/screen';
 
-import type { PlayedMelodyNote } from './finale-presentation-store';
+import {
+  notifyMelodyAudioComplete,
+  notifyFinalStandoffAudioComplete,
+  requestOcarinaClaim,
+  type PlayedMelodyNote,
+} from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
 
 export interface FinaleOverlayProps {
   readonly phase: BossPhase;
   readonly finale: FinaleState;
+  readonly localPlayerId: string;
+  readonly ocarinaPerformerId: string | null;
   /** 同じ文言を再生し直すための連番。0なら表示しない。 */
   readonly zeroDamageSequence: number;
   readonly microphoneStatus: MicrophoneInputStatus;
@@ -30,6 +37,8 @@ export interface FinaleOverlayProps {
 export function FinaleOverlay({
   phase,
   finale,
+  localPlayerId,
+  ocarinaPerformerId,
   zeroDamageSequence,
   microphoneStatus,
   playedMelodyNotes,
@@ -69,6 +78,7 @@ export function FinaleOverlay({
     return (
       <section className={styles.overlay} aria-live="polite">
         <div className={styles.cinematic}>
+          <FinalStandoffVoice />
           <p className={styles.chapter}>FINAL STANDOFF</p>
           <p className={styles.line}>
             「……無駄だ。」
@@ -84,7 +94,7 @@ export function FinaleOverlay({
   }
 
   if (finale === 'MELODY_ACCEPTED') {
-    return <MelodyAccepted />;
+    return <MelodyAccepted onAudioEnded={ocarinaPerformerId === localPlayerId} />;
   }
 
   if (finale === 'MEMORY') {
@@ -109,7 +119,7 @@ export function FinaleOverlay({
             </div>
           ) : (
             <>
-              {performing ? (
+              {performing && ocarinaPerformerId === localPlayerId ? (
                 <SheetMusic
                   microphoneStatus={microphoneStatus}
                   playedNotes={playedMelodyNotes}
@@ -117,13 +127,26 @@ export function FinaleOverlay({
                   expectedNote={melodyExpected}
                   showNextHint={showMelodyHint}
                 />
-              ) : (
+              ) : ocarinaPerformerId === null ? (
                 <div className={styles.ocarinaPrompt}>
                   <p>
                     伝説のオカリナが
                     <br />
                     あなたたちに応えている……
                   </p>
+                  <strong>最初にオカリナを取れ</strong>
+                  <button
+                    className={styles.startMelody}
+                    type="button"
+                    onClick={() => {
+                      requestOcarinaClaim();
+                    }}
+                  >
+                    オカリナを取る
+                  </button>
+                </div>
+              ) : ocarinaPerformerId === localPlayerId ? (
+                <div className={styles.ocarinaPrompt}>
                   <strong>伝説のオカリナを奏でよ</strong>
                   <button
                     className={styles.startMelody}
@@ -135,6 +158,11 @@ export function FinaleOverlay({
                   >
                     演奏を始める
                   </button>
+                </div>
+              ) : (
+                <div className={styles.ocarinaPrompt}>
+                  <p>仲間が伝説のオカリナを手に取った。</p>
+                  <strong>演奏を見守ろう</strong>
                 </div>
               )}
             </>
@@ -148,11 +176,31 @@ export function FinaleOverlay({
   return null;
 }
 
+/** フィールド全体に響く台詞。終了後は残響だけを少し残す。 */
+function FinalStandoffVoice(): React.JSX.Element {
+  return (
+    <audio
+      autoPlay
+      src="/audio/daisuke_hori_breakVoice.mp3"
+      onEnded={() => window.setTimeout(notifyFinalStandoffAudioComplete, 700)}
+    >
+      <track kind="captions" srcLang="ja" label="台詞" />
+    </audio>
+  );
+}
+
 /** 旋律完成の一瞬だけ、画面を止めたように見せて回想へ繋ぐ。 */
-function MelodyAccepted(): React.JSX.Element {
+function MelodyAccepted({ onAudioEnded }: { onAudioEnded: boolean }): React.JSX.Element {
   return (
     <section className={`${styles.overlay} ${styles.melodyAccepted}`} aria-live="assertive">
       <div className={styles.melodyFlash} />
+      <audio
+        autoPlay
+        src="/audio/okarina_zelda.wav"
+        onEnded={onAudioEnded ? notifyMelodyAudioComplete : undefined}
+      >
+        <track kind="captions" srcLang="ja" label="歌詞なし" />
+      </audio>
       <p className={styles.melodySmall}>THE LEGENDARY MELODY HAS BEEN PLAYED</p>
       <h1 className={styles.melodyTitle}>安 眠 の 旋 律</h1>
       <p className={styles.melodyLine}>「……この音は……？」</p>
@@ -324,7 +372,6 @@ function Ending(): React.JSX.Element {
           className={styles.returnTitle}
           type="button"
           onClick={() => {
-            window.dispatchEvent(new Event('finale:ending-complete'));
             goTo('TITLE');
           }}
         >

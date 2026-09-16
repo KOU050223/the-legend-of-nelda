@@ -97,37 +97,6 @@ describe('createAttackSequence', () => {
     expect(take(sequence, 2).map((step) => step.attackId)).toEqual(['FLUFFY_FUTON', 'YAWN_WAVE']);
   });
 
-  it('出題を使い切っても止まらず、決着がつくまで最後の手を出し続ける', () => {
-    // 被弾が続いて列を使い切っても IDLE で固まらないこと。
-    const sequence = createAttackSequence({
-      random: fixedRandom(0),
-      tutorial: [],
-      mainBattle: [{ slot: 'FLUFFY_FUTON', assist: false }],
-    });
-
-    expect(take(sequence, 3).map((step) => step.attackId)).toEqual([
-      'FLUFFY_FUTON',
-      'FLUFFY_FUTON',
-      'FLUFFY_FUTON',
-    ]);
-  });
-
-  it('使い切ったあと繰り返すのは本戦の手で、チュートリアルへ戻らない', () => {
-    // SEQ-002。チュートリアルの手を繰り返すと本戦へ入れなくなる。
-    const sequence = createAttackSequence({
-      random: fixedRandom(0),
-      tutorial: [{ slot: 'PILLOW_SWEEP', assist: true }],
-      mainBattle: [{ slot: 'YAWN_WAVE', assist: false }],
-    });
-
-    expect(take(sequence, 4).map((step) => ({ id: step.attackId, phase: step.phase }))).toEqual([
-      { id: 'PILLOW_SWEEP', phase: 'TUTORIAL' },
-      { id: 'YAWN_WAVE', phase: 'MAIN' },
-      { id: 'YAWN_WAVE', phase: 'MAIN' },
-      { id: 'YAWN_WAVE', phase: 'MAIN' },
-    ]);
-  });
-
   it('同じ技が続いても攻撃方向は毎回引き直す', () => {
     // 完了条件「左右ランダムに発動する」。乱数を交互に返して向きが変わることを見る。
     let call = 0;

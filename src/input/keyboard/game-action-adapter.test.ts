@@ -32,20 +32,22 @@ function release(code: string): void {
 }
 
 describe('キーボードから全アクションを出せる', () => {
-  it('攻撃・回避・インタラクト・蘇生・キャラ固有がすべて出る', () => {
+  it('攻撃・回避・蘇生・インタラクト・キャラ固有がすべて出る', () => {
     const { actions } = setup();
 
     press('Space');
     press('ShiftLeft');
     press('KeyE');
     press('KeyF');
+    press('KeyR');
     press('KeyQ');
 
     expect(actions.map((action) => action.type)).toEqual([
       'ATTACK',
       'DODGE',
-      'INTERACT',
       'REVIVE',
+      'REVIVE',
+      'INTERACT',
       'CHARACTER_ACTION',
     ]);
   });
