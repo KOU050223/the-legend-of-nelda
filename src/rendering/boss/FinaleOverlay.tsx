@@ -346,7 +346,6 @@ function Ending(): React.JSX.Element {
           className={styles.returnTitle}
           type="button"
           onClick={() => {
-            window.dispatchEvent(new Event('finale:ending-complete'));
             goTo('TITLE');
           }}
         >

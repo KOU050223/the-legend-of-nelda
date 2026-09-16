@@ -635,15 +635,6 @@ export function BossArenaScene({
   }, [melodyActivitySequence, melodyStarted, finale]);
 
   useEffect(() => {
-    if (battle === null) return undefined;
-    const completeEnding = () => {
-      if (finale === 'ENDING') battle.advanceFinale();
-    };
-    window.addEventListener('finale:ending-complete', completeEnding);
-    return () => window.removeEventListener('finale:ending-complete', completeEnding);
-  }, [battle, finale]);
-
-  useEffect(() => {
     if (!import.meta.env.DEV) return undefined;
     const onDebugFinale = (event: KeyboardEvent) => {
       if (event.repeat) return;

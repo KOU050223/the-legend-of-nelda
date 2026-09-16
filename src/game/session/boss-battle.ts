@@ -41,7 +41,6 @@ const FINALE_AUTO_ADVANCE_MS: Partial<Record<FinaleState, number>> = {
   MELODY_ACCEPTED: 2_700,
   MEMORY: 14_500,
   HORI_FALLING_ASLEEP: 5_000,
-  ENDING: 21_400,
 };
 
 /**
