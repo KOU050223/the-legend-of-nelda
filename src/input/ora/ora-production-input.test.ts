@@ -359,7 +359,7 @@ describe('createOraProductionInput', () => {
     adapter.detach();
   });
 
-  it('手を見失うとCalibration崩れ前に予約済みだったATTACKも発火しない', async () => {
+  it('手を見失っていても、既に予約済みのATTACKは発火する (ATTACKは声だけの入力)', async () => {
     const actions: GameAction[] = [];
     const adapter = await createTestAttach()((action) => actions.push(action));
 
@@ -369,10 +369,33 @@ describe('createOraProductionInput', () => {
 
     observedLeft = undefined;
     runNextFrame(1_150);
-    expect(timeoutCallbacks.size).toBe(0);
+    // ORA_ACTIONの判定はリセットされるが、ATTACKの予約は手の状態と無関係。
+    expect(timeoutCallbacks.size).toBe(2);
+
+    runNextTimeout();
+    runNextTimeout();
+    adapter.detach();
+    expect(attackActions(actions)).toHaveLength(2);
+  });
+
+  it('手を一度も検出できなくても、声のCalibrationさえ済めばATTACKは発火する', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    observedLeft = undefined;
+    nowMs = 0;
+    rms = 0.2;
+    runInterval();
+    nowMs = 350;
+    rms = 0;
+    runInterval();
+    runNextFrame(0);
+
+    submitUtterance('オラ', 0.2);
+    runNextTimeout();
 
     adapter.detach();
-    expect(attackActions(actions)).toEqual([]);
+    expect(attackActions(actions)).toHaveLength(1);
   });
 
   it('通常発話のRMSはCalibration時の大きい声量に左右されずATTACK閾値を通る', async () => {

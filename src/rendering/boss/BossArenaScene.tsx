@@ -646,6 +646,19 @@ export function BossArenaScene({
       if (!disposed) activeSource.submit(action);
     };
 
+    // Oraの手検出フレームは画面座標系のまま出てくる。Keyboardと同じく
+    // カメラ向きへ揃えないと、カメラを回したときだけ移動方向が食い違う。
+    const submitFromOra = (action: GameAction): void => {
+      if (action.type !== 'MOVE') {
+        submit(action);
+        return;
+      }
+      submit({
+        ...action,
+        input: toCameraRelativeMovement(action.input, cameraInputYawRef.current),
+      });
+    };
+
     const attachKeyboard = (): void => {
       let keyboard: ReturnType<typeof attachKeyboardGameActions> | null = null;
       keyboard = attachKeyboardGameActions((action) => {
@@ -691,7 +704,7 @@ export function BossArenaScene({
         },
       });
 
-      void Promise.resolve(attachOra(submit))
+      void Promise.resolve(attachOra(submitFromOra))
         .then((adapter) => {
           if (disposed) {
             adapter.detach();

@@ -273,7 +273,9 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - **重要な副次情報**: mainの取り込みにより、LiveKitボイスチャットが`?debug=voice`の検証専用ページだけでなく、**通常のGAME/WORLD画面へ本番導線として統合された**（`MultiplayerVoiceSessionProvider`, `VoiceHud`）。以前ユーザーへ「LiveKitは本番未統合なので競合しない」と回答したが、この状況は変わった。オラ大輔選択中に音声チャットも同時に有効な場合、マイク二重使用・スピーカー再生の回り込みによる誤発話判定への影響を今後検証する必要がある（未検証、要フォローアップ）。
 - push・PR作成は未実施。
 
-### 保留
+## main取り込み後の実機フィードバック対応
 
-- `main`の取り込み（現在20コミット遅れ、LiveKit統合#124含む）はユーザー指示により今回は実施しない。
+1. **Oraの移動がカメラ相対になっていなかった**: main取り込みで導入されたカメラ相対移動（`toCameraRelativeMovement`）はKeyboard入力にしか適用しておらず、Oraの手検出MOVEは画面座標系のまま出ていたため、カメラを回すとKeyboardとOraで移動方向の感覚が食い違っていた。`submitFromOra`という薄いラッパーを追加し、Ora由来のMOVEアクションにも同じ`toCameraRelativeMovement(input, cameraInputYawRef.current)`を適用するよう修正した。
+2. **ATTACKが手のCalibration状態に引きずられて頻繁に失敗する**: `handleSpeechResult`が`handCalibrator.isComplete() && voiceCalibrator.isComplete()`の両方を見ており、実プレイ中に手が一瞬フレーム外へ出ただけで（移動やORA_ACTIONの合間によく起きる）、その瞬間に発話した「オラ」がまるごと評価されずに消えていた。ATTACKは音声だけの入力なので、声のCalibration（`voiceCalibrator.isComplete()`）だけをゲートにするよう変更。合わせて`processFrame`側の手Calibration崩れ時のリセットも、ORA_ACTION（両手が要る）だけを対象にし、`voiceAttackRecognizer.reset()`/`clearPendingAttacks()`を手の状態から切り離した（声のCalibrationは一度完了すると崩れないため、これらの呼び出しは実質不要だった）。「ボイスでの攻撃がなかなか成功しない」というユーザー報告の主要因と見ている。
+- 検証: `pnpm vitest run src`（108ファイル/1122テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。既存の「手を見失うと予約済みATTACKも発火しない」テストは新しい正しい仕様（ATTACKは手の状態と無関係に発火する）に合わせて書き換えた。
 - コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。

@@ -453,16 +453,20 @@ export async function attachOraProductionInput(
         endedAt,
         intensity: intensityBetween(startedAt, endedAt),
       };
-      // Calibration未完了でも認識結果自体は公開する。「音声認識が拾えていない」
-      // のか「Calibration待ちで止めている」のかを実機で切り分けるため。
-      const calibrated = handCalibrator.isComplete() && voiceCalibrator.isComplete();
-      const attacks = calibrated ? voiceAttackRecognizer.recognize(candidate) : [];
+      // ATTACKは声だけの入力なので、声のCalibrationだけを見る。手の
+      // Calibrationも条件にすると、実プレイ中に手が一瞬フレーム外へ出た
+      // だけで（移動やORA_ACTIONの合間によく起きる）、その瞬間に発話した
+      // 「オラ」がまるごと評価されず消える。手を条件から外し、Calibration
+      // 未完了でも認識結果自体は公開する（「音声認識が拾えていない」のか
+      // 「声のCalibration待ちで止めている」のかを実機で切り分けるため）。
+      const voiceReady = voiceCalibrator.isComplete();
+      const attacks = voiceReady ? voiceAttackRecognizer.recognize(candidate) : [];
       if (import.meta.env.DEV) {
         console.debug('[ora] voice candidate', {
           transcript: candidate.transcript,
           intensity: candidate.intensity,
           hits: attacks.length,
-          calibrated,
+          voiceReady,
         });
       }
       notifyVoiceCandidate({
@@ -470,7 +474,7 @@ export async function attachOraProductionInput(
         intensity: candidate.intensity,
         hits: attacks.length,
       });
-      if (!calibrated) continue;
+      if (!voiceReady) continue;
 
       for (const [attackIndex, attack] of attacks.entries()) {
         scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS, attack.intensity);
@@ -555,12 +559,13 @@ export async function attachOraProductionInput(
       // 更新されず、キャラが走り続けてしまう。
       emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
 
-      if (!calibration.handComplete || !calibration.voiceComplete) {
+      // ORA_ACTIONは両手が要る。ATTACKは音声だけの入力なので、ここでは
+      // 手のCalibrationだけを見る（声のCalibrationは handleSpeechResult 側で
+      // 独立に見ている。一度揃うと崩れないため、ここで一緒に握り潰すと
+      // 「移動やORA_ACTIONの合間に手が一瞬フレーム外へ出た」だけで、その
+      // 瞬間の発話ぶんのATTACKやRush判定の連続性まで失われてしまう）。
+      if (!calibration.handComplete) {
         oraActionRecognizer.reset();
-        voiceAttackRecognizer.reset();
-        // Calibrationが崩れた後に、崩れる直前の発話から予約済みの複数hit
-        // ATTACKが遅れて発火しないようにする。
-        clearPendingAttacks();
         return;
       }
 
