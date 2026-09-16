@@ -44,6 +44,7 @@ describe('画面 URL の対応', () => {
   it('従来のデバッグ用クエリを対応する画面として解釈する', () => {
     expect(routeForLocation(location('/', '?scene=world'))).toBe('WORLD');
     expect(routeForLocation(location('/', '?debug=ora'))).toBe('ORA_DEBUG');
+    expect(routeForLocation(location('/', '?debug=dance-camera'))).toBe('WORLD');
   });
 
   it('未知の URL はタイトルへ戻す', () => {
