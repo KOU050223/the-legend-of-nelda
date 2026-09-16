@@ -76,6 +76,7 @@ import {
   publishFinalePresentation,
   resetFinalePresentation,
   setMelodyAudioCompleteHandler,
+  setFinalStandoffAudioCompleteHandler,
   setOcarinaClaimHandler,
   type PlayedMelodyNote,
 } from './finale-presentation-store';
@@ -533,15 +534,13 @@ export function BossArenaScene({
   useEffect(() => {
     if (battle === null) return undefined;
     const delayMs =
-      finale === 'FINAL_STANDOFF'
-        ? 7_500
-        : finale === 'OCARINA_APPEARING'
-          ? 5_200
-          : finale === 'MEMORY'
-            ? 14_500
-            : finale === 'HORI_FALLING_ASLEEP'
-              ? 5_000
-              : null;
+      finale === 'OCARINA_APPEARING'
+        ? 5_200
+        : finale === 'MEMORY'
+          ? 14_500
+          : finale === 'HORI_FALLING_ASLEEP'
+            ? 5_000
+            : null;
     if (delayMs === null) return undefined;
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
@@ -618,14 +617,20 @@ export function BossArenaScene({
         sourceForMelody.submit({ type: 'MELODY_AUDIO_COMPLETE' });
       }
     }
+    function completeFinalStandoffAudio(): void {
+      if (finale === 'FINAL_STANDOFF')
+        sourceForMelody.submit({ type: 'FINAL_STANDOFF_AUDIO_COMPLETE' });
+    }
     window.addEventListener('finale:melody-start', startMelody);
     setOcarinaClaimHandler(claimOcarina);
     setMelodyAudioCompleteHandler(completeMelodyAudio);
+    setFinalStandoffAudioCompleteHandler(completeFinalStandoffAudio);
     return () => {
       disposed = true;
       window.removeEventListener('finale:melody-start', startMelody);
       setOcarinaClaimHandler(null);
       setMelodyAudioCompleteHandler(null);
+      setFinalStandoffAudioCompleteHandler(null);
       microphoneStop.current?.();
       microphoneStop.current = null;
     };

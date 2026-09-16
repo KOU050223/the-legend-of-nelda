@@ -43,6 +43,7 @@ let snapshot = INITIAL_SNAPSHOT;
 const listeners = new Set<() => void>();
 let claimOcarina: (() => void) | null = null;
 let melodyAudioComplete: (() => void) | null = null;
+let finalStandoffAudioComplete: (() => void) | null = null;
 
 export function setOcarinaClaimHandler(handler: (() => void) | null): void {
   claimOcarina = handler;
@@ -58,6 +59,14 @@ export function setMelodyAudioCompleteHandler(handler: (() => void) | null): voi
 
 export function notifyMelodyAudioComplete(): void {
   melodyAudioComplete?.();
+}
+
+export function setFinalStandoffAudioCompleteHandler(handler: (() => void) | null): void {
+  finalStandoffAudioComplete = handler;
+}
+
+export function notifyFinalStandoffAudioComplete(): void {
+  finalStandoffAudioComplete?.();
 }
 
 export function getFinalePresentationSnapshot(): FinalePresentationSnapshot {

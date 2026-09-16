@@ -36,7 +36,6 @@ export const FINALE_STANDOFF_FALLBACK_MS = 4_000;
 
 /** Authorityが最終演出を同期するための状態ごとの表示尺。 */
 const FINALE_AUTO_ADVANCE_MS: Partial<Record<FinaleState, number>> = {
-  FINAL_STANDOFF: 7_500,
   OCARINA_APPEARING: 5_200,
   MEMORY: 14_500,
   HORI_FALLING_ASLEEP: 5_000,
@@ -319,6 +318,11 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
 
       if (finale === 'MELODY_ACCEPTED' && action.type === 'MELODY_AUDIO_COMPLETE') {
         if (ocarinaPerformerId === playerId) setFinale(nextFinaleState(finale));
+        return;
+      }
+
+      if (finale === 'FINAL_STANDOFF' && action.type === 'FINAL_STANDOFF_AUDIO_COMPLETE') {
+        setFinale(nextFinaleState(finale));
         return;
       }
 

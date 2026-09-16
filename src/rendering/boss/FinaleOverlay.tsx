@@ -13,6 +13,7 @@ import { useScreenStore } from '@/app/screen';
 
 import {
   notifyMelodyAudioComplete,
+  notifyFinalStandoffAudioComplete,
   requestOcarinaClaim,
   type PlayedMelodyNote,
 } from './finale-presentation-store';
@@ -77,6 +78,7 @@ export function FinaleOverlay({
     return (
       <section className={styles.overlay} aria-live="polite">
         <div className={styles.cinematic}>
+          <FinalStandoffVoice />
           <p className={styles.chapter}>FINAL STANDOFF</p>
           <p className={styles.line}>
             「……無駄だ。」
@@ -172,6 +174,19 @@ export function FinaleOverlay({
   }
 
   return null;
+}
+
+/** フィールド全体に響く台詞。終了後は残響だけを少し残す。 */
+function FinalStandoffVoice(): React.JSX.Element {
+  return (
+    <audio
+      autoPlay
+      src="/audio/daisuke_hori_breakVoice.mp3"
+      onEnded={() => window.setTimeout(notifyFinalStandoffAudioComplete, 700)}
+    >
+      <track kind="captions" srcLang="ja" label="台詞" />
+    </audio>
+  );
 }
 
 /** 旋律完成の一瞬だけ、画面を止めたように見せて回想へ繋ぐ。 */
