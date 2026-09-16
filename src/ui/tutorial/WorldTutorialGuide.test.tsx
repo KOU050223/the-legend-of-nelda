@@ -20,7 +20,8 @@ describe('WorldTutorialGuide', () => {
     expect(screen.getByRole('status')).toHaveTextContent('WASD / 矢印キー：移動');
     expect(screen.getByRole('status')).toHaveTextContent('SPACE / J：攻撃');
     expect(screen.getByRole('status')).toHaveTextContent('SHIFT：回避');
-    expect(screen.getByRole('status')).toHaveTextContent('E：調べる');
+    expect(screen.getByRole('status')).toHaveTextContent('E / F：蘇生（連打）');
+    expect(screen.getByRole('status')).toHaveTextContent('R：調べる');
   });
 
   it('表示開始から15秒後に案内を消す', async () => {

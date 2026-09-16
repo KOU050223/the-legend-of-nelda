@@ -49,6 +49,32 @@ src/input/keyboard/
 `vite.config.ts` の `test.include` が `src/**/*.{test,spec}.{ts,tsx}` を拾うため、
 この命名なら設定を触らずに認識される。
 
+## 意図して残しているバグは `*.bug.test.ts`
+
+このゲームはB級3DアクションRPGの「壊れて見える」手触りをわざと狙っている
+（[Issue #42](https://github.com/KOU050223/the-legend-of-nelda/issues/42)）。
+そのため「普通に読むと誤動作にしか見えないが、実は意図した挙動」が存在する。
+
+| ファイル名 | 中身 |
+|---|---|
+| `foo.test.ts` | 通常の仕様。本来期待される挙動 |
+| `foo.bug.test.ts` | 意図して残している・作っているバグっぽい挙動 |
+
+```text
+src/game/attacks/
+├─ fluffy-futon.ts
+├─ fluffy-futon.test.ts       ← 通常の仕様
+└─ fluffy-futon.bug.test.ts   ← 意図したバグ
+```
+
+`*` が `foo.bug` を吸収するので、`test.include` は `*.bug.test.ts` も
+そのまま拾う。**設定変更は要らない**。`pnpm test` / `pnpm test:coverage` /
+`pnpm test:server` と lefthook の `vitest related` すべてで通常テストと
+同じように実行される。
+
+どの挙動を Intentional Bug として扱ってよいかの線引きは
+[`testing-strategy.md`](./testing-strategy.md) §12.1 に置いてある。
+
 ---
 
 # 3. 実行環境
@@ -343,6 +369,11 @@ window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
 4. 通ることを確認する
 
 手順 2 を飛ばすと、テストが本当にそのバグを捕まえているか分からない。
+
+直さないと決めた場合は、そのバグを `*.bug.test.ts` へ書く。
+逆に Intentional Bug をやめて直すときは、対応する bug test を削除するか、
+通常仕様のテストへ書き換える。bug test に残ったままだと
+「直したのに仕様書はバグのまま」という食い違いが残る。
 
 ---
 

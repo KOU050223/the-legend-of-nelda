@@ -199,6 +199,12 @@ export function isGameAction(value: unknown): value is GameAction {
   if (value.type === 'MOVE') {
     return hasOnlyKeys(value, ['type', 'input']) && isMovementInput(value.input);
   }
+  if (value.type === 'ATTACK') {
+    return (
+      hasOnlyKeys(value, ['type']) ||
+      (hasOnlyKeys(value, ['type', 'intensity']) && isFiniteNumber(value.intensity))
+    );
+  }
   return hasOnlyKeys(value, ['type']) && isDiscreteGameActionType(value.type);
 }
 

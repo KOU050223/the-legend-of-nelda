@@ -2,6 +2,8 @@ import { useFrame } from '@react-three/fiber';
 import { Vector3, type Group } from 'three';
 import { useRef, type MutableRefObject, type RefObject } from 'react';
 
+import { applyDanceCameraOffset, danceCameraOffset, type DanceCameraProfile } from './dance-camera';
+
 /** 戦闘中にユーザーが選べる通常カメラ。ゲーム開始時は third-person。 */
 export type BattleCameraMode = 'third-person' | 'overhead' | 'first-person';
 
@@ -31,6 +33,13 @@ export interface BattleThirdPersonCameraProps {
   inputYawRef: MutableRefObject<number>;
   /** Finale の専用Cameraが transform を担当している間は通常Cameraを止める。 */
   active?: boolean;
+  /** Base Camera の後段へ合成する、Client-local な見ざる演出。 */
+  danceEffect?: boolean;
+  danceIntensity?: number;
+  danceSpeed?: number;
+  danceProfile?: DanceCameraProfile;
+  /** 強制視点中でも、入力用yawをこのBase Cameraが更新してよいか。 */
+  writesInputYaw?: boolean;
 }
 
 /**
@@ -45,13 +54,20 @@ export function BattleThirdPersonCamera({
   boss,
   inputYawRef,
   active = true,
+  danceEffect = false,
+  danceIntensity = 1,
+  danceSpeed = 1,
+  danceProfile = 'normal',
+  writesInputYaw = true,
 }: BattleThirdPersonCameraProps): null {
   const desiredPosition = useRef(new Vector3());
+  const smoothedPosition = useRef(new Vector3());
+  const hasSmoothedPosition = useRef(false);
   const desiredTarget = useRef(new Vector3());
   const smoothedTarget = useRef(new Vector3());
   const playerToBoss = useRef(new Vector3(0, 0, -1));
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera, clock }, delta) => {
     const playerRoot = player.current;
     const bossRoot = boss.current;
     if (!active || playerRoot === null || bossRoot === null) return;
@@ -98,12 +114,27 @@ export function BattleThirdPersonCamera({
 
     const positionFactor = 1 - Math.exp(-config.followRate * delta);
     const targetFactor = 1 - Math.exp(-config.targetRate * delta);
-    camera.position.lerp(desiredPosition.current, positionFactor);
+    // 前フレームのDance後 position ではなく、Base Cameraだけの位置を補間する。
+    // これでDance Offsetが通常Cameraの追従値へ混ざらない。
+    if (!hasSmoothedPosition.current) {
+      smoothedPosition.current.copy(camera.position);
+      hasSmoothedPosition.current = true;
+    }
+    smoothedPosition.current.lerp(desiredPosition.current, positionFactor);
+    camera.position.copy(smoothedPosition.current);
     smoothedTarget.current.lerp(desiredTarget.current, targetFactor);
     camera.lookAt(smoothedTarget.current);
 
     // 入力は見た目のCamera座標ではなく、安定した基準方向から求める。
-    inputYawRef.current = mode === 'third-person' ? Math.atan2(-direction.x, -direction.z) : 0;
+    if (writesInputYaw)
+      inputYawRef.current = mode === 'third-person' ? Math.atan2(-direction.x, -direction.z) : 0;
+
+    if (danceEffect) {
+      applyDanceCameraOffset(
+        camera,
+        danceCameraOffset(clock.getElapsedTime() * danceSpeed, mode, danceIntensity, danceProfile),
+      );
+    }
   });
 
   return null;

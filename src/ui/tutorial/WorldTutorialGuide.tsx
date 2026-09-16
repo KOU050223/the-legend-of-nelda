@@ -33,7 +33,8 @@ export function WorldTutorialGuide(): React.JSX.Element | null {
       <span>WASD / 矢印キー：移動</span>
       <span>SPACE / J：攻撃</span>
       <span>SHIFT：回避</span>
-      <span>E：調べる</span>
+      <span>E / F：蘇生（連打）</span>
+      <span>R：調べる</span>
       <span>C：カメラ切替（3人称 / 俯瞰 / 一人称）</span>
       <span>一人称中：画面クリック＋マウスで見回す</span>
     </output>

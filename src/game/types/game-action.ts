@@ -48,7 +48,10 @@ export type DiscreteGameActionType = (typeof DISCRETE_GAME_ACTIONS)[number];
 
 export type GameAction =
   /** 移動入力。押しっぱなしのあいだ毎フレーム発生する。 */
-  { type: 'MOVE'; input: MovementInput } | { type: DiscreteGameActionType };
+  | { type: 'MOVE'; input: MovementInput }
+  /** 音声ATTACKだけは声量を任意で載せられる。未指定なら従来どおりの攻撃。 */
+  | { type: 'ATTACK'; intensity?: number }
+  | { type: Exclude<DiscreteGameActionType, 'ATTACK'> };
 
 export type GameActionType = GameAction['type'];
 
