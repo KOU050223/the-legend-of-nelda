@@ -439,14 +439,19 @@ export async function attachOraProductionInput(
       }
 
       const neutral = handCalibrator.getNeutral();
-      emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
-      const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
-      if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });
       const reviveState = oraReviveRecognizer.update(
         observation.left,
         observation.right,
         timestamp,
       );
+      emit({
+        type: 'MOVE',
+        input: reviveState.isHolding
+          ? { forward: 0, right: 0 }
+          : joystick.update(observation.left, neutral, timestamp),
+      });
+      const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
+      if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });
       if (reviveState.triggered) emit({ type: 'REVIVE' });
     } catch (error) {
       reportError(error);

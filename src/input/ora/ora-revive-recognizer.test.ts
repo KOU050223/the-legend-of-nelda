@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import { REVIVE_INPUT_INTERVAL_MS } from '@/game/config/phase2-player-balance';
 
-import { createOraReviveRecognizer } from './ora-revive-recognizer';
+import { createOraReviveRecognizer, ORA_REVIVE_INPUT_INTERVAL_MS } from './ora-revive-recognizer';
 import type { HandObservation } from './types';
 
 type Hand = NonNullable<HandObservation['left']>;
 
 function hand(x: number, y = 0.55, isOpen = false): Hand {
-  return { x, y, velocityX: 0, velocityY: 0, isOpen };
+  return { x, y, velocityX: 0, velocityY: 0, isOpen, isClosed: !isOpen };
 }
 
 describe('createOraReviveRecognizer', () => {
   it('両手を閉じて近づけた合掌を保持すると即時と一定間隔でREVIVEを出す', () => {
-    const recognizer = createOraReviveRecognizer();
+    const recognizer = createOraReviveRecognizer({ inputIntervalMs: REVIVE_INPUT_INTERVAL_MS });
     const left = hand(0.44);
     const right = hand(0.56);
 
@@ -44,5 +44,25 @@ describe('createOraReviveRecognizer', () => {
     const recognizer = createOraReviveRecognizer();
 
     expect(recognizer.update(left, right, 1_000).triggered).toBe(false);
+  });
+
+  it('手首が縦に離れていると同じ横位置でも合掌とみなさない', () => {
+    const recognizer = createOraReviveRecognizer();
+
+    expect(recognizer.update(hand(0.5, 0.2), hand(0.5, 0.8), 1_000).triggered).toBe(false);
+  });
+
+  it('閉じた状態が明示されない手ではREVIVEを出さない', () => {
+    const recognizer = createOraReviveRecognizer();
+    const left = { ...hand(0.44) };
+    const right = { ...hand(0.56) };
+    delete left.isClosed;
+    delete right.isClosed;
+
+    expect(recognizer.update(left, right, 1_000).triggered).toBe(false);
+  });
+
+  it('ネットワーク揺らぎに備えて既定間隔に余裕を持たせる', () => {
+    expect(ORA_REVIVE_INPUT_INTERVAL_MS).toBe(REVIVE_INPUT_INTERVAL_MS + 16);
   });
 });

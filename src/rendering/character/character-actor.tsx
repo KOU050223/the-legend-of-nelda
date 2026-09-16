@@ -1,8 +1,9 @@
 import { forwardRef } from 'react';
-import { Billboard } from '@react-three/drei';
+import { Billboard, Text } from '@react-three/drei';
 import type { Group } from 'three';
 
-import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
+import { DEFAULT_REVIVAL } from '@/game/config/phase2-player-balance';
+import { requiredReviveInputs, reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 
 import { CharacterModel } from './CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from './character-models';
@@ -40,7 +41,7 @@ export const CharacterActor = forwardRef<Group, CharacterActorProps>(function Ch
         characterId={player.characterId}
         context={context ?? motionContextFor(player, now)}
       />
-      <StatusBar player={player} local={local} />
+      <StatusBar player={player} local={local} now={now} />
     </group>
   );
 });
@@ -60,6 +61,22 @@ const BAR_OVERHEAD_HEIGHT = CHARACTER_DISPLAY_HEIGHT + 0.25;
 
 /** 倒れているときのバーの高さ。寝ている体の上に置く。 */
 const BAR_DOWNED_HEIGHT = 0.6;
+const DOWNED_BAR_HEIGHT = 0.1;
+
+export function reviveProgressLabel(player: PlayerSnapshot): string {
+  return `蘇生中 ${player.reviveInputs}/${requiredReviveInputs()}`;
+}
+
+export function sleepCountdownSeconds(player: PlayerSnapshot, now: number): number | null {
+  if (player.status !== 'FALLING_ASLEEP' || player.sleepAt === null) return null;
+  return Math.max(0, (player.sleepAt - now) / 1000);
+}
+
+export function sleepCountdownRatio(player: PlayerSnapshot, now: number): number {
+  const seconds = sleepCountdownSeconds(player, now);
+  if (seconds === null) return 0;
+  return Math.min(1, seconds / (DEFAULT_REVIVAL.sleepCountdownMs / 1000));
+}
 
 /**
  * 頭上のHPバー。倒れている間は蘇生ゲージに切り替わる。
@@ -71,27 +88,60 @@ const BAR_DOWNED_HEIGHT = 0.6;
 function StatusBar({
   player,
   local = false,
+  now,
 }: {
   player: PlayerSnapshot;
   local?: boolean;
+  now: number;
 }): React.JSX.Element {
   const reviving = player.status === 'FALLING_ASLEEP';
   const ratio = reviving ? reviveRatio(player) : player.hp / player.hpMax;
   const color = reviving ? '#ffd60a' : local ? '#4cd964' : '#f2f2f7';
+  const sleepSeconds = sleepCountdownSeconds(player, now);
+  const sleepRatio = sleepCountdownRatio(player, now);
 
   // Actor Root が位置を持つので、バーは相対位置で置く。高さはキャラの表示高さ
   // から決める。固定値にすると、モデルの高さを変えたときに頭上から離れる。
   return (
     <Billboard position={[0, reviving ? BAR_DOWNED_HEIGHT : BAR_OVERHEAD_HEIGHT, 0]}>
-      <mesh>
-        <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
-        <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
-      </mesh>
-      {/* 左端を固定して伸縮させるため、幅の半分だけ中心をずらす。 */}
-      <mesh position={[(-BAR_WIDTH * (1 - ratio)) / 2, 0, 0.01]}>
-        <planeGeometry args={[BAR_WIDTH * ratio, BAR_HEIGHT]} />
-        <meshBasicMaterial color={color} depthWrite={false} />
-      </mesh>
+      {reviving ? (
+        <>
+          <Text position={[0, 0.19, 0.02]} fontSize={0.12} color="#ffd60a" anchorY="middle">
+            {reviveProgressLabel(player)}
+          </Text>
+          <mesh position={[0, 0.06, 0]}>
+            <planeGeometry args={[BAR_WIDTH, DOWNED_BAR_HEIGHT]} />
+            <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
+          </mesh>
+          <mesh position={[(-BAR_WIDTH * (1 - ratio)) / 2, 0.06, 0.01]}>
+            <planeGeometry args={[BAR_WIDTH * ratio, DOWNED_BAR_HEIGHT]} />
+            <meshBasicMaterial color="#ffd60a" depthWrite={false} />
+          </mesh>
+          <Text position={[0, -0.1, 0.02]} fontSize={0.1} color="#ff9f0a" anchorY="middle">
+            {`寝落ちまで ${sleepSeconds?.toFixed(1) ?? '—'}秒`}
+          </Text>
+          <mesh position={[0, -0.23, 0]}>
+            <planeGeometry args={[BAR_WIDTH, DOWNED_BAR_HEIGHT]} />
+            <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
+          </mesh>
+          <mesh position={[(-BAR_WIDTH * (1 - sleepRatio)) / 2, -0.23, 0.01]}>
+            <planeGeometry args={[BAR_WIDTH * sleepRatio, DOWNED_BAR_HEIGHT]} />
+            <meshBasicMaterial color="#ff9f0a" depthWrite={false} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh>
+            <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
+            <meshBasicMaterial color="#1c1c1e" depthWrite={false} />
+          </mesh>
+          {/* 左端を固定して伸縮させるため、幅の半分だけ中心をずらす。 */}
+          <mesh position={[(-BAR_WIDTH * (1 - ratio)) / 2, 0, 0.01]}>
+            <planeGeometry args={[BAR_WIDTH * ratio, BAR_HEIGHT]} />
+            <meshBasicMaterial color={color} depthWrite={false} />
+          </mesh>
+        </>
+      )}
     </Billboard>
   );
 }

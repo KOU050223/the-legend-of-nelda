@@ -20,8 +20,14 @@ export interface MarkerObservation {
 /** MediaPipeなどの手追跡器が渡す、左右手首と指の開閉状態の正規化済み観測値。 */
 export interface HandObservation {
   capturedAt: number;
-  left?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & { isOpen?: boolean };
-  right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & { isOpen?: boolean };
+  left?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & {
+    isOpen?: boolean;
+    isClosed?: boolean;
+  };
+  right?: Pick<MarkerPosition, 'x' | 'y' | 'velocityX' | 'velocityY'> & {
+    isOpen?: boolean;
+    isClosed?: boolean;
+  };
 }
 
 export const ORA_GAME_ACTIONS = [

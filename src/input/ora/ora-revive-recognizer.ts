@@ -23,8 +23,10 @@ export interface OraReviveRecognizer {
 
 const defaults = {
   maxHandDistance: 0.22,
-  inputIntervalMs: REVIVE_INPUT_INTERVAL_MS,
+  inputIntervalMs: REVIVE_INPUT_INTERVAL_MS + 16,
 } as const;
+
+export const ORA_REVIVE_INPUT_INTERVAL_MS = defaults.inputIntervalMs;
 
 /** 合掌をREVIVEの連打入力へ変換する純粋なフレーム認識器。 */
 export function createOraReviveRecognizer(
@@ -36,9 +38,9 @@ export function createOraReviveRecognizer(
 
   function isHolding(left: HandObservation['left'], right: HandObservation['right']): boolean {
     return (
-      left?.isOpen === false &&
-      right?.isOpen === false &&
-      Math.abs(left.x - right.x) <= maxHandDistance
+      left?.isClosed === true &&
+      right?.isClosed === true &&
+      Math.hypot(left.x - right.x, left.y - right.y) <= maxHandDistance
     );
   }
 

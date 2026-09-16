@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AttachInputAdapter, GameAction } from '@/game/types/game-action';
-import { REVIVE_INPUT_INTERVAL_MS } from '@/game/config/phase2-player-balance';
 import type { HandObservation } from './types';
 
 type FakeTrack = { stop: () => void };
@@ -42,6 +41,7 @@ import {
   type OraCalibrationState,
   type OraProductionInputStatus,
 } from './ora-production-input';
+import { ORA_REVIVE_INPUT_INTERVAL_MS } from './ora-revive-recognizer';
 
 type FrameCallback = (timestamp: number) => void;
 
@@ -96,7 +96,7 @@ class FakeSpeechRecognition {
 }
 
 function hand(x: number, y: number, isOpen = true): NonNullable<HandObservation['left']> {
-  return { x, y, velocityX: 0, velocityY: 0, isOpen };
+  return { x, y, velocityX: 0, velocityY: 0, isOpen, isClosed: !isOpen };
 }
 
 function runNextFrame(timestamp: number): void {
@@ -290,10 +290,15 @@ describe('createOraProductionInput', () => {
       right: hand(0.56, 0.55, false),
     };
     runNextFrame(1_001);
-    runNextFrame(1_001 + REVIVE_INPUT_INTERVAL_MS - 1);
-    runNextFrame(1_001 + REVIVE_INPUT_INTERVAL_MS);
+    runNextFrame(1_001 + ORA_REVIVE_INPUT_INTERVAL_MS - 1);
+    runNextFrame(1_001 + ORA_REVIVE_INPUT_INTERVAL_MS);
 
     expect(actions.filter((action) => action.type === 'REVIVE')).toHaveLength(2);
+    expect(
+      actions
+        .filter((action): action is Extract<GameAction, { type: 'MOVE' }> => action.type === 'MOVE')
+        .every(({ input }) => input.forward === 0 && input.right === 0),
+    ).toBe(true);
     adapter.detach();
   });
 
