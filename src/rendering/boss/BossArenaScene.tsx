@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 
-import { Billboard, Text } from '@react-three/drei';
+import { Billboard, Html, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { MathUtils, Vector3, type Group } from 'three';
 
@@ -43,6 +43,12 @@ import { useGameStore } from '@/store/game-store';
 import { DEFEAT_RESULT_TIMING, RESULT_TIMING } from '@/ui/result/result-presentation';
 
 import { BattleThirdPersonCamera, type BattleCameraMode } from '../camera/BattleThirdPersonCamera';
+import {
+  DANCE_CAMERA_LOOP_SECONDS,
+  danceCameraOffset,
+  nextDanceCameraMode,
+  readDanceCameraDebugSettings,
+} from '../camera/dance-camera';
 import { FirstPersonCamera } from '../camera/FirstPersonCamera';
 import { CharacterActor } from '../character/character-actor';
 import {
@@ -315,6 +321,9 @@ export function BossArenaScene({
 
   // 通常戦闘は3人称で始める。俯瞰・一人称はそれぞれ広域確認・没入プレイ用に選べる。
   const [cameraMode, setCameraMode] = useState<BattleCameraMode>('third-person');
+  // ODORUNOの見ざるが選択中の視点を定期的に奪う。ユーザー選択のcameraModeは
+  // inputYaw用に残し、表示側だけをこのstateで差し替える。
+  const [dancePresentationMode, setDancePresentationMode] = useState<BattleCameraMode | null>(null);
 
   // 追従カメラは Object3D を見るので、操作キャラの Root を渡す。
   // 中身は actorRoots から引き直す (下の Effect)。
@@ -355,6 +364,16 @@ export function BossArenaScene({
   // 演出を始めない (リモート接続直後の1瞬)。
   const finale = view?.snapshot.finale ?? 'NONE';
   const localPlayer = view?.snapshot.players.find((player) => player.id === localPlayerId) ?? null;
+  // Camera Transform は送信しない。現在このClientがODORUNOを操作している場合だけ、
+  // 各 Base Camera の後段で presentation effect を合成する。
+  const danceCameraDebug = readDanceCameraDebugSettings(
+    typeof window === 'undefined' ? '' : window.location.search,
+  );
+  const odorunoDanceCamera =
+    localPlayer?.characterId === 'ODORUNO' && finale === 'NONE' && danceCameraDebug.enabled;
+  const presentationCameraMode = odorunoDanceCamera
+    ? (dancePresentationMode ?? cameraMode)
+    : cameraMode;
   const [zeroDamageSequence, setZeroDamageSequence] = useState(0);
   const [melodyStarted, setMelodyStarted] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneInputStatus>('idle');
@@ -364,13 +383,32 @@ export function BossArenaScene({
   const [showMelodyHint, setShowMelodyHint] = useState(false);
 
   useEffect(() => {
+    if (!odorunoDanceCamera) return undefined;
+
+    let timer: number | null = null;
+    const scheduleNextSwitch = () => {
+      timer = window.setTimeout(
+        () => {
+          setDancePresentationMode((current) => nextDanceCameraMode(current ?? cameraMode));
+          scheduleNextSwitch();
+        },
+        900 + Math.random() * 800,
+      );
+    };
+    scheduleNextSwitch();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [cameraMode, odorunoDanceCamera]);
+
+  useEffect(() => {
     const hud = useFirstPersonHealthHudStore.getState();
-    if (cameraMode === 'first-person' && finale === 'NONE' && localPlayer !== null) {
+    if (presentationCameraMode === 'first-person' && finale === 'NONE' && localPlayer !== null) {
       hud.show(localPlayer.hp, localPlayer.hpMax);
     } else {
       hud.hide();
     }
-  }, [cameraMode, finale, localPlayer]);
+  }, [finale, localPlayer, presentationCameraMode]);
 
   useEffect(() => () => useFirstPersonHealthHudStore.getState().hide(), []);
   const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
@@ -811,8 +849,8 @@ export function BossArenaScene({
             now={view.now}
             context={view.playerMotionContexts[view.snapshot.players.indexOf(player)]}
             local={player.id === localPlayerId}
-            hideModel={cameraMode === 'first-person' && player.id === localPlayerId}
-            hideStatusBar={cameraMode === 'first-person' && player.id === localPlayerId}
+            hideModel={presentationCameraMode === 'first-person' && player.id === localPlayerId}
+            hideStatusBar={presentationCameraMode === 'first-person' && player.id === localPlayerId}
           />
         </Suspense>
       ))}
@@ -835,12 +873,17 @@ export function BossArenaScene({
       )}
 
       <BattleThirdPersonCamera
-        mode={cameraMode === 'first-person' ? 'third-person' : cameraMode}
+        mode={presentationCameraMode === 'first-person' ? 'third-person' : presentationCameraMode}
         player={localRoot}
         boss={bossRoot}
         inputYawRef={cameraInputYawRef}
+        danceEffect={odorunoDanceCamera}
+        danceIntensity={danceCameraDebug.intensity}
+        danceSpeed={danceCameraDebug.speed}
+        danceProfile={danceCameraDebug.force ? 'debug' : 'normal'}
+        writesInputYaw={cameraMode !== 'first-person'}
         active={
-          cameraMode !== 'first-person' &&
+          presentationCameraMode !== 'first-person' &&
           finale !== 'HORI_FALLING_ASLEEP' &&
           finale !== 'OCARINA_APPEARING' &&
           finale !== 'WAITING_FOR_MELODY'
@@ -849,8 +892,14 @@ export function BossArenaScene({
       <FirstPersonCamera
         player={localRoot}
         inputYawRef={cameraInputYawRef}
+        danceEffect={odorunoDanceCamera}
+        danceIntensity={danceCameraDebug.intensity}
+        danceSpeed={danceCameraDebug.speed}
+        danceProfile={danceCameraDebug.force ? 'debug' : 'normal'}
+        inputActive={cameraMode === 'first-person'}
+        writesInputYaw={cameraMode === 'first-person'}
         active={
-          cameraMode === 'first-person' &&
+          presentationCameraMode === 'first-person' &&
           finale !== 'HORI_FALLING_ASLEEP' &&
           finale !== 'OCARINA_APPEARING' &&
           finale !== 'WAITING_FOR_MELODY'
@@ -858,7 +907,61 @@ export function BossArenaScene({
       />
       <SleepCamera target={bossRoot} active={finale === 'HORI_FALLING_ASLEEP'} />
       <LegendaryOcarina phase={melodyStarted ? 'NONE' : finale} anchor={bossRoot} />
+      {danceCameraDebug.visible && (
+        <DanceCameraDebug
+          enabled={odorunoDanceCamera}
+          intensity={danceCameraDebug.intensity}
+          mode={presentationCameraMode}
+          role={localPlayer?.characterId ?? '-'}
+          forced={danceCameraDebug.force}
+          speed={danceCameraDebug.speed}
+        />
+      )}
     </>
+  );
+}
+
+function DanceCameraDebug({
+  enabled,
+  intensity,
+  mode,
+  role,
+  forced,
+  speed,
+}: {
+  readonly enabled: boolean;
+  readonly intensity: number;
+  readonly mode: BattleCameraMode;
+  readonly role: string;
+  readonly forced: boolean;
+  readonly speed: number;
+}): React.JSX.Element {
+  const [elapsed, setElapsed] = useState(0);
+  const lastReported = useRef(0);
+  useFrame(({ clock }) => {
+    const now = clock.getElapsedTime();
+    if (now - lastReported.current < 0.1) return;
+    lastReported.current = now;
+    setElapsed(now * speed);
+  });
+  const offset = danceCameraOffset(elapsed, mode, intensity, forced ? 'debug' : 'normal');
+  const phase = (elapsed % DANCE_CAMERA_LOOP_SECONDS) / DANCE_CAMERA_LOOP_SECONDS;
+
+  return (
+    <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <pre
+        style={{
+          background: 'rgba(0, 0, 0, 0.72)',
+          color: '#8cff98',
+          font: '12px/1.45 monospace',
+          margin: 12,
+          padding: 10,
+          width: 'fit-content',
+        }}
+      >
+        {`DANCE CAMERA: ${enabled ? 'ON' : 'OFF'}\nROLE: ${role}\nPROFILE: ${forced ? 'DEBUG FORCE' : 'NORMAL'}\nCAMERA MODE: ${mode}\nLOOP: ${DANCE_CAMERA_LOOP_SECONDS.toFixed(1)}s × ${speed.toFixed(2)}\nPHASE: ${phase.toFixed(2)}\n\nYAW:   ${(offset.yaw * (180 / Math.PI)).toFixed(1)}°\nPITCH: ${(offset.pitch * (180 / Math.PI)).toFixed(1)}°\nROLL:  ${(offset.roll * (180 / Math.PI)).toFixed(1)}°\nBOB:   ${offset.bobY.toFixed(2)}\nSWAY:  ${offset.swayX.toFixed(2)}\nZOOM:  ${offset.zoom.toFixed(2)}\nINTENSITY: ${intensity.toFixed(2)}`}
+      </pre>
+    </Html>
   );
 }
 
