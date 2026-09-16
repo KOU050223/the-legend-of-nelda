@@ -113,7 +113,7 @@ describe('通常攻撃の3段連撃', () => {
     expect(hits[0]?.damage).toBe(CHARACTER_STATS.PAY.attackPower);
   });
 
-  it('オラ大輔の音声ATTACKは声量をダメージへ反映し、Authority側で範囲外をクランプする', () => {
+  it('オラ大輔の音声ATTACKは送信直後に即命中し、声量をダメージへ反映する（Authority側で範囲外をクランプ）', () => {
     const cases = [
       { intensity: 0, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MIN },
       { intensity: 1, multiplier: ORA_VOICE_DAMAGE_MULTIPLIER_MAX },
@@ -122,11 +122,10 @@ describe('通常攻撃の3段連撃', () => {
     ];
 
     for (const { intensity, multiplier } of cases) {
-      const { player, clock, hits } = setup({ characterId: 'ORA' });
+      const { player, hits } = setup({ characterId: 'ORA' });
       player.submit({ type: 'ATTACK', intensity });
-      clock.advance(comboStepAt(0).windupMs);
-      player.update(0.016);
 
+      // 予備動作を待たずに、送信した瞬間に命中している。
       expect(hits[0]?.damage).toBeCloseTo(CHARACTER_STATS.ORA.attackPower * multiplier);
     }
   });
@@ -140,6 +139,33 @@ describe('通常攻撃の3段連撃', () => {
 
       expect(hits[0]?.damage).toBe(CHARACTER_STATS[characterId].attackPower);
     }
+  });
+
+  it('オラ大輔は連呼するたびに硬直を待たず毎回命中する（他キャラの連撃制限を受けない）', () => {
+    const { player, clock, hits } = setup({ characterId: 'ORA' });
+
+    player.submit({ type: 'ATTACK', intensity: 0.5 });
+    clock.advance(140);
+    player.submit({ type: 'ATTACK', intensity: 0.5 });
+    clock.advance(140);
+    player.submit({ type: 'ATTACK', intensity: 0.5 });
+
+    expect(hits).toHaveLength(3);
+  });
+
+  it('比較: オラ大輔以外は同じ間隔で連打しても硬直中は弾かれる', () => {
+    const { player, clock, hits } = setup({ characterId: 'PAY' });
+
+    player.submit({ type: 'ATTACK' });
+    clock.advance(comboStepAt(0).windupMs);
+    player.update(0.016);
+    clock.advance(140);
+    player.submit({ type: 'ATTACK' });
+    clock.advance(140);
+    player.submit({ type: 'ATTACK' });
+    player.update(0.016);
+
+    expect(hits).toHaveLength(1);
   });
 
   it('1回の振りで二重に当たらない', () => {
@@ -494,14 +520,13 @@ describe('プレイヤー状態のスナップショット', () => {
 
   it('攻撃の途中で復元しても、同じ時刻に判定が出る', () => {
     const step = comboStepAt(0);
-    const origin = setup({ characterId: 'ORA' });
-    origin.player.submit({ type: 'ATTACK', intensity: 1 });
+    const origin = setup();
+    origin.player.submit({ type: 'ATTACK' });
     origin.clock.advance(step.windupMs / 2);
 
     const wire: PlayerSnapshot = structuredClone(origin.player.snapshot());
-    expect(wire.swing?.damageMultiplier).toBe(ORA_VOICE_DAMAGE_MULTIPLIER_MAX);
 
-    const replica = setup({ characterId: 'ORA' });
+    const replica = setup();
     replica.clock.advance(step.windupMs / 2);
     replica.player.restore(wire);
 
@@ -512,8 +537,21 @@ describe('プレイヤー状態のスナップショット', () => {
     replica.clock.advance(2);
     replica.player.update(0.016);
     expect(replica.hits).toHaveLength(1);
-    expect(replica.hits[0]?.damage).toBeCloseTo(
-      CHARACTER_STATS.ORA.attackPower * ORA_VOICE_DAMAGE_MULTIPLIER_MAX,
-    );
+    expect(replica.hits[0]?.damage).toBeCloseTo(CHARACTER_STATS.PAY.attackPower);
+  });
+
+  it('オラの音声ATTACKは送信直後に命中済みなので、復元しても二重に判定しない', () => {
+    const origin = setup({ characterId: 'ORA' });
+    origin.player.submit({ type: 'ATTACK', intensity: 1 });
+
+    const wire: PlayerSnapshot = structuredClone(origin.player.snapshot());
+    expect(wire.swing?.damageMultiplier).toBe(ORA_VOICE_DAMAGE_MULTIPLIER_MAX);
+    expect(wire.swing?.hasHit).toBe(true);
+
+    const replica = setup({ characterId: 'ORA' });
+    replica.player.restore(wire);
+    replica.player.update(0.016);
+
+    expect(replica.hits).toHaveLength(0);
   });
 });

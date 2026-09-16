@@ -171,15 +171,32 @@ export function createPlayer(options: PlayerOptions): Player {
     return comboPhaseAt(clock.now() - swing.startedAt, step) !== 'DONE';
   }
 
-  function startAttack(intensity: number | undefined): void {
+  function startAttack(): void {
     const stepIndex = nextComboStep(swing, clock.now());
     if (stepIndex === null) return;
+    swing = { stepIndex, startedAt: clock.now(), hasHit: false };
+  }
+
+  /**
+   * オラ大輔の声ATTACKだけの経路。「オラ」と言うたびに必ず1回当てる、という
+   * ユーザーの明示的な要望により、剣を振る前提のコンボ受付判定
+   * (nextComboStep、直前の振りがDONEになるまで次を弾く) を通さない。
+   * 常に新しいswingへ差し替えて即座に命中させる。見た目の「振っている」
+   * 扱い(isSwinging/isBusy、移動ロック)だけはstep0のタイミングを流用する。
+   */
+  function startVoiceAttack(intensity: number | undefined): void {
+    const multiplier = damageMultiplierForIntensity(intensity);
     swing = {
-      stepIndex,
+      stepIndex: 0,
       startedAt: clock.now(),
-      damageMultiplier: damageMultiplierForIntensity(intensity),
-      hasHit: false,
+      damageMultiplier: multiplier,
+      hasHit: true,
     };
+    onAttackHit?.({
+      attackerId: id,
+      damage: stats.attackPower * comboStepAt(0).damageScale * multiplier,
+      origin: position,
+    });
   }
 
   function startDodge(): void {
@@ -216,8 +233,12 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (action.type === 'ATTACK') {
-        // wire上のintensityは全キャラから届き得るため、音声ATTACK補正はオラだけに限定する。
-        startAttack(characterId === 'ORA' ? action.intensity : undefined);
+        // wire上のintensityは全キャラから届き得るため、音声ATTACKはオラだけに限定する。
+        if (characterId === 'ORA') {
+          startVoiceAttack(action.intensity);
+        } else {
+          startAttack();
+        }
         return;
       }
       if (action.type === 'DODGE') {
