@@ -61,14 +61,14 @@ export interface CharacterStats {
 export const CHARACTER_STATS: Readonly<Record<CharacterId, CharacterStats>> = {
   ODORUNO: {
     moveSpeed: 7,
-    maxHp: 140,
+    maxHp: 200,
     attackPower: 10,
     dodgeInvulnerableMs: 400,
     dodgeDistance: 5,
     dodgeCooldownMs: 600,
   },
   PAY: {
-    moveSpeed: 9.5,
+    moveSpeed: 10,
     maxHp: 100,
     attackPower: 10,
     dodgeInvulnerableMs: 300,
@@ -78,7 +78,7 @@ export const CHARACTER_STATS: Readonly<Record<CharacterId, CharacterStats>> = {
   ORA: {
     moveSpeed: 7,
     maxHp: 100,
-    attackPower: 12,
+    attackPower: 15,
     dodgeInvulnerableMs: 300,
     dodgeDistance: 4,
     dodgeCooldownMs: 800,
