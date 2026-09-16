@@ -43,15 +43,15 @@ describe('BarrierOverlay', () => {
 
     expect(screen.getByText('BOSS INVINCIBLE')).toBeInTheDocument();
     expect(screen.getByText('「睡眠時間など4時間で十分だ！！！」')).toBeInTheDocument();
-    expect(screen.getByText('光る円の中に3人で入れ！')).toBeInTheDocument();
+    expect(screen.getByText('オレンジの円に3人で入れ！')).toBeInTheDocument();
   });
 
   it('演出のあとは「円に入る」という解除方法を出す', () => {
     render(<BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" />);
     skipCutscene();
 
-    expect(screen.getByText('光る円の中に入って結界を解け')).toBeInTheDocument();
-    expect(screen.getByText('地面の光る円へ走って、中に立つ')).toBeInTheDocument();
+    expect(screen.getByText('オレンジの円に入って結界を解け')).toBeInTheDocument();
+    expect(screen.getByText('オレンジの光の柱へ走って、中に立つ')).toBeInTheDocument();
   });
 
   it('埋まっている円の数を出す', () => {
@@ -74,14 +74,14 @@ describe('BarrierOverlay', () => {
     expect(screen.getByText('空いている')).toBeInTheDocument();
   });
 
-  it('役割によらず同じ解除方法を出す (Pay大輔だけ伝え方を添える)', () => {
+  it('役割によらず同じ解除方法を出す', () => {
     const { rerender } = render(
       <BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" />,
     );
     skipCutscene();
-    expect(screen.getByText(/空いている円へ向かおう/)).toBeInTheDocument();
+    expect(screen.getByText(/水色の安全地帯ではない/)).toBeInTheDocument();
 
     rerender(<BarrierOverlay challenge={challenge()} localCharacterId="PAY" />);
-    expect(screen.getByText(/仲間へ空いている円を伝えよう/)).toBeInTheDocument();
+    expect(screen.getByText(/水色の安全地帯ではない/)).toBeInTheDocument();
   });
 });

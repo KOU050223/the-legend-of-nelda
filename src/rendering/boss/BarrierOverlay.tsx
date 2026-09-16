@@ -70,10 +70,10 @@ function BarrierCutscene({ phase }: { phase: BarrierChallengeSnapshot['phase'] }
           <p className={styles.lead}>
             {phase === 'BARRIER_1'
               ? '堀大輔の周囲に結界が張られた。攻撃は通らない。'
-              : '再び結界。3人で散って光る円へ入れ。'}
+              : '再び結界。3人で散ってオレンジの円へ入れ。'}
           </p>
         </div>
-        <p className={styles.callToAction}>光る円の中に3人で入れ！</p>
+        <p className={styles.callToAction}>オレンジの円に3人で入れ！</p>
       </div>
     </section>
   );
@@ -104,18 +104,18 @@ function BarrierGuide({
     <div className={styles.guide}>
       <div className={styles.guideHeader}>
         <span className={styles.badge}>BOSS INVINCIBLE</span>
-        <strong className={styles.guideTitle}>光る円の中に入って結界を解け</strong>
+        <strong className={styles.guideTitle}>オレンジの円に入って結界を解け</strong>
         <span className={styles.progress} aria-label="埋まっている円">
           {challenge.occupiedCount} / {total}
         </span>
       </div>
 
       <div className={styles.role}>
-        <strong className={styles.roleAction}>地面の光る円へ走って、中に立つ</strong>
+        <strong className={styles.roleAction}>オレンジの光の柱へ走って、中に立つ</strong>
         <span className={styles.roleDetail}>
           {localCharacterId === 'PAY'
-            ? '3人が別々の円に同時に入ると解除。仲間へ空いている円を伝えよう。'
-            : '3人が別々の円に同時に入ると解除。空いている円へ向かおう。'}
+            ? '装置の足元のオレンジの円が目印 (水色の安全地帯ではない)。3人が別々の円に入ると解除。'
+            : '装置の足元のオレンジの円が目印 (水色の安全地帯ではない)。3人が別々の円に入ると解除。'}
         </span>
       </div>
 

@@ -22,10 +22,17 @@ import {
  */
 const GROUND_OFFSET_Y = 0.45;
 
-/** 空いているサークル。入ってほしいので、埋まっている側より目立たせる。 */
-const IDLE_COLOR = '#8fd4ff';
+/**
+ * 空いているサークル。
+ *
+ * 安全地帯 (ArenaMarkers の SafeZoneMark、水色 #9fd7ff・半径3.5) が同じ
+ * アリーナに3つ出ており、水色で描くと見分けが付かない。実際に「入ったのに
+ * 埋まらない」と読まれた (Issue #143 のフィードバック)。装置の頭
+ * (DEVICE_TOP_COLOR #ffd166) と同じ琥珀にして、装置に属する円だと分かるようにする。
+ */
+const IDLE_COLOR = '#ffb020';
 
-/** 誰かが入っているサークル。達成済みなので落ち着いた緑にする。 */
+/** 誰かが入っているサークル。埋まったことを色で切り替える。 */
 const OCCUPIED_COLOR = '#7dffb0';
 
 export interface BarrierCirclesProps {
@@ -47,7 +54,24 @@ export function BarrierCircles({ barrier }: BarrierCirclesProps): React.JSX.Elem
               <meshBasicMaterial
                 color={occupied ? OCCUPIED_COLOR : IDLE_COLOR}
                 transparent
-                opacity={occupied ? 0.45 : 0.24}
+                opacity={occupied ? 0.5 : 0.42}
+                side={DoubleSide}
+                depthWrite={false}
+              />
+            </mesh>
+            {/*
+              光の柱。装置は半径17に散っていて、円の塗りだけでは遠くから
+              どこへ向かえばいいか読めない。柱は視線の高さにも掛かるので、
+              アリーナのどこに居ても「あそこへ走る」が決まる。
+            */}
+            <mesh position={[0, 5, 0]}>
+              <cylinderGeometry
+                args={[DEVICE_INTERACT_RANGE * 0.62, DEVICE_INTERACT_RANGE * 0.62, 10, 24, 1, true]}
+              />
+              <meshBasicMaterial
+                color={occupied ? OCCUPIED_COLOR : IDLE_COLOR}
+                transparent
+                opacity={occupied ? 0.2 : 0.16}
                 side={DoubleSide}
                 depthWrite={false}
               />
