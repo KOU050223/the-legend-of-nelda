@@ -297,3 +297,20 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - トレードオフ: 暫定結果は最終確定より認識精度がやや落ちる（後で内容が変わる可能性がある）が、「オラ」のような短い単語では実害が小さいと判断した。キーワード一致（「オラ」が発話の主要部分）という既存の誤発火防止はそのまま効く。
 - 検証: `pnpm vitest run src`（108ファイル/1129テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。interim反応・二重発火防止・未マッチ時の再評価継続を検証する新規テストを追加した。
 - コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
+
+## Issue #136: イントロ音声読み上げ
+
+計画: `docs/20260916_intro_voice_implementation_plan.md`
+
+| # | フェーズ | 完了条件 | 状態 |
+|---|---|---|---|
+| 1 | 音声プレイヤー | 13本のMP3を番号順に再生し、停止・破棄・再生失敗をテスト済み | 完了 |
+| 2 | イントロ接続 | 音声の `ended` で次ショットへ進み、字幕・音声の同期をテスト済み | 完了 |
+| 3 | 品質・PR | lint / format / typecheck / test / build、差分確認、レビュー、PR作成 | 実行中 |
+
+## レビュー
+
+- `src/intro/intro-voice.ts` に13本の音声を事前読み込みし、ショット切替・`ended`通知・再生拒否通知・停止・破棄を実装した。
+- `src/intro/IntroCutscene.tsx` は音声の `ended` 通知で次の字幕・映像ショットへ進み、SKIP/終了時に音声を停止する。再生拒否時だけ既存ショット尺をフォールバックに使う。
+- `docs/previews/issue-136-intro-voice.png` にイントロ画面の確認用スクリーンショットを保存した。
+- 検証結果: `pnpm test`（112ファイル / 1156テスト）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、変更対象の `oxfmt --check` がすべて終了コード0。既存のThree.js/jsdom警告とbuildのchunkサイズ警告は残るが、エラーはない。
