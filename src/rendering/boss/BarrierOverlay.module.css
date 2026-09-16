@@ -90,6 +90,8 @@
     900 clamp(14px, 2.1vw, 28px) / 1 Impact,
     sans-serif;
   letter-spacing: 0.08em;
+  /* 明るい下地へ載せるので、.overlay の暗い影は打ち消す。 */
+  text-shadow: none;
 }
 
 /* 解除中ずっと出し続ける案内。視界を塞がないよう画面下へ寄せる。 */
