@@ -244,7 +244,7 @@ describe('createAuthorityServer', () => {
     expect(stateMessages(odoruno).at(-1)?.battle.boss.hp).toBeLessThan(1000);
   });
 
-  it('開始済みroomのLEAVEは参加者を外し、残りのclientをMATCHINGへ戻す', async () => {
+  it('開始済みroomのLEAVEは参加者だけを外し、残りのclientの開始状態を維持する', async () => {
     const server = createAuthorityServer({
       port: 0,
       stateBroadcastIntervalMs: 10_000,
@@ -262,11 +262,41 @@ describe('createAuthorityServer', () => {
     await waitFor(() => {
       const lobby = lobbyMessages(odoruno).at(-1);
       return (
-        lobby?.started === false &&
+        lobby?.started === true &&
         lobby.slots.every((slot) => slot.participantId !== 'participant-token-pay')
       );
     });
-    expect(lobbyMessages(odoruno).at(-1)).toMatchObject({ started: false });
+    expect(lobbyMessages(odoruno).at(-1)).toMatchObject({ started: true });
+  });
+
+  it('開始済みroomの最後の参加者がLEAVEした後は、新しい3人を受け入れる', async () => {
+    const server = createAuthorityServer({
+      port: 0,
+      stateBroadcastIntervalMs: 10_000,
+      tokenToPlayerId: TEST_TOKEN_TO_PLAYER_ID,
+    });
+    servers.push(server);
+    const odoruno = await connectClient(server, 'token-odoruno');
+    const pay = await connectClient(server, 'token-pay');
+    const ora = await connectClient(server, 'token-ora');
+    await selectAndStart(odoruno, pay, ora);
+    await waitFor(() => lobbyMessages(odoruno).some(({ started }) => started));
+
+    odoruno.socket.send(JSON.stringify({ type: 'LEAVE' }));
+    pay.socket.send(JSON.stringify({ type: 'LEAVE' }));
+    ora.socket.send(JSON.stringify({ type: 'LEAVE' }));
+    await waitFor(() => odoruno.socket.readyState === WebSocket.CLOSED);
+    await waitFor(() => pay.socket.readyState === WebSocket.CLOSED);
+    await waitFor(() => ora.socket.readyState === WebSocket.CLOSED);
+
+    const nextPlayer = await connectClient(server, 'token-pay', 'participant-next-game');
+    const nextLobby = lobbyMessages(nextPlayer).at(-1);
+    expect(nextLobby?.started).toBe(false);
+    expect(nextLobby?.slots[0]).toEqual({
+      participantId: 'participant-next-game',
+      role: null,
+      connected: true,
+    });
   });
 
   it('3クライアントが同じBattleRoomのSTATEを共有しPAY以外へWASSHOIを配送する', async () => {

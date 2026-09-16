@@ -383,9 +383,11 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     const index = participants.indexOf(participant);
     if (index >= 0) participants.splice(index, 1);
 
-    // 開始済みbattleから1人だけを安全に取り除くAPIは無いため、残った参加者を
-    // MATCHINGへ戻して新しい3人でbattleを作り直す。幽霊playerを残さない。
-    if (started) {
+    // BossBattleのrosterは開始時に凍結される。参加者が残る間にbattle全体を破棄すると
+    // 残りの参加者までMATCHINGへ落ち、進行中のEND演出を中断してしまうため、
+    // 開始済みのroomはそのまま継続する。最後の1人も退出してroomが空になった時だけ
+    // battleを破棄し、次の3人を新しい募集として受け入れる。
+    if (started && participants.length === 0) {
       started = false;
       frozenRoles = null;
       battle = null;
