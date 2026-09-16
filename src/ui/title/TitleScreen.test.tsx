@@ -24,6 +24,23 @@ describe('タイトル画面', () => {
     expect(screen.getByText('〜3人の勇者と眠らない男〜')).toBeInTheDocument();
   });
 
+  it('final_sward2を最大音量でループ再生する', () => {
+    const { container } = render(<TitleScreen />);
+    const bgm = container.querySelector('audio');
+
+    expect(bgm).toHaveAttribute('autoplay');
+    expect(bgm).toHaveAttribute('loop');
+    expect(bgm).toHaveProperty('volume', 1);
+    expect(bgm?.querySelector('source')).toHaveAttribute('src', '/audio/final_sward2.mp3');
+  });
+
+  it('自動再生を拒否されたときはBGM再生ボタンを出す', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValueOnce(new Error('blocked'));
+    render(<TitleScreen />);
+
+    expect(await screen.findByRole('button', { name: 'BGMを再生' })).toBeInTheDocument();
+  });
+
   it('「ひとりで」を押すとイントロへ移り、ひとり用モードを選ぶ (Issue #110)', () => {
     render(<TitleScreen />);
 

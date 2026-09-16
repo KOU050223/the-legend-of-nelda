@@ -35,19 +35,33 @@ export function TitleScreen(): React.JSX.Element {
   const goTo = useScreenStore((state) => state.goTo);
   const items = menuItems();
   const voicePlayer = useRef<TitleVoicePlayer | null>(null);
+  const bgm = useRef<HTMLAudioElement | null>(null);
   const [heroReaction, setHeroReaction] = useState(0);
+  const [bgmBlocked, setBgmBlocked] = useState(false);
 
   useEffect(() => {
     const player = createTitleVoicePlayer();
+    const bgmElement = bgm.current;
     voicePlayer.current = player;
+    // 音源自体が小さいため、HTMLAudioElementで設定できる最大音量にする。
+    if (bgmElement !== null) bgmElement.volume = 1;
+    const playback = bgmElement?.play();
+    if (playback !== undefined) {
+      void playback.catch(() => setBgmBlocked(true));
+    }
     return () => {
       voicePlayer.current = null;
       player.dispose();
+      bgmElement?.pause();
     };
   }, []);
 
   return (
     <div className={styles.title}>
+      <audio aria-hidden="true" autoPlay loop preload="auto" ref={bgm}>
+        <source src="/audio/final_sward2.mp3" type="audio/mpeg" />
+        <track kind="captions" srcLang="ja" label="BGM" />
+      </audio>
       <img className={styles.background} src="/title/bg.png" alt="" aria-hidden="true" />
       <div className={styles.skyFigures} aria-hidden="true">
         <img className={`${styles.skyFigure} ${styles.oraShadow}`} src={oraShadow} alt="" />
@@ -90,6 +104,20 @@ export function TitleScreen(): React.JSX.Element {
               {item.label}
             </button>
           ))}
+          {bgmBlocked && (
+            <button
+              type="button"
+              className={styles.link}
+              onClick={() => {
+                const playback = bgm.current?.play();
+                if (playback !== undefined) {
+                  void playback.then(() => setBgmBlocked(false)).catch(() => setBgmBlocked(true));
+                }
+              }}
+            >
+              BGMを再生
+            </button>
+          )}
         </nav>
       </div>
     </div>
