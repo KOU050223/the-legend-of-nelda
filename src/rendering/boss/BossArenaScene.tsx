@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Billboard, Html, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
@@ -20,6 +20,7 @@ import {
   type BattleSnapshot,
   type BossBattle,
 } from '@/game/session/boss-battle';
+import { createNpcDriver } from '@/game/npc/npc-driver';
 import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
 import type { GameAction, InputAdapter } from '@/game/types/game-action';
 import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
@@ -360,6 +361,22 @@ export function BossArenaScene({
   // finale を進め、こちらは snapshot を映すだけ (二重に進めない)。
   const battle = localBattle?.battle ?? null;
   const events = localBattle?.events ?? null;
+
+  /**
+   * 人間が操作していない2キャラを動かす NPC (Issue #158)。
+   *
+   * ローカル戦闘のときだけ持つ。リモートでは全員が実プレイヤーで、
+   * NPC を走らせると Authority の状態と二重に動かすことになる。
+   * 担当は毎フレーム `readLocalPlayerId` から引き直すので、
+   * 操作キャラを切り替えても追従する。
+   */
+  const npcDriver = useMemo(
+    () =>
+      localBattle === null
+        ? null
+        : createNpcDriver({ rosterIds: LOCAL_PLAYER_IDS, readLocalPlayerId }),
+    [localBattle],
+  );
 
   // 操作キャラ。ローカルは画面から切り替えられ (Issue #106)、リモートは
   // Authority が WELCOME で決めた1人に固定される。混ぜないよう分けて持つ。
@@ -919,6 +936,10 @@ export function BossArenaScene({
         input: toCameraRelativeMovement(move.input, cameraInputYawRef.current),
       });
     }
+
+    // 人間が操作していないキャラへ NPC の入力を流す。時間を進める前に
+    // 送るので、人間の入力と同じフレームで処理される。
+    if (battle !== null && npcDriver !== null) npcDriver.tick(battle);
 
     // ローカルはここで時間が進み、その場で STATE が流れる。リモートは
     // サーバーが進めるので tick() は何もしない。
