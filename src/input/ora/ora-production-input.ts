@@ -14,6 +14,7 @@ import { createHandNeutralCalibrator } from './hand-calibration';
 import { createMediaPipeHandDetector, type HandDetector } from './hand-detector';
 import { createHandJoystick } from './hand-joystick';
 import { createOraActionRecognizer } from './ora-action-recognizer';
+import { createOraReviveRecognizer } from './ora-revive-recognizer';
 import {
   createOraVoiceAttackRecognizer,
   type OraUtteranceCandidate,
@@ -217,6 +218,7 @@ export async function attachOraProductionInput(
   const voiceCalibrator = createVoiceBaselineCalibrator();
   const joystick = createHandJoystick();
   const oraActionRecognizer = createOraActionRecognizer();
+  const oraReviveRecognizer = createOraReviveRecognizer();
   const voiceAttackRecognizer = createOraVoiceAttackRecognizer();
 
   let phase: OraProductionInputPhase = 'idle';
@@ -594,25 +596,36 @@ export async function attachOraProductionInput(
       notifyHandTrackingFrame({ left: observation.left, neutral });
       const calibration = notifyCalibration();
 
-      // MOVEは手のCalibrationだけに依存させ、Calibration中も含めて毎フレーム
-      // 送る。joystick.update()は手/Neutralが無ければゼロを返すので、手を
-      // 見失った瞬間に確実にNeutralへ戻る (Phase2の「Hand LostでNeutral復帰」)。
-      // ここで送らずにreturnすると、player-state側に残った直前の移動入力が
-      // 更新されず、キャラが走り続けてしまう。
-      emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
-
       // ORA_ACTIONは両手が要る。ATTACKは音声だけの入力なので、ここでは
       // 手のCalibrationだけを見る（声のCalibrationは handleSpeechResult 側で
       // 独立に見ている。一度揃うと崩れないため、ここで一緒に握り潰すと
       // 「移動やORA_ACTIONの合間に手が一瞬フレーム外へ出た」だけで、その
       // 瞬間の発話ぶんのATTACKやRush判定の連続性まで失われてしまう）。
       if (!calibration.handComplete) {
+        // MOVEは手のCalibrationだけに依存させ、Calibration中も含めて毎フレーム
+        // 送る。joystick.update()は手/Neutralが無ければゼロを返すので、手を
+        // 見失った瞬間に確実にNeutralへ戻る。
+        emit({ type: 'MOVE', input: joystick.update(observation.left, neutral, timestamp) });
         oraActionRecognizer.reset();
+        oraReviveRecognizer.reset();
+        voiceAttackRecognizer.reset();
         return;
       }
 
+      const reviveState = oraReviveRecognizer.update(
+        observation.left,
+        observation.right,
+        timestamp,
+      );
+      emit({
+        type: 'MOVE',
+        input: reviveState.isHolding
+          ? { forward: 0, right: 0 }
+          : joystick.update(observation.left, neutral, timestamp),
+      });
       const oraState = oraActionRecognizer.update(observation.left, observation.right, timestamp);
       if (oraState.triggered) emit({ type: 'CHARACTER_ACTION' });
+      if (reviveState.triggered) emit({ type: 'REVIVE' });
     } catch (error) {
       reportError(error);
     }

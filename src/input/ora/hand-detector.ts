@@ -17,6 +17,7 @@ type HandLandmarks = readonly (HandLandmark | undefined)[];
 type HandPosition = NonNullable<HandObservation['left']>;
 
 const OPEN_FINGER_DISTANCE_MARGIN = 0.02;
+const CLOSED_FINGER_DISTANCE_MARGIN = 0.01;
 const FINGER_LANDMARK_PAIRS = [
   [6, 8],
   [10, 12],
@@ -54,6 +55,21 @@ function detectOpenHand(landmarks: HandLandmarks | undefined): boolean | undefin
   );
 }
 
+function detectClosedHand(landmarks: HandLandmarks | undefined): boolean | undefined {
+  const wrist = landmarks?.[0];
+  if (!wrist) return undefined;
+
+  const fingerLandmarks = FINGER_LANDMARK_PAIRS.map(([pipIndex, tipIndex]) => ({
+    pip: landmarks[pipIndex],
+    tip: landmarks[tipIndex],
+  }));
+  if (fingerLandmarks.some(({ pip, tip }) => !pip || !tip)) return undefined;
+
+  return fingerLandmarks.every(
+    ({ pip, tip }) => distance(wrist, tip!) < distance(wrist, pip!) - CLOSED_FINGER_DISTANCE_MARGIN,
+  );
+}
+
 function createHandPosition(
   landmarks: HandLandmarks | undefined,
   before: HandPosition | undefined,
@@ -75,6 +91,8 @@ function createHandPosition(
   };
   const isOpen = detectOpenHand(landmarks);
   if (isOpen !== undefined) position.isOpen = isOpen;
+  const isClosed = detectClosedHand(landmarks);
+  if (isClosed !== undefined) position.isClosed = isClosed;
   return position;
 }
 

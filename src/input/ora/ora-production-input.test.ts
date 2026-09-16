@@ -42,6 +42,7 @@ import {
   type OraHandTrackingFrame,
   type OraProductionInputStatus,
 } from './ora-production-input';
+import { ORA_REVIVE_INPUT_INTERVAL_MS } from './ora-revive-recognizer';
 
 type FrameCallback = (timestamp: number) => void;
 type TimeoutCallback = { handler: () => void; milliseconds: number };
@@ -58,6 +59,7 @@ let timeoutCallbacks: Map<number, TimeoutCallback>;
 let nextTimeoutId: number;
 let nowMs: number;
 let rms: number;
+let detectedHands: HandObservation;
 let observedLeft: HandObservation['left'];
 
 class FakeSpeechRecognition {
@@ -118,8 +120,8 @@ class FakeSpeechRecognition {
   }
 }
 
-function hand(x: number, y: number): NonNullable<HandObservation['left']> {
-  return { x, y, velocityX: 0, velocityY: 0, isOpen: true };
+function hand(x: number, y: number, isOpen = true): NonNullable<HandObservation['left']> {
+  return { x, y, velocityX: 0, velocityY: 0, isOpen, isClosed: !isOpen };
 }
 
 function runNextFrame(timestamp: number): void {
@@ -222,16 +224,24 @@ function setupSuccessfulResources(): void {
   nextTimeoutId = 1;
   nowMs = 0;
   rms = 0;
+  detectedHands = {
+    capturedAt: 0,
+    left: hand(0.2, 0.2),
+    right: hand(0.8, 0.2),
+  };
   observedLeft = hand(0.2, 0.2);
   FakeSpeechRecognition.instances.length = 0;
 
   const detector = {
     detect: vi.fn<(_video: HTMLVideoElement, capturedAt: number) => HandObservation>(
-      (_video, capturedAt) => ({
-        capturedAt,
-        ...(observedLeft === undefined ? {} : { left: observedLeft }),
-        right: hand(0.8, 0.2),
-      }),
+      (_video, capturedAt) => {
+        const { left: _detectedLeft, ...withoutLeft } = detectedHands;
+        return {
+          ...withoutLeft,
+          capturedAt,
+          ...(observedLeft === undefined ? {} : { left: observedLeft }),
+        };
+      },
     ),
     close: vi.fn<() => void>(),
   };
@@ -594,6 +604,37 @@ describe('createOraProductionInput', () => {
     expect(actions.some((action) => action.type === 'CHARACTER_ACTION')).toBe(true);
     expect(actions.some((action) => action.type === 'ATTACK')).toBe(false);
 
+    adapter.detach();
+  });
+
+  it('合掌を保持している間は一定間隔でREVIVEを送る', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    runNextFrame(0);
+    rms = 0.2;
+    runInterval();
+    nowMs = 350;
+    rms = 0;
+    runInterval();
+    runNextFrame(1_000);
+
+    detectedHands = {
+      capturedAt: 1_001,
+      left: hand(0.44, 0.55, false),
+      right: hand(0.56, 0.55, false),
+    };
+    observedLeft = detectedHands.left;
+    runNextFrame(1_001);
+    runNextFrame(1_001 + ORA_REVIVE_INPUT_INTERVAL_MS - 1);
+    runNextFrame(1_001 + ORA_REVIVE_INPUT_INTERVAL_MS);
+
+    expect(actions.filter((action) => action.type === 'REVIVE')).toHaveLength(2);
+    expect(
+      actions
+        .filter((action): action is Extract<GameAction, { type: 'MOVE' }> => action.type === 'MOVE')
+        .every(({ input }) => input.forward === 0 && input.right === 0),
+    ).toBe(true);
     adapter.detach();
   });
 

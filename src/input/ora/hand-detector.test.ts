@@ -100,6 +100,7 @@ describe('createMediaPipeHandDetector', () => {
     const result = detector.detect(document.createElement('video'), 1_000);
 
     expect(result.left?.isOpen).toBe(true);
+    expect(result.left?.isClosed).toBe(false);
   });
 
   it('4本の指が曲がっている場合は開いた手ではないとして返す', async () => {
@@ -113,5 +114,6 @@ describe('createMediaPipeHandDetector', () => {
     const result = detector.detect(document.createElement('video'), 1_000);
 
     expect(result.right?.isOpen).toBe(false);
+    expect(result.right?.isClosed).toBe(true);
   });
 });
