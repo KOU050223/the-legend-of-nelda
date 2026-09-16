@@ -94,8 +94,18 @@ class FakeSpeechRecognition {
     this.stopped = true;
   }
 
-  emitFinal(transcript: string): void {
-    const event = { resultIndex: 0, results: [{ isFinal: true, 0: { transcript } }] };
+  emitFinal(transcript: string, resultIndex = 0): void {
+    this.emitResult(transcript, true, resultIndex);
+  }
+
+  emitInterim(transcript: string, resultIndex = 0): void {
+    this.emitResult(transcript, false, resultIndex);
+  }
+
+  private emitResult(transcript: string, isFinal: boolean, resultIndex: number): void {
+    const results: unknown[] = Array.from({ length: resultIndex });
+    results.push({ isFinal, 0: { transcript } });
+    const event = { resultIndex, results };
     for (const listener of this.listeners.get('result') ?? []) listener(event);
   }
 
@@ -470,6 +480,73 @@ describe('createOraProductionInput', () => {
       { type: 'ATTACK', intensity: 1 },
       { type: 'ATTACK', intensity: 1 },
     ]);
+
+    adapter.detach();
+  });
+
+  it('確定(isFinal)を待たず、interim結果の時点でオラに反応してATTACKを予約する', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    nowMs = 1_000;
+    rms = 0.2;
+    runInterval();
+    nowMs = 1_100;
+    runInterval();
+    FakeSpeechRecognition.instances.at(-1)?.emitInterim('オラ');
+
+    // isFinalを一度も送っていない時点で、既に予約されている。
+    expect(timeoutCallbacks.size).toBe(1);
+    runNextTimeout();
+    expect(attackActions(actions)).toEqual([{ type: 'ATTACK', intensity: 1 }]);
+
+    adapter.detach();
+  });
+
+  it('interimで反応した後、同じ発話がfinalへ確定しても二重に発火しない', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    nowMs = 1_000;
+    rms = 0.2;
+    runInterval();
+    nowMs = 1_100;
+    runInterval();
+    const recognition = FakeSpeechRecognition.instances.at(-1)!;
+    recognition.emitInterim('オラ');
+    runNextTimeout();
+    expect(attackActions(actions)).toHaveLength(1);
+
+    // 同じresultIndex(既定の0)がfinalへ確定しても、既に消費済みなので無視する。
+    recognition.emitFinal('オラ');
+    expect(timeoutCallbacks.size).toBe(0);
+    expect(attackActions(actions)).toHaveLength(1);
+
+    adapter.detach();
+  });
+
+  it('interimがまだ何にもマッチしない間は、確定を待たず更新のたびに再評価する', async () => {
+    const actions: GameAction[] = [];
+    const adapter = await createTestAttach()((action) => actions.push(action));
+
+    completeCalibration();
+    nowMs = 1_000;
+    rms = 0.2;
+    runInterval();
+    nowMs = 1_100;
+    runInterval();
+    const recognition = FakeSpeechRecognition.instances.at(-1)!;
+    // 最初の暫定結果はまだ断片で、キーワードとして成立しない。
+    recognition.emitInterim('お');
+    expect(timeoutCallbacks.size).toBe(0);
+
+    // 続きが届いて「オラ」に育った時点で反応する。
+    recognition.emitInterim('オラ');
+    expect(timeoutCallbacks.size).toBe(1);
+    runNextTimeout();
+    expect(attackActions(actions)).toHaveLength(1);
 
     adapter.detach();
   });

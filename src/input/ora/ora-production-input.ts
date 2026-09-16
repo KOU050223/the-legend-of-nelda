@@ -253,6 +253,10 @@ export async function attachOraProductionInput(
   // MAX_UTTERANCE_GAP_MSを超える無音を挟んだら、無関係な過去の発話(例えば
   // Calibration中に拾った音)を引きずらないよう、新しい開始点として仕切り直す。
   let earliestPendingSpeechAt: number | null = null;
+  // 既にATTACKへ変換した最大のSpeechRecognition結果index。同じ発話への
+  // interim更新やfinal確定で二重に発火しないようにする。recognitionが
+  // 再起動すると内部のindexは0から数え直されるため、再起動のたびにリセットする。
+  let firedResultIndex = -1;
 
   const notifyStatus = (nextPhase: OraProductionInputPhase): void => {
     phase = nextPhase;
@@ -461,15 +465,16 @@ export async function attachOraProductionInput(
     if (stopped) return;
     const endedAt = now();
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      // 同じ発話に何度目かのinterim更新が来ても、既にATTACKへ変換済みなら
+      // 無視する（二重発火を防ぐ）。まだ何にもマッチしていない発話は、
+      // 確定を待たず毎回の更新を見続ける（「オラ」と言った瞬間に反応するため、
+      // isFinalを待たない）。
+      if (index <= firedResultIndex) continue;
       const result = event.results[index];
-      if (!result?.isFinal) continue;
-      const transcript = result[0]?.transcript?.trim();
+      const transcript = result?.[0]?.transcript?.trim();
       if (!transcript) continue;
 
       const startedAt = Math.min(endedAt, earliestPendingSpeechAt ?? Math.max(0, endedAt - 1_000));
-      // このfinal結果で発話区間を消費した。次のオラのために「本当の開始時刻」
-      // の追跡をやり直す。
-      earliestPendingSpeechAt = null;
       const candidate: OraUtteranceCandidate = {
         transcript,
         startedAt,
@@ -489,6 +494,7 @@ export async function attachOraProductionInput(
           transcript: candidate.transcript,
           intensity: candidate.intensity,
           hits: attacks.length,
+          isFinal: result?.isFinal === true,
           voiceReady,
         });
       }
@@ -497,10 +503,19 @@ export async function attachOraProductionInput(
         intensity: candidate.intensity,
         hits: attacks.length,
       });
-      if (!voiceReady) continue;
 
-      for (const [attackIndex, attack] of attacks.entries()) {
-        scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS, attack.intensity);
+      if (attacks.length > 0) {
+        // マッチした。確定を待たずここで消費し、この発話の後続のinterim更新
+        // やfinal結果で同じATTACKを繰り返し発火しない。
+        firedResultIndex = index;
+        earliestPendingSpeechAt = null;
+        for (const [attackIndex, attack] of attacks.entries()) {
+          scheduleAttack(attackIndex * VOICE_ATTACK_HIT_SPACING_MS, attack.intensity);
+        }
+      } else if (result?.isFinal) {
+        // 確定してもマッチしなかった。この発話は終わったとみなし、次の発話の
+        // ために「本当の開始時刻」の追跡をやり直す。
+        earliestPendingSpeechAt = null;
       }
     }
   };
@@ -520,7 +535,8 @@ export async function attachOraProductionInput(
     setSpeechRecognitionStatus('available');
     recognition = new Recognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    // 確定(isFinal)を待たず、「オラ」と言った瞬間の暫定結果に反応するため。
+    recognition.interimResults = true;
     recognition.lang = 'ja-JP';
     speechResultListener = handleSpeechResult;
     speechErrorListener = (event) => {
@@ -538,6 +554,9 @@ export async function attachOraProductionInput(
       if (stopped || recognition === undefined || speechRecognitionStatus !== 'available') return;
       try {
         recognition.start();
+        // 再起動すると内部の結果indexは0から数え直されるため、前回セッション分の
+        // firedResultIndexを持ち越すと新しいセッションの序盤を誤ってスキップする。
+        firedResultIndex = -1;
       } catch (error) {
         setSpeechRecognitionStatus('error', 'error', messageOf(error));
       }
