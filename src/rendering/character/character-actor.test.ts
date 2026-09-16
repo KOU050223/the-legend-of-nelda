@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_REVIVAL } from '@/game/config/phase2-player-balance';
 import type { PlayerSnapshot } from '@/game/player/player-state';
 
-import { reviveProgressLabel, sleepCountdownRatio, sleepCountdownSeconds } from './character-actor';
+import {
+  reviveProgressLabel,
+  sleepCountdownRatio,
+  sleepCountdownSeconds,
+} from './character-actor-status';
 
 function snapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
   return {

@@ -2,13 +2,17 @@ import { forwardRef } from 'react';
 import { Billboard, Text } from '@react-three/drei';
 import type { Group } from 'three';
 
-import { DEFAULT_REVIVAL } from '@/game/config/phase2-player-balance';
-import { requiredReviveInputs, reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
+import { reviveRatio, type PlayerSnapshot } from '@/game/player/player-state';
 
 import { CharacterModel } from './CharacterModel';
 import { CHARACTER_DISPLAY_HEIGHT } from './character-models';
 import { motionContextFor } from './motion-context';
 import type { MotionContext } from './motion-manifest';
+import {
+  reviveProgressLabel,
+  sleepCountdownRatio,
+  sleepCountdownSeconds,
+} from './character-actor-status';
 
 export interface CharacterActorProps {
   /** 再レンダー対象の表示状態。HPバーとモデル選択がこの値を使う。 */
@@ -62,21 +66,6 @@ const BAR_OVERHEAD_HEIGHT = CHARACTER_DISPLAY_HEIGHT + 0.25;
 /** 倒れているときのバーの高さ。寝ている体の上に置く。 */
 const BAR_DOWNED_HEIGHT = 0.6;
 const DOWNED_BAR_HEIGHT = 0.1;
-
-export function reviveProgressLabel(player: PlayerSnapshot): string {
-  return `蘇生中 ${player.reviveInputs}/${requiredReviveInputs()}`;
-}
-
-export function sleepCountdownSeconds(player: PlayerSnapshot, now: number): number | null {
-  if (player.status !== 'FALLING_ASLEEP' || player.sleepAt === null) return null;
-  return Math.max(0, (player.sleepAt - now) / 1000);
-}
-
-export function sleepCountdownRatio(player: PlayerSnapshot, now: number): number {
-  const seconds = sleepCountdownSeconds(player, now);
-  if (seconds === null) return 0;
-  return Math.min(1, seconds / (DEFAULT_REVIVAL.sleepCountdownMs / 1000));
-}
 
 /**
  * 頭上のHPバー。倒れている間は蘇生ゲージに切り替わる。
