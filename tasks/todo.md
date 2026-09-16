@@ -306,7 +306,7 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 |---|---|---|---|
 | 1 | 音声プレイヤー | 13本のMP3を番号順に再生し、停止・破棄・再生失敗をテスト済み | 完了 |
 | 2 | イントロ接続 | 音声の `ended` で次ショットへ進み、字幕・音声の同期をテスト済み | 完了 |
-| 3 | 品質・PR | lint / format / typecheck / test / build、差分確認、レビュー、PR作成 | 実行中 |
+| 3 | 品質・PR | lint / format / typecheck / test / build、差分確認、レビュー、PR作成 | 完了 |
 
 ## レビュー
 
@@ -314,3 +314,5 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 - `src/intro/IntroCutscene.tsx` は音声の `ended` 通知で次の字幕・映像ショットへ進み、SKIP/終了時に音声を停止する。再生拒否時だけ既存ショット尺をフォールバックに使う。
 - `docs/previews/issue-136-intro-voice.png` にイントロ画面の確認用スクリーンショットを保存した。
 - 検証結果: `pnpm test`（112ファイル / 1156テスト）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、変更対象の `oxfmt --check` がすべて終了コード0。既存のThree.js/jsdom警告とbuildのchunkサイズ警告は残るが、エラーはない。
+- CI結果: PR #157 の `Workers Builds: nelda` が成功。
+- PR: https://github.com/KOU050223/the-legend-of-nelda/pull/157
