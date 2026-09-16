@@ -12,7 +12,9 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { OraStatusHud } from '@/ui/ora-status/OraStatusHud';
 import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
+import { useLocalPlayerStore } from '@/store/local-player-store';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
 import { MultiplayerVoiceSessionProvider } from '@/ui/voice/MultiplayerVoiceSessionProvider';
@@ -125,6 +127,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
         <GameScene multiplayer />
         <FirstPersonHealthHud />
         <VoiceHud />
+        <OraStatusHud />
       </div>
     );
   }
@@ -140,6 +143,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
         <FinalePresentation />
         <WorldTutorialGuide />
         <PlayerSwitch />
+        <OraStatusHud />
         <MicrophoneDebugPanel />
         <ResultOverlay
           onRestart={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }))}
@@ -170,9 +174,15 @@ export function BattleScreen(): React.JSX.Element {
 /**
  * 音声入力の閾値調整用パネル。本番ビルドへは出さず、ゲームUIとも密結合させない。
  * ワールド探索モードでも閾値を合わせられるよう、両方の画面へ出す。(Issue #43)
+ *
+ * オラ大輔選択中は隠す。これはオカリナ/わっしょい用のマイク調整パネルで、
+ * オラ大輔の音声入力（本番は選択するだけで自動的にマイクへ繋がる）とは
+ * 無関係だが、同じ「マイク入力を有効にする」ボタンが常時見えているせいで
+ * 「オラを使う前に毎回これを押さないといけない」という誤解を招いていた。
  */
 function MicrophoneDebugPanel(): React.JSX.Element | null {
-  if (MicrophoneDebug === null) return null;
+  const localPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
+  if (MicrophoneDebug === null || localPlayerId === 'ora') return null;
 
   return (
     <Suspense fallback={null}>
