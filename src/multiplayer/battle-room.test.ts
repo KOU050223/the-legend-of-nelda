@@ -66,7 +66,6 @@ function createBattleHarness(
     },
     players: [],
     snapshot: () => createBattleSnapshot(),
-    barrierViewFor: () => null,
   };
 
   return { battle, elapsed: () => elapsed, submitted, updates };

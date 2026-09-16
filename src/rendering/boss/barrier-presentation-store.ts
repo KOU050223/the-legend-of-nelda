@@ -13,21 +13,13 @@ import type { CharacterId } from '@/game/config/phase2-player-balance';
 export interface BarrierPresentationSnapshot {
   /** 進行中の結界。結界フェーズ外・ソロでは null。 */
   readonly challenge: BarrierChallengeSnapshot | null;
-  /** 操作しているキャラ。案内の文言を役割ごとに変えるために持つ。 */
+  /** 操作しているキャラ。自分がサークルに入れているかを出すために持つ。 */
   readonly localCharacterId: CharacterId | null;
-  /**
-   * 手順を間違えて進行が巻き戻された回数。
-   *
-   * 0 なら表示しない。同じ文言を続けて出し直せるよう、真偽値ではなく
-   * 単調増加の連番にする (FinaleOverlay の zeroDamageSequence と同じ理由)。
-   */
-  readonly resetSequence: number;
 }
 
 const INITIAL_SNAPSHOT: BarrierPresentationSnapshot = {
   challenge: null,
   localCharacterId: null,
-  resetSequence: 0,
 };
 
 let snapshot = INITIAL_SNAPSHOT;
@@ -43,11 +35,7 @@ export function subscribeToBarrierPresentation(listener: () => void): () => void
 }
 
 export function publishBarrierPresentation(next: BarrierPresentationSnapshot): void {
-  if (
-    snapshot.challenge === next.challenge &&
-    snapshot.localCharacterId === next.localCharacterId &&
-    snapshot.resetSequence === next.resetSequence
-  )
+  if (snapshot.challenge === next.challenge && snapshot.localCharacterId === next.localCharacterId)
     return;
   snapshot = next;
   for (const listener of listeners) listener();

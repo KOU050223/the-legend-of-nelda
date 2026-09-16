@@ -1,21 +1,22 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { BarrierChallengeSnapshot } from '@/game/barrier/barrier-challenge';
 import { DEVICE_ANCHORS } from '@/game/arena/arena';
+import type { BarrierChallengeSnapshot } from '@/game/barrier/barrier-challenge';
 
 import { BarrierOverlay } from './BarrierOverlay';
 
 function challenge(overrides: Partial<BarrierChallengeSnapshot> = {}): BarrierChallengeSnapshot {
+  const devices = overrides.devices ?? [
+    { id: 'DEVICE_0', anchor: DEVICE_ANCHORS[0]!, status: 'IDLE' },
+    { id: 'DEVICE_1', anchor: DEVICE_ANCHORS[1]!, status: 'IDLE' },
+    { id: 'DEVICE_2', anchor: DEVICE_ANCHORS[2]!, status: 'IDLE' },
+  ];
+
   return {
-    phase: 'BARRIER_2',
-    devices: [
-      { id: 'DEVICE_0', anchor: DEVICE_ANCHORS[0]!, status: 'IDLE' },
-      { id: 'DEVICE_1', anchor: DEVICE_ANCHORS[1]!, status: 'IDLE' },
-      { id: 'DEVICE_2', anchor: DEVICE_ANCHORS[2]!, status: 'IDLE' },
-    ],
-    nextStepIndex: 0,
-    securedDeviceId: null,
+    phase: 'BARRIER_1',
+    devices,
+    occupiedCount: devices.filter((device) => device.status === 'OCCUPIED').length,
     ...overrides,
   };
 }
@@ -32,72 +33,55 @@ describe('BarrierOverlay', () => {
   afterEach(() => vi.useRealTimers());
 
   it('結界が無いときは何も表示しない', () => {
-    const { container } = render(
-      <BarrierOverlay challenge={null} localCharacterId="ODORUNO" resetSequence={0} />,
-    );
+    const { container } = render(<BarrierOverlay challenge={null} localCharacterId="ODORUNO" />);
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it('発動直後はボスが無敵になったことを演出で伝える', () => {
-    render(<BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" resetSequence={0} />);
+    render(<BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" />);
 
     expect(screen.getByText('BOSS INVINCIBLE')).toBeInTheDocument();
     expect(screen.getByText('「睡眠時間など4時間で十分だ！！！」')).toBeInTheDocument();
+    expect(screen.getByText('光る円の中に3人で入れ！')).toBeInTheDocument();
   });
 
-  it('演出のあとは操作しているキャラ向けの解除手順を出す', () => {
-    render(<BarrierOverlay challenge={challenge()} localCharacterId="ORA" resetSequence={0} />);
+  it('演出のあとは「円に入る」という解除方法を出す', () => {
+    render(<BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" />);
     skipCutscene();
 
-    expect(screen.getByText('オラ大輔')).toBeInTheDocument();
-    expect(screen.getByText('確保された装置の前で、オラ大輔専用入力で起動')).toBeInTheDocument();
-    // 別の役割の手順は出さない。
-    expect(screen.queryByText('オドルノ大輔')).not.toBeInTheDocument();
+    expect(screen.getByText('光る円の中に入って結界を解け')).toBeInTheDocument();
+    expect(screen.getByText('地面の光る円へ走って、中に立つ')).toBeInTheDocument();
   });
 
-  it('役割ごとに案内を変える', () => {
-    render(<BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" resetSequence={0} />);
-    skipCutscene();
-
-    expect(screen.getByText('装置へ走り、E / INTERACT で現場を確保')).toBeInTheDocument();
-  });
-
-  it('装置の状態と進捗を出す', () => {
+  it('埋まっている円の数を出す', () => {
     render(
       <BarrierOverlay
         challenge={challenge({
-          nextStepIndex: 1,
-          securedDeviceId: 'DEVICE_0',
           devices: [
-            { id: 'DEVICE_0', anchor: DEVICE_ANCHORS[0]!, status: 'SECURED' },
+            { id: 'DEVICE_0', anchor: DEVICE_ANCHORS[0]!, status: 'OCCUPIED' },
             { id: 'DEVICE_1', anchor: DEVICE_ANCHORS[1]!, status: 'IDLE' },
-            { id: 'DEVICE_2', anchor: DEVICE_ANCHORS[2]!, status: 'ACTIVATED' },
+            { id: 'DEVICE_2', anchor: DEVICE_ANCHORS[2]!, status: 'OCCUPIED' },
           ],
         })}
-        localCharacterId="PAY"
-        resetSequence={0}
+        localCharacterId="ORA"
       />,
     );
     skipCutscene();
 
-    expect(screen.getByLabelText('起動済みの装置')).toHaveTextContent('1 / 3');
-    expect(screen.getByText('確保 → 起動待ち')).toBeInTheDocument();
-    expect(screen.getByText('起動済み')).toBeInTheDocument();
+    expect(screen.getByLabelText('埋まっている円')).toHaveTextContent('2 / 3');
+    expect(screen.getAllByText('誰かいる')).toHaveLength(2);
+    expect(screen.getByText('空いている')).toBeInTheDocument();
   });
 
-  it('手順を間違えたときだけ、やり直しになったことを出す', () => {
+  it('役割によらず同じ解除方法を出す (Pay大輔だけ伝え方を添える)', () => {
     const { rerender } = render(
-      <BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" resetSequence={0} />,
+      <BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" />,
     );
     skipCutscene();
+    expect(screen.getByText(/空いている円へ向かおう/)).toBeInTheDocument();
 
-    expect(screen.queryByText('順番が違う！')).not.toBeInTheDocument();
-
-    rerender(
-      <BarrierOverlay challenge={challenge()} localCharacterId="ODORUNO" resetSequence={1} />,
-    );
-
-    expect(screen.getByText('順番が違う！')).toBeInTheDocument();
+    rerender(<BarrierOverlay challenge={challenge()} localCharacterId="PAY" />);
+    expect(screen.getByText(/仲間へ空いている円を伝えよう/)).toBeInTheDocument();
   });
 });

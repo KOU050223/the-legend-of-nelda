@@ -8,7 +8,6 @@ import { createAudioManager } from '@/audio/audio-manager';
 import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
 import type { BarrierChallengeSnapshot } from '@/game/barrier/barrier-challenge';
-import { didResetProgress } from '@/game/barrier/barrier-progress';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
@@ -65,6 +64,7 @@ import {
 } from '../character/HoriDaisukeModel';
 import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
+import { BarrierCircles } from './BarrierCircles';
 import { DangerZoneMarks } from './DangerZoneMarks';
 import { DumbbellSlam, type DumbbellSlamFrame } from './DumbbellSlam';
 import { publishBarrierPresentation, resetBarrierPresentation } from './barrier-presentation-store';
@@ -237,8 +237,7 @@ function isSameBarrier(
 ): boolean {
   if (a === null || b === null) return a === b;
   if (a.phase !== b.phase) return false;
-  if (a.nextStepIndex !== b.nextStepIndex) return false;
-  if (a.securedDeviceId !== b.securedDeviceId) return false;
+  if (a.occupiedCount !== b.occupiedCount) return false;
   if (a.devices.length !== b.devices.length) return false;
 
   return a.devices.every((device, index) => {
@@ -467,26 +466,13 @@ export function BossArenaScene({
   // 結界の表示。ソロでは BossBattle が結界を自動解除するので barrier は常に
   // null になり、ここから何も出ない (GAME でだけ動く)。
   const barrier = view?.snapshot.barrier ?? null;
-  const previousBarrier = useRef<BarrierChallengeSnapshot | null>(null);
-  const [barrierResetSequence, setBarrierResetSequence] = useState(0);
-
-  useEffect(() => {
-    // `reset: true` は submit() の戻り値にしか無く、判定が Authority 側で
-    // 起きるマルチプレイではクライアントへ届かない。届く BattleSnapshot の
-    // 差分から「巻き戻された」を復元する。
-    if (didResetProgress(previousBarrier.current, barrier)) {
-      setBarrierResetSequence((current) => current + 1);
-    }
-    previousBarrier.current = barrier;
-  }, [barrier]);
 
   useEffect(() => {
     publishBarrierPresentation({
       challenge: barrier,
       localCharacterId: localPlayer?.characterId ?? null,
-      resetSequence: barrierResetSequence,
     });
-  }, [barrier, localPlayer, barrierResetSequence]);
+  }, [barrier, localPlayer]);
 
   useEffect(() => resetBarrierPresentation, []);
 
@@ -879,6 +865,8 @@ export function BossArenaScene({
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
+      {/* 結界の解除サークル。判定と同じ半径を描き、入る場所を地面で示す。 */}
+      <BarrierCircles barrier={barrier} />
 
       {/* 絶対起床アラームのダンベル投げと衝撃波 (#122)。判定は持たない飾りなので
           演出強度 0 では消える。危険範囲そのものは上の DangerZoneMarks が描く。 */}
