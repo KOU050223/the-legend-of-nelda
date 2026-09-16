@@ -128,5 +128,5 @@ Issue #100 / #143（結界・保護サークル）は別の担当者が対応中
 - `src/intro/IntroCutscene.tsx` は音声の `ended` 通知で次の字幕・映像ショットへ進み、SKIP/終了時に音声を停止する。再生拒否時だけ既存ショット尺をフォールバックに使う。
 - `docs/previews/issue-136-intro-voice.png` にイントロ画面の確認用スクリーンショットを保存した。
 - 検証結果: `pnpm test`（112ファイル / 1156テスト）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、変更対象の `oxfmt --check` がすべて終了コード0。既存のThree.js/jsdom警告とbuildのchunkサイズ警告は残るが、エラーはない。
-- CI結果: PR #157 の `Workers Builds: nelda` が成功。
+- CI結果: PR #157 の `Lint / Type Check / Test / Build`、`Workers Builds: nelda`、`React Doctor` がすべて成功。
 - PR: https://github.com/KOU050223/the-legend-of-nelda/pull/157
