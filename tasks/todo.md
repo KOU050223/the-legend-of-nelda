@@ -24,17 +24,17 @@
 
 ## フェーズ計画（ゲート分割・この順で最短距離を通す）
 
-| # | フェーズ | 完了条件 (DoD) | 状態 |
-|---|---------|----------------|------|
-| 1 | 両手トラッキング基盤 + Calibration | 左右手の位置がリアルタイムで取れる、左手Neutral位置と音量基準をCalibrationで取得できる | 完了 |
-| 2 | MOVE 左手Air Joystick | Dead Zone/Smoothing/Hysteresis/Clamp込みで連続MOVEが出る、Hand LostでNeutral復帰 | 完了 |
-| 3A | ATTACK Voice「オラ」検出 | 「オラ」発話でATTACK発火、連続発話が複数hitへ展開、3回以上でORA RUSH、通常会話の誤発火防止（VAD単体に頼らない）、右手振りfallback維持 | 完了（純粋ロジックのみ。ブラウザ配線はPhase5） |
-| 4 | ORA_ACTION 両手パー | 両手OPEN+上側+Spread+700ms HoldでCHARACTER_ACTION発火、進行度UI、Cooldown | 完了（純粋ロジックのみ。UI/配線はPhase5/6） |
-| 5 | 本番配線 + Multiplayer疎通 | アダプタ選択構造でOra Production/Keyboardを切替、オラ選択中はKeyboard/Mouse非attach、Debug Keyboardのみdev fallback、Raw映像/音声非送信でGameActionのみ同期確認 | 完了（コミット未実施） |
-| 6 | Debug UI拡張 (`?debug=ora`) | Camera/Mic状態、両手位置、Voice combo、ORA_ACTION進行度を表示 | 着手中（Codex並列委譲） |
-| 3B | intensity → 威力/演出反映 | GameAction等の変更範囲調査 → Damage Multiplier 0.85〜1.30 clampで反映、VFX/SE/CameraShakeが音量で変化 | 未着手 |
-| 7 | Docs更新 | `docs/phase2-ora-input-spec.md`をProduction方針(Markerless + Voice)へ更新、#49はfallback注記 | 未着手 |
-| 8 | 品質まとめ | lint/typecheck/test/build、実機WebCam+Mic手動確認 | 未着手 |
+| #   | フェーズ                           | 完了条件 (DoD)                                                                                                                                                  | 状態                                           |
+| --- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1   | 両手トラッキング基盤 + Calibration | 左右手の位置がリアルタイムで取れる、左手Neutral位置と音量基準をCalibrationで取得できる                                                                          | 完了                                           |
+| 2   | MOVE 左手Air Joystick              | Dead Zone/Smoothing/Hysteresis/Clamp込みで連続MOVEが出る、Hand LostでNeutral復帰                                                                                | 完了                                           |
+| 3A  | ATTACK Voice「オラ」検出           | 「オラ」発話でATTACK発火、連続発話が複数hitへ展開、3回以上でORA RUSH、通常会話の誤発火防止（VAD単体に頼らない）、右手振りfallback維持                           | 完了（純粋ロジックのみ。ブラウザ配線はPhase5） |
+| 4   | ORA_ACTION 両手パー                | 両手OPEN+上側+Spread+700ms HoldでCHARACTER_ACTION発火、進行度UI、Cooldown                                                                                       | 完了（純粋ロジックのみ。UI/配線はPhase5/6）    |
+| 5   | 本番配線 + Multiplayer疎通         | アダプタ選択構造でOra Production/Keyboardを切替、オラ選択中はKeyboard/Mouse非attach、Debug Keyboardのみdev fallback、Raw映像/音声非送信でGameActionのみ同期確認 | 完了（コミット未実施）                         |
+| 6   | Debug UI拡張 (`?debug=ora`)        | Camera/Mic状態、両手位置、Voice combo、ORA_ACTION進行度を表示                                                                                                   | 着手中（Codex並列委譲）                        |
+| 3B  | intensity → 威力/演出反映          | GameAction等の変更範囲調査 → Damage Multiplier 0.85〜1.30 clampで反映、VFX/SE/CameraShakeが音量で変化                                                           | 未着手                                         |
+| 7   | Docs更新                           | `docs/phase2-ora-input-spec.md`をProduction方針(Markerless + Voice)へ更新、#49はfallback注記                                                                    | 未着手                                         |
+| 8   | 品質まとめ                         | lint/typecheck/test/build、実機WebCam+Mic手動確認                                                                                                               | 未着手                                         |
 
 各フェーズ完了時にClaudeが差分確認してコミット。push/PRは許可が出るまで行わない。
 
@@ -194,6 +194,7 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 1. **Calibration UXに発声指示がない**: `BossArenaScene.tsx`のオーバーレイが「両手を自然な位置に構えてください…{進捗%}」の1文のみで、声量Calibrationのために発声が要ることを一切示していなかった。`OraCalibrationState`の`handComplete`/`voiceComplete`を個別に見て、未完了の項目だけ「両手を画面下寄りの自然な位置に構えてください」「「オラ！」と一度声に出してください」を出し分けるよう修正。
 2. **「オラ！」でATTACKが発火しない**: `ora-production-input.ts`の`intensityBetween()`が、わっしょい用（シャウト前提、threshold〜RMS1.0を線形正規化）の`toIntensity`をそのまま流用し、さらにCalibration中にたまたま拾った1回の音量（baseline）で割っていた。通常会話のRMS(0.01〜0.03程度)は`baseline`次第で`voiceAttackRecognizer`の`minIntensity: 0.2`を安定して超えられず、ほとんどの発話が棄却されていた。baseline比をやめ、`normalizeOraSpeechIntensity()`（RMS 0.06を天井とする発話向けの絶対スケール）に置き換えた。Calibration用の`voiceCalibrator`（Phase3B用に温存）自体は変更していない。
 3. **「オラオラ」で連続攻撃にならない**: `handleSpeechResult`が1発話から生成された複数hitを、タイムスタンプを無視して同一フレームで同期的に一括emitしていた。`attack-combo.ts`の`nextComboStep`は直前の段が`DONE`（最短500ms）になるまで次の入力を拒否するため、実質1発しか通らなかった。`scheduleAttack()`で`attackIndex * 140ms`ずつ`setTimeout`により分散発火するよう修正し、`detach()`で未発火タイマーを全解除するようにした（同一発話内の連呼が高速コンボにならないのはキーボード連打と同じ制約として許容し、`attack-combo.ts`側は変更していない）。
+
 - 追加テスト: 通常音量がbaselineに左右されずATTACKを通す回帰テスト、複数hitの140ms間隔分散emitの確認、detach後に予約済みATTACKが発火しないことの確認。
 - 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/74テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過（Claudeが独立再実行して確認済み）。
 - `src/ui/ora-debug/`配下（Phase6並列作業）には触れていない。コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
@@ -205,6 +206,7 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 1. **Calibration案内・エラー表示を3D Billboardから画面固定2D HUDへ移動**（Codex実装）: `<Billboard>`（`BOSS_ANCHOR`=マップ中央付近に描画）をやめ、`@react-three/drei`の`<Html fullscreen>`で画面上部固定に変更。
 2. **左手Air Joystickインジケータを新規追加**（Codex実装）: `ora-production-input.ts`に`onHandTrackingFrame`コールバックを追加し、`processFrame`から毎フレーム（Calibration中も含め）手位置とNeutralを公開。`BossArenaScene.tsx`側はReact stateを使わず`useRef`でDOM要素のstyleを直接書き換える設計（既存の「位置はstateへ入れない」方針を踏襲）。クランプ半径は`hand-joystick.ts`から新規exportした`DEFAULT_HAND_JOYSTICK_OPTIONS`を再利用し、UI側で定数を複製していない。
 3. **実機調査用のデバッグ状態パネルを追加**（Claude実装）: Claudeがブラウザ自動操作（Claude in Chrome）で実機を直接操作し、SpeechRecognitionの実際の動作を切り分け調査した。孤立したWeb Speech APIテストでは正常動作を確認したが、アプリの実`handleSpeechResult`へ合成「オラ」resultを注入するテストでは、Calibration完了ゲート（`!handCalibrator.isComplete() || !voiceCalibrator.isComplete()`）が音声処理そのものを止めていることを確認した（手のCalibrationが完了していないとATTACKは一切評価されない）。この切り分けをDevToolsなしで実機でも追えるよう、`onVoiceCandidate`コールバックを追加し、`candidate`計算をCalibration完了ゲートより前へ移動（Calibration未完了でも直近の認識結果・intensity・hit数を公開するように変更）。`BossArenaScene.tsx`の新HUDへ、DEV限定で`hand`/`voice`/`speech`/`candidate`/`intensity`/`hits`を表示する小さな状態パネルを追加した。
+
 - 検証結果: `pnpm vitest run src/input/ora src/rendering/boss` は13ファイル/75テスト通過、`pnpm tsc -b --noEmit` 通過、`pnpm oxlint --type-aware src/input/ora src/rendering/boss` 通過。
 - ユーザーへ、フルリロード後にオラ大輔を選び直し、画面右上のDEVパネルで`hand`/`voice`/`speech`/`candidate`の実値を見ながら再テストするよう依頼中。ATTACKが依然発火しない場合、この表示から原因（Calibration待ちか、キーワード判定棄却か）を直接特定できる。
 - コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
@@ -277,6 +279,7 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 
 1. **Oraの移動がカメラ相対になっていなかった**: main取り込みで導入されたカメラ相対移動（`toCameraRelativeMovement`）はKeyboard入力にしか適用しておらず、Oraの手検出MOVEは画面座標系のまま出ていたため、カメラを回すとKeyboardとOraで移動方向の感覚が食い違っていた。`submitFromOra`という薄いラッパーを追加し、Ora由来のMOVEアクションにも同じ`toCameraRelativeMovement(input, cameraInputYawRef.current)`を適用するよう修正した。
 2. **ATTACKが手のCalibration状態に引きずられて頻繁に失敗する**: `handleSpeechResult`が`handCalibrator.isComplete() && voiceCalibrator.isComplete()`の両方を見ており、実プレイ中に手が一瞬フレーム外へ出ただけで（移動やORA_ACTIONの合間によく起きる）、その瞬間に発話した「オラ」がまるごと評価されずに消えていた。ATTACKは音声だけの入力なので、声のCalibration（`voiceCalibrator.isComplete()`）だけをゲートにするよう変更。合わせて`processFrame`側の手Calibration崩れ時のリセットも、ORA_ACTION（両手が要る）だけを対象にし、`voiceAttackRecognizer.reset()`/`clearPendingAttacks()`を手の状態から切り離した（声のCalibrationは一度完了すると崩れないため、これらの呼び出しは実質不要だった）。「ボイスでの攻撃がなかなか成功しない」というユーザー報告の主要因と見ている。
+
 - 検証: `pnpm vitest run src`（108ファイル/1122テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。既存の「手を見失うと予約済みATTACKも発火しない」テストは新しい正しい仕様（ATTACKは手の状態と無関係に発火する）に合わせて書き換えた。
 
 ## 実機フィードバック追加対応（candidateは正しいがhits:0）
@@ -284,11 +287,13 @@ PR #125をpushした後の実機確認で3件の不具合が判明したため�
 3. **連呼発話の音量ピーク検出漏れ**: 「おらおらおら…」のように短い無音(hangoverMs=300ms超)を挟んで連呼すると、独自の発話区間トラッキング(`speechStartedAt`)が無音のたびに区切り直り、SpeechRecognitionがまとめて返す1つのfinal結果に対して、言い終わりの最後の1区間だけを見て音量ピークを過小評価していた（言い終わりで声が小さくなると`hits: 0`になる）。`earliestPendingSpeechAt`を追加し、`handleSpeechResult`が消費するか`MAX_UTTERANCE_GAP_MS`(800ms、自然な連呼の間隔より長いがCalibration時の音量等の無関係な過去を引きずらない値)を超える無音があるまでは「本当の発話開始時刻」を覚えておくよう修正。「candidateは正しく認識できているのにhitsが0」というユーザー報告と一致する不具合だった。
 4. **オラ大輔のATTACKを連呼するたびに必ず1回当てる（ユーザーの明示的な設計判断）**: 従来はキーボードと同じコンボの受付判定(`nextComboStep`、直前の振りがDONEになるまで次を弾く、1段あたり500〜950ms)を全キャラ共通で通しており、オラ大輔の音声ATTACKも連呼すると大半が物理的に弾かれていた。「オラオラ言うたびに1攻撃でいい」という明示的な要望を受け、`player-state.ts`にオラ大輔専用の`startVoiceAttack()`を新設し、コンボの受付判定を通さず常に新しいswingへ差し替えて即座に命中させるよう変更。見た目の「振っている」扱い（`isSwinging`/`isBusy`、移動ロック）はstep0のタイミングをそのまま流用する。キーボード操作の他キャラ（オドルノ/Pay）は従来どおりコンボ制限を受ける。
 5. **マイクパネルの誤解を招くUI**: ワールド画面に常時表示される「MICROPHONE」パネル（Pay大輔のオカリナ/わっしょい調整用、Issue #43、`MicrophoneDebug.tsx`）はオラ大輔の音声入力とは完全に無関係だが、同じ「マイク入力を有効にする」ボタンが常に見えているため「オラを使う前に毎回これを押す必要がある」という誤解を招いていた。オラ大輔選択中は`MicrophoneDebugPanel`を非表示にするよう`App.tsx`を修正。
+
 - 検証: `pnpm vitest run src`（108ファイル/1126テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。`player-state.test.ts`の「攻撃の途中で復元しても、同じ時刻に判定が出る」テストは、オラ大輔専用の即時命中設計により意味が変わったため、汎用キャラ（PAY）でのテストに戻し、オラ大輔向けには別途「復元しても二重に判定しない」テストを追加した。
 
 ## 「オラって言った瞬間に攻撃したい」への対応
 
 6. **SpeechRecognitionの確定(isFinal)を待たない**: `recognition.interimResults`を`false`から`true`へ変更し、`handleSpeechResult`がisFinalを問わず暫定結果の時点でキーワード判定・ATTACK発火まで行うよう変更した。Chromeの確定結果はSTT処理の都合で数百ms〜1〜2秒程度遅れることがあり、「オラと言ってから攻撃が出るまでの体感遅延」の主因だったため。同じ発話（同じSpeechRecognitionの`resultIndex`）への後続のinterim更新やfinal確定で二重に発火しないよう、マッチした時点のindexを`firedResultIndex`として記録し、それ以下のindexは無視する。まだ何にもマッチしていない発話（インデックスは同じだが内容が育っていく途中）は、確定を待たず毎回の更新で再評価する。SpeechRecognitionが再起動すると内部の結果indexは0から数え直されるため、再起動のたびに`firedResultIndex`もリセットする。
+
 - トレードオフ: 暫定結果は最終確定より認識精度がやや落ちる（後で内容が変わる可能性がある）が、「オラ」のような短い単語では実害が小さいと判断した。キーワード一致（「オラ」が発話の主要部分）という既存の誤発火防止はそのまま効く。
 - 検証: `pnpm vitest run src`（108ファイル/1129テスト）・`pnpm tsc -b --noEmit`・`pnpm oxlint --type-aware src`すべて通過。interim反応・二重発火防止・未マッチ時の再評価継続を検証する新規テストを追加した。
 - コミットはClaudeが行う。PR #125へのpush反映はユーザー確認後。
