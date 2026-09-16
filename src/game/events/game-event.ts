@@ -71,6 +71,15 @@ export type GameEvent =
   | { type: 'COMBAT_STATE_CHANGED'; from: CombatState; to: CombatState }
   | { type: 'INPUT_REJECTED'; action: PlayerAction; reason: InputRejectionReason }
   /**
+   * Intentional Bug。ふかふか布団の被弾が「布団に入る」ではなく
+   * 「吹き飛ぶ」に化けた (docs/testing-guide.md §16 / Issue #140 / #42)。
+   *
+   * 被弾そのものが無かったことになるので SLEEPINESS は増えない。HIT State へは
+   * 通常どおり進むため、この周回が飛ばされたわけではない。演出だけを
+   * 大げさにするために、被弾と別のイベントとして出す。
+   */
+  | { type: 'PLAYER_BLOWN_AWAY'; attackId: string }
+  /**
    * BOSS_DOWN 中の追撃が命中した。State は BOSS_DOWN のまま進まないため
    * (COMBAT_STATE_CHANGED を再発火すると DAMAGE の演出が重複する)、
    * ダメージが実際に入ったことを Audio / VFX へ知らせる専用イベント。

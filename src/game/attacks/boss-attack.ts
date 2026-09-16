@@ -87,6 +87,16 @@ export interface BossAttack extends CombatAttack {
     /** 被弾したときの SLEEPINESS 倍率。1 未満でペナルティ軽減。 */
     sleepiness?: number;
   };
+  /**
+   * Intentional Bug。この一手の被弾が「吹き飛び」に化けるか
+   * (docs/testing-guide.md §16 / Issue #140 / #42)。
+   *
+   * true なら HIT State で SLEEPINESS を足さず、代わりに PLAYER_BLOWN_AWAY を
+   * 出す。抽選は技を生成する側が済ませてここへ結果だけを渡す。State Machine の
+   * 途中で引き直すと、同じ一手の中で被弾したりしなかったりして
+   * 「壊れて見える」ではなく本当に壊れるため。
+   */
+  blowsAway?: boolean;
   cues?: AttackCueSettings;
 }
 
@@ -337,6 +347,12 @@ export function createBossAttackController({
     }
 
     if (to === 'HIT') {
+      // Intentional Bug: 布団に入らず吹き飛んだ周回は眠気が増えない。
+      // 被弾の演出だけを別イベントへ振り替える (Issue #140 / #42)。
+      if (attack.blowsAway === true) {
+        eventBus.emit({ type: 'PLAYER_BLOWN_AWAY', attackId: attack.id });
+        return;
+      }
       if (isAttackId(attack.id)) {
         vitals.applyAttackSleepiness(attack.id, attack.damageScale?.sleepiness ?? 1);
       } else {

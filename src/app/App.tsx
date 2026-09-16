@@ -25,6 +25,7 @@ import { IntroCutscene } from '@/intro/IntroCutscene';
 import { useScreenStore } from './screen';
 import { currentRoute, subscribeToRoute, type AppRoute } from './route';
 import { createCombatSession } from './combat-session';
+import { createFutonBlowAway } from '@/game/attacks/fluffy-futon';
 import styles from './App.module.css';
 
 /**
@@ -202,7 +203,11 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
   useEffect(() => {
     // 戦闘一式はこの Effect の中で作って同じ Effect で捨てる。StrictMode の
     // 二重マウントでもループと購読が二重に残らないようにするため。
-    const session = createCombatSession();
+    // Intentional Bug「布団に入らず吹き飛ぶ」は本番だけで有効にする
+    // (Issue #140 / #42)。ゲームロジック側の既定を確率にすると、乱数を
+    // 固定しただけの既存テストまでこの抽選に巻き込まれるため、
+    // 合成点であるここで入れる。
+    const session = createCombatSession({ blowAway: createFutonBlowAway() });
     const { recordAction } = useGameStore.getState();
 
     const detachKeyboard = attachKeyboardInput((action) => {

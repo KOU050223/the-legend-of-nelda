@@ -157,6 +157,16 @@ export function vfxForEvent(event: GameEvent): VfxCue[] {
       }
       return [];
 
+    // Intentional Bug「布団に入らず吹き飛ぶ」(Issue #140 / #42)。
+    // 通常の被弾 (HIT の SHAKE 420ms / strength 1) より明らかに派手にして、
+    // 「今のは普通の被弾ではない」と分かるようにする。眠気は増えていないので、
+    // 演出だけが大げさという #42 の狙いどおりの見え方になる。
+    case 'PLAYER_BLOWN_AWAY':
+      return [
+        { kind: 'HIT_STOP', durationMs: 620, strength: 1 },
+        { kind: 'SHAKE', durationMs: 900, strength: 1 },
+      ];
+
     // 大ダウン中の追撃。State が進まないぶん COMBAT_STATE_CHANGED は来ないが、
     // 実際にHPが削れているので DAMAGE と同じ手応えの演出を出す。
     case 'BOSS_DOWN_FOLLOW_UP_HIT':
