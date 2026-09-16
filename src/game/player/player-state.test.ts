@@ -297,6 +297,17 @@ describe('HP・睡眠・蘇生', () => {
     expect(player.snapshot().status).toBe('ASLEEP');
   });
 
+  it('HP0から寝落ちまでの待ち時間は30秒', () => {
+    const { player, clock } = setup();
+
+    player.takeDamage(999);
+
+    expect(player.snapshot().sleepAt).toBe(30_000);
+    clock.advance(29_999);
+    player.update(0.016);
+    expect(player.snapshot().status).toBe('FALLING_ASLEEP');
+  });
+
   it('駆け寄った仲間の連打で起き上がる', () => {
     const clock = createFakeClock(0);
     const fallen = setup({ clock }).player;

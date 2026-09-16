@@ -117,7 +117,7 @@ export const ATTACK_REACH = 3;
  * (§5.3「数値はプレイテストで調整する」)。
  */
 export interface RevivalBalance {
-  /** HP0から完全に寝てしまうまで (ms)。仕様は8〜10秒。 */
+  /** HP0から完全に寝てしまうまで (ms)。 */
   sleepCountdownMs: number;
   /** 1人で起こしたときに必要な時間 (ms)。仕様は3〜4秒。 */
   soloReviveMs: number;
@@ -130,7 +130,7 @@ export interface RevivalBalance {
 }
 
 export const DEFAULT_REVIVAL: RevivalBalance = {
-  sleepCountdownMs: 9000,
+  sleepCountdownMs: 30_000,
   soloReviveMs: 3500,
   reviveRange: 3,
   revivedHpRatio: 0.3,

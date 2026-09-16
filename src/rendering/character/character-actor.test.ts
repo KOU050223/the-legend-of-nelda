@@ -38,8 +38,8 @@ describe('蘇生ステータス表示', () => {
   it('寝落ちまでの秒数と残り割合を計算する', () => {
     const player = snapshot();
 
-    expect(sleepCountdownSeconds(player, 2_000)).toBe(7);
-    expect(sleepCountdownRatio(player, 2_000)).toBeCloseTo(7 / 9);
+    expect(sleepCountdownSeconds(player, 2_000)).toBe(28);
+    expect(sleepCountdownRatio(player, 2_000)).toBeCloseTo(28 / 30);
   });
 
   it('寝落ち済みや通常状態では残り時間を表示しない', () => {
