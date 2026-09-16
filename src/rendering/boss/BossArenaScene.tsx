@@ -88,7 +88,7 @@ import {
   type PlayedMelodyNote,
 } from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
-import { isOutcomeRestartAllowed } from './outcome-restart';
+import { isBattleSettled, isOutcomeRestartAllowed } from './outcome-restart';
 
 /**
  * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
@@ -401,7 +401,10 @@ export function BossArenaScene({
   const resultStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
-    if (outcome === 'ONGOING') {
+    // `LOCAL_DOWN` は決着ではない。結果画面 (BAD END) を出すと、NPC が
+    // 起こしに来る前にゲームが終わったように見える (#158)。倒れている表示は
+    // OutcomeBanner 側の ZZZ が担う。
+    if (outcome === 'ONGOING' || outcome === 'LOCAL_DOWN') {
       resultStartedAt.current = null;
       useGameStore.setState({ result: null });
       return;
@@ -899,7 +902,10 @@ export function BossArenaScene({
 
   useFrame((_, delta) => {
     // 決着後は戦闘時間を進めず、結果ムービーの経過時間だけを更新する。
-    if (outcome !== 'ONGOING') {
+    //
+    // `LOCAL_DOWN` (操作キャラが倒れただけ) は含めない。判定は
+    // isBattleSettled が持つ (#158)。
+    if (isBattleSettled(outcome)) {
       // 技の演出はここで捨てる。この先で ref を更新しないまま
       // DumbbellSlam が自分の useFrame で読み続けるため、消さないと
       // 決着ムービーのあいだ中ダンベルと衝撃波が止まったまま残る。
