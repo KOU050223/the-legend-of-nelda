@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
+import { BarrierPresentation } from '@/rendering/boss/BarrierPresentation';
 import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
 import { FirstPersonHealthHud } from '@/rendering/camera/FirstPersonHealthHud';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
@@ -124,6 +125,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
       <div className={styles.root}>
         <GameScene multiplayer />
         <FirstPersonHealthHud />
+        <BarrierPresentation />
         <VoiceHud />
       </div>
     );
@@ -137,6 +139,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
       <div className={styles.root}>
         <GameScene world />
         <FirstPersonHealthHud />
+        <BarrierPresentation />
         <FinalePresentation />
         <WorldTutorialGuide />
         <PlayerSwitch />
