@@ -21,6 +21,7 @@ vi.mock('@/multiplayer/realtime-battle-client', () => ({
 
 import { useScreenStore } from '@/app/screen';
 import { useMultiplayerSessionStore } from '@/multiplayer/session-store';
+import { MultiplayerVoiceSessionProvider } from '@/ui/voice/MultiplayerVoiceSessionProvider';
 
 import { MatchingScreen } from './MatchingScreen';
 
@@ -28,6 +29,10 @@ interface ConnectionHarness {
   readonly transport: ClientTransport;
   readonly client: ReturnType<typeof createRealtimeBattleClient>;
   disconnect: () => void;
+}
+
+function renderMatching(ui: Parameters<typeof render>[0]) {
+  return render(<MultiplayerVoiceSessionProvider>{ui}</MultiplayerVoiceSessionProvider>);
 }
 
 function createConnectionHarness(): ConnectionHarness {
@@ -123,7 +128,7 @@ describe('MatchingScreen', () => {
   });
 
   it('StrictModeの二重マウントでも接続を1つだけ作る', () => {
-    render(
+    renderMatching(
       <StrictMode>
         <MatchingScreen />
       </StrictMode>,
@@ -140,7 +145,7 @@ describe('MatchingScreen', () => {
       roster,
     });
 
-    render(<MatchingScreen />);
+    renderMatching(<MatchingScreen />);
 
     expect(screen.getByLabelText('接続状態')).toHaveTextContent('接続済み');
     expect(screen.getByText('自分の役割: PAY')).toBeInTheDocument();
@@ -153,7 +158,7 @@ describe('MatchingScreen', () => {
   });
 
   it('開始前は役割カードから選択でき、3役が揃った後だけSTARTを送る', () => {
-    render(<MatchingScreen />);
+    renderMatching(<MatchingScreen />);
     const connection = connections[0];
     if (connection === undefined) throw new Error('connection was not created');
 
@@ -197,6 +202,29 @@ describe('MatchingScreen', () => {
     expect(connection.client.requestStart).toHaveBeenCalledOnce();
   });
 
+  it('Authorityが自分のRoleを確定するとVoice Chatの接続UIを表示する', () => {
+    useMultiplayerSessionStore.setState({
+      status: 'CONNECTED',
+      participantId: 'participant-test',
+      lobby: {
+        type: 'LOBBY',
+        slots: [
+          { participantId: 'participant-test', role: 'ORA', connected: true },
+          { participantId: 'participant-b', role: 'PAY', connected: true },
+          { participantId: 'participant-c', role: 'ODORUNO', connected: true },
+        ],
+        started: false,
+        full: false,
+      },
+    });
+
+    renderMatching(<MatchingScreen />);
+
+    expect(screen.getByRole('region', { name: 'ボイスチャット' })).toBeInTheDocument();
+    expect(screen.getByLabelText('ボイスチャット接続状態')).toHaveTextContent('DISCONNECTED');
+    expect(screen.getByRole('button', { name: 'マイクを有効にする' })).toBeInTheDocument();
+  });
+
   it('4人目のfull状態では役割選択とSTARTを表示しない', () => {
     useMultiplayerSessionStore.setState({
       status: 'FULL',
@@ -212,7 +240,7 @@ describe('MatchingScreen', () => {
       },
     });
 
-    render(<MatchingScreen />);
+    renderMatching(<MatchingScreen />);
 
     expect(screen.getByRole('heading', { name: 'この部屋は満員です' })).toBeInTheDocument();
     expect(screen.getByLabelText('接続状態')).toHaveTextContent('部屋が満員です');
@@ -238,14 +266,14 @@ describe('MatchingScreen', () => {
       },
     });
 
-    render(<MatchingScreen />);
+    renderMatching(<MatchingScreen />);
 
     expect(screen.getByRole('alert')).toHaveTextContent('その役割はすでに選ばれています');
     expect(screen.getByRole('group', { name: '役割を選ぶ' })).toBeInTheDocument();
   });
 
   it('切断後は再接続を選べる', () => {
-    render(<MatchingScreen />);
+    renderMatching(<MatchingScreen />);
     const firstConnection = connections[0];
     if (firstConnection === undefined) throw new Error('connection was not created');
 
@@ -266,7 +294,7 @@ describe('MatchingScreen', () => {
         roster: { ...roster, started: true },
       });
 
-      render(<MatchingScreen />);
+      renderMatching(<MatchingScreen />);
 
       // 通信状態はすでに"揃った"はずだが、演出のあいだはまだMATCHING側に
       // 留まる (通信ロジックそのものは待たせていないことの確認)。

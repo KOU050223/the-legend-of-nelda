@@ -26,7 +26,8 @@ export interface OraVoiceAttackRecognizer {
 }
 
 const defaults: Required<OraVoiceAttackRecognizerOptions> = {
-  minIntensity: 0.2,
+  // キーワード一致を主な誤発火防止にし、音量は無音・環境ノイズの除外だけを担う。
+  minIntensity: 0.05,
   cooldownMs: 300,
   rushWindowMs: 1_200,
   rushThreshold: 3,

@@ -10,7 +10,13 @@ import {
 import { facingRotationY, moveCharacter } from '../movement/movement';
 import type { MovementInput, PlanarPosition } from '../movement/types';
 import type { GameAction } from '../types/game-action';
-import { comboPhaseAt, comboStepAt, nextComboStep, type ComboSwing } from './attack-combo';
+import {
+  comboPhaseAt,
+  comboStepAt,
+  damageMultiplierForIntensity,
+  nextComboStep,
+  type ComboSwing,
+} from './attack-combo';
 
 /**
  * 1人のプレイヤーの状態。docs/phase2-gameplay-spec.md §4 / §5。
@@ -171,6 +177,28 @@ export function createPlayer(options: PlayerOptions): Player {
     swing = { stepIndex, startedAt: clock.now(), hasHit: false };
   }
 
+  /**
+   * オラ大輔の声ATTACKだけの経路。「オラ」と言うたびに必ず1回当てる、という
+   * ユーザーの明示的な要望により、剣を振る前提のコンボ受付判定
+   * (nextComboStep、直前の振りがDONEになるまで次を弾く) を通さない。
+   * 常に新しいswingへ差し替えて即座に命中させる。見た目の「振っている」
+   * 扱い(isSwinging/isBusy、移動ロック)だけはstep0のタイミングを流用する。
+   */
+  function startVoiceAttack(intensity: number | undefined): void {
+    const multiplier = damageMultiplierForIntensity(intensity);
+    swing = {
+      stepIndex: 0,
+      startedAt: clock.now(),
+      damageMultiplier: multiplier,
+      hasHit: true,
+    };
+    onAttackHit?.({
+      attackerId: id,
+      damage: stats.attackPower * comboStepAt(0).damageScale * multiplier,
+      origin: position,
+    });
+  }
+
   function startDodge(): void {
     const now = clock.now();
     if (now < dodgeReadyAt) return;
@@ -205,7 +233,12 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (action.type === 'ATTACK') {
-        startAttack();
+        // wire上のintensityは全キャラから届き得るため、音声ATTACKはオラだけに限定する。
+        if (characterId === 'ORA') {
+          startVoiceAttack(action.intensity);
+        } else {
+          startAttack();
+        }
         return;
       }
       if (action.type === 'DODGE') {
@@ -244,7 +277,7 @@ export function createPlayer(options: PlayerOptions): Player {
           swing = { ...swing, hasHit: true };
           onAttackHit?.({
             attackerId: id,
-            damage: stats.attackPower * step.damageScale,
+            damage: stats.attackPower * step.damageScale * (swing.damageMultiplier ?? 1),
             origin: position,
           });
         }

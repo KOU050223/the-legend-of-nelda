@@ -101,6 +101,10 @@ export const COMBO_STEPS: readonly ComboStep[] = [
   { windupMs: 250, activeMs: 150, recoverMs: 550, damageScale: 1.8 },
 ];
 
+/** オラ大輔の音声ATTACKで使うダメージ倍率の下限・上限。 */
+export const ORA_VOICE_DAMAGE_MULTIPLIER_MIN = 0.85;
+export const ORA_VOICE_DAMAGE_MULTIPLIER_MAX = 1.3;
+
 /**
  * 連撃が途切れるまでの猶予 (ms)。
  * この時間内に次の攻撃入力が来なければ1段目へ戻る。

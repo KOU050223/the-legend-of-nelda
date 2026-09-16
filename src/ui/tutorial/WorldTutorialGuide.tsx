@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useWorldTutorialStore } from './world-tutorial-store';
 import styles from './TutorialGuide.module.css';
 
-const WORLD_TUTORIAL_DURATION_MS = 30_000;
+const WORLD_TUTORIAL_DURATION_MS = 15_000;
 
 /** ワールド探索中に常時表示する操作案内。 */
 export function WorldTutorialGuide(): React.JSX.Element | null {
@@ -35,6 +35,8 @@ export function WorldTutorialGuide(): React.JSX.Element | null {
       <span>SHIFT：回避</span>
       <span>E / F：蘇生（連打）</span>
       <span>R：調べる</span>
+      <span>C：カメラ切替（3人称 / 俯瞰 / 一人称）</span>
+      <span>一人称中：画面クリック＋マウスで見回す</span>
     </output>
   );
 }

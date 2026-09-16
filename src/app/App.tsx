@@ -4,6 +4,7 @@ import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
 import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
+import { FirstPersonHealthHud } from '@/rendering/camera/FirstPersonHealthHud';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
 import { useGameStore } from '@/store/game-store';
 import { ResultOverlay } from '@/ui/result/ResultOverlay';
@@ -11,9 +12,13 @@ import { Hud } from '@/ui/hud/Hud';
 import { EffectSettings } from '@/ui/settings/EffectSettings';
 import { TitleScreen } from '@/ui/title/TitleScreen';
 import { OraDebugPage } from '@/ui/ora-debug/OraDebugPage';
+import { OraStatusHud } from '@/ui/ora-status/OraStatusHud';
 import { PlayerSwitch } from '@/ui/player-switch/PlayerSwitch';
+import { useLocalPlayerStore } from '@/store/local-player-store';
 import { WasshoiDebug } from '@/ui/wasshoi-debug/WasshoiDebug';
 import { MatchingScreen } from '@/ui/matching/MatchingScreen';
+import { MultiplayerVoiceSessionProvider } from '@/ui/voice/MultiplayerVoiceSessionProvider';
+import { VoiceHud } from '@/ui/voice/VoiceHud';
 import { WorldTutorialGuide } from '@/ui/tutorial/WorldTutorialGuide';
 import { IntroCutscene } from '@/intro/IntroCutscene';
 
@@ -89,15 +94,29 @@ export function App(): React.JSX.Element {
     );
   }
 
+  return (
+    <MultiplayerVoiceSessionProvider>
+      <AppScreen screen={screen} />
+    </MultiplayerVoiceSessionProvider>
+  );
+}
+
+function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getState>['screen'] }) {
   if (screen === 'TITLE') return <TitleScreen />;
 
   if (screen === 'INTRO') {
-    return <IntroCutscene onComplete={() => useScreenStore.getState().goTo('MATCHING')} />;
+    return (
+      <IntroCutscene
+        onComplete={() =>
+          useScreenStore
+            .getState()
+            .goTo(useScreenStore.getState().mode === 'SINGLE' ? 'WORLD' : 'MATCHING')
+        }
+      />
+    );
   }
 
-  if (screen === 'MATCHING') {
-    return <MatchingScreen />;
-  }
+  if (screen === 'MATCHING') return <MatchingScreen />;
 
   // GAME は本番マルチプレイ。Authority権威のBattleSourceだけを使う
   // (MultiplayerArenaSceneがsession不在時にMATCHINGへ差し戻すので、
@@ -106,6 +125,9 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene multiplayer />
+        <FirstPersonHealthHud />
+        <VoiceHud />
+        <OraStatusHud />
       </div>
     );
   }
@@ -117,14 +139,16 @@ export function App(): React.JSX.Element {
     return (
       <div className={styles.root}>
         <GameScene world />
+        <FirstPersonHealthHud />
         <FinalePresentation />
         <WorldTutorialGuide />
-        {/*
-          操作キャラの切り替え (Issue #106)。DEV ガードは付けない。
-          一人で遊ぶときに3人を持ち替えられること自体を本番でも出す。
-        */}
         <PlayerSwitch />
+        <OraStatusHud />
         <MicrophoneDebugPanel />
+        <ResultOverlay
+          onRestart={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }))}
+          onTitle={returnToTitle}
+        />
       </div>
     );
   }
@@ -150,15 +174,26 @@ export function BattleScreen(): React.JSX.Element {
 /**
  * 音声入力の閾値調整用パネル。本番ビルドへは出さず、ゲームUIとも密結合させない。
  * ワールド探索モードでも閾値を合わせられるよう、両方の画面へ出す。(Issue #43)
+ *
+ * オラ大輔選択中は隠す。これはオカリナ/わっしょい用のマイク調整パネルで、
+ * オラ大輔の音声入力（本番は選択するだけで自動的にマイクへ繋がる）とは
+ * 無関係だが、同じ「マイク入力を有効にする」ボタンが常時見えているせいで
+ * 「オラを使う前に毎回これを押さないといけない」という誤解を招いていた。
  */
 function MicrophoneDebugPanel(): React.JSX.Element | null {
-  if (MicrophoneDebug === null) return null;
+  const localPlayerId = useLocalPlayerStore((state) => state.localPlayerId);
+  if (MicrophoneDebug === null || localPlayerId === 'ora') return null;
 
   return (
     <Suspense fallback={null}>
       <MicrophoneDebug />
     </Suspense>
   );
+}
+
+function returnToTitle(): void {
+  useGameStore.getState().reset();
+  useScreenStore.getState().goTo('TITLE');
 }
 
 function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
@@ -198,7 +233,7 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
           <EffectSettings />
         </>
       )}
-      <ResultOverlay onRestart={onRestart} />
+      <ResultOverlay onRestart={onRestart} onTitle={returnToTitle} />
     </div>
   );
 }

@@ -46,6 +46,9 @@ export function routeForLocation(location: Pick<Location, 'pathname' | 'search'>
 
   if (import.meta.env.DEV) {
     if (location.pathname === '/debug/ora') return 'ORA_DEBUG';
+    // 見ざるはタイトルの「ひとりで」後と同じローカルWorldで確認する。
+    // `/battle` は旧Phase 1の別Cameraなので、ここへ送らない。
+    if (new URLSearchParams(location.search).get('debug') === 'dance-camera') return 'WORLD';
     if (new URLSearchParams(location.search).get('scene') === 'world') {
       return 'WORLD';
     }

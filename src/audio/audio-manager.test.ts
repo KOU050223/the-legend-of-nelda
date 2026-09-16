@@ -105,6 +105,16 @@ describe('soundForEvent', () => {
     );
   });
 
+  it.each([
+    ['odoruno', 'odoruno-damage'],
+    ['pay', 'pay-damage'],
+    ['ora', 'ora-damage'],
+  ] as const)('%s の被弾は固有ボイスを鳴らす', (targetId, expected) => {
+    expect(
+      soundForEvent({ type: 'BOSS_ATTACK_HIT', attackId: 'MORNING_DASH', targetId, damage: 20 }),
+    ).toBe(expected);
+  });
+
   it('早押しで弾かれた周回でも被弾すればヒットSEが鳴る', () => {
     // 早押しは JUDGED を発行しないまま HIT State へ進んで眠気ダメージが入る
     // (§13)。JUDGED を発火源にすると、この周回だけ無音で被弾する。

@@ -57,6 +57,15 @@ describe('createOraVoiceAttackRecognizer', () => {
     expect(result).toEqual([]);
   });
 
+  it('既定の音量ゲートは無音近傍だけを除外し、0.05のキーワード発話を受理する', () => {
+    const recognizer = createOraVoiceAttackRecognizer();
+
+    expect(recognizer.recognize(utterance('オラ', 0, 100, 0.049))).toEqual([]);
+    expect(
+      recognizer.recognize(utterance('オラ', 200, 300, 0.05)).map((event) => event.intensity),
+    ).toEqual([0.05]);
+  });
+
   it('直前に受理した発話のCooldown内に始まる発話は受理しない', () => {
     const recognizer = createOraVoiceAttackRecognizer({ cooldownMs: 300 });
     const first = recognizer.recognize(utterance('オラ', 1_000, 1_100));
