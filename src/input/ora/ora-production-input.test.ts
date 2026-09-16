@@ -635,6 +635,7 @@ describe('createOraProductionInput', () => {
         .filter((action): action is Extract<GameAction, { type: 'MOVE' }> => action.type === 'MOVE')
         .every(({ input }) => input.forward === 0 && input.right === 0),
     ).toBe(true);
+    adapter.detach();
   });
 
   it('no-speech等の一時的なエラーはstatusを壊さず、endから自動的に再開する', async () => {
