@@ -11,8 +11,6 @@ import {
   type BarrierChallenge,
   type BarrierChallengeSnapshot,
   type BarrierParticipant,
-  type BarrierPayView,
-  isBarrierAction,
 } from '../barrier/barrier-challenge';
 import { DEFAULT_REVIVAL, type CharacterId } from '../config/phase2-player-balance';
 import type { PlanarPosition } from '../movement/types';
@@ -33,6 +31,13 @@ import {
 
 /** 最終形態で一度は攻撃不能を体験できるようにする猶予。 */
 export const FINALE_STANDOFF_FALLBACK_MS = 4_000;
+
+/** Authorityが最終演出を同期するための状態ごとの表示尺。 */
+const FINALE_AUTO_ADVANCE_MS: Partial<Record<FinaleState, number>> = {
+  OCARINA_APPEARING: 5_200,
+  MEMORY: 14_500,
+  HORI_FALLING_ASLEEP: 5_000,
+};
 
 /**
  * 堀大輔と3人のプレイヤーを繋ぐ1戦ぶんのセッション。
@@ -63,6 +68,10 @@ export interface BossBattleOptions {
   readonly debugSkipBarriers?: boolean;
   /** ソロ進行では3人協力を前提にした結界を使わず、そのまま戦闘を続ける。 */
   readonly solo?: boolean;
+  /** Authorityの開発環境だけで最終局面へのスキップを受理する。 */
+  readonly allowDebugFinaleSkip?: boolean;
+  /** マルチAuthorityが最終演出の状態遷移を時刻で同期する。 */
+  readonly autoAdvanceFinale?: boolean;
 }
 
 export interface PlayerSeed {
@@ -77,6 +86,8 @@ export interface BattleSnapshot {
   readonly barrier: BarrierChallengeSnapshot | null;
   /** Authority が持つ最終決戦の進行。全クライアントで同じ演出を始めるために送る。 */
   readonly finale: FinaleState;
+  /** WAITING_FOR_MELODY で最初にオカリナを取った参加者。nullなら未選択。 */
+  readonly ocarinaPerformerId?: string | null;
 }
 
 export type BattleOutcome = 'ONGOING' | 'VICTORY' | 'DEFEAT';
@@ -120,8 +131,6 @@ export interface BossBattle {
   readonly boss: HoriBoss;
   readonly players: readonly Player[];
   snapshot(): BattleSnapshot;
-  /** ACTIVE な PAY だけが結界の正解情報を取得する。 */
-  barrierViewFor(playerId: string): BarrierPayView | null;
 }
 
 function toBarrierParticipant(player: Player): BarrierParticipant {
@@ -169,6 +178,8 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     createBoss = createHoriBoss,
     debugSkipBarriers = false,
     solo = false,
+    allowDebugFinaleSkip = false,
+    autoAdvanceFinale = false,
   } = options;
 
   let boss: HoriBoss;
@@ -205,6 +216,8 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
 
   let barrierChallenge: BarrierChallenge | null = null;
   let finale: FinaleState = 'NONE';
+  let finaleStartedAt: number | null = null;
+  let ocarinaPerformerId: string | null = null;
   let noSleepModeStartedAt: number | null = null;
 
   function syncFinale(): void {
@@ -213,15 +226,26 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     const now = clock.now();
     if (noSleepModeStartedAt === null) noSleepModeStartedAt = now;
     if (finale === 'NONE' && now - noSleepModeStartedAt >= FINALE_STANDOFF_FALLBACK_MS) {
-      finale = 'FINAL_STANDOFF';
+      setFinale('FINAL_STANDOFF');
     }
+  }
+
+  function setFinale(next: FinaleState): void {
+    finale = next;
+    finaleStartedAt = clock.now();
+  }
+
+  function syncFinalePresentation(): void {
+    const durationMs = FINALE_AUTO_ADVANCE_MS[finale];
+    if (!autoAdvanceFinale || durationMs === undefined || finaleStartedAt === null) return;
+    if (clock.now() - finaleStartedAt >= durationMs) setFinale(nextFinaleState(finale));
   }
 
   /** 通常攻撃が無効化された瞬間は、時間待ちせず最終演出へ入る。 */
   function startFinaleFromNullifiedAttack(): void {
     syncFinale();
     if (boss.snapshot().phase === 'NO_SLEEP_MODE' && finale === 'NONE') {
-      finale = 'FINAL_STANDOFF';
+      setFinale('FINAL_STANDOFF');
     }
   }
 
@@ -243,6 +267,22 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     if (barrierChallenge === null || barrierChallenge.snapshot().phase !== phase) {
       barrierChallenge = createBarrierChallenge(phase);
     }
+  }
+
+  /**
+   * 立ち位置からサークルの埋まり具合を測り、揃っていれば結界を解く。
+   *
+   * 解除条件が「3人が別々のサークルへ同時に入る」なので、判定は入力ではなく
+   * 毎フレームの位置で決まる。読み取り専用の snapshot() ではなく update() から
+   * 呼ぶ。snapshot() は配信間隔で回るので、そちらで判定すると解除の瞬間が
+   * 配信の都合に引きずられる。
+   */
+  function evaluateBarrier(): void {
+    if (barrierChallenge === null) return;
+    const result = barrierChallenge.evaluate(players.map(toBarrierParticipant));
+    if (!result.completed) return;
+    boss.breakBarrier();
+    syncBarrierChallenge();
   }
 
   function findReviveTarget(rescuer: Player): Player | null {
@@ -268,6 +308,36 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
       const player = byId.get(playerId);
       if (player === undefined) return;
 
+      if (action.type === 'DEBUG_ENTER_NO_SLEEP' && allowDebugFinaleSkip) {
+        this.debugEnterNoSleepMode();
+        // デバッグでは無敵確認のための通常攻撃や4秒待機を挟まず、演出確認へ直行する。
+        setFinale('FINAL_STANDOFF');
+        return;
+      }
+
+      // オカリナは最初に INTERACT した1人だけが担当する。マイクの音そのものは
+      // 各ブラウザ内で認識し、完了結果だけをAuthorityへ送る。
+      if (finale === 'WAITING_FOR_MELODY') {
+        if (action.type === 'INTERACT' && ocarinaPerformerId === null) {
+          ocarinaPerformerId = playerId;
+          return;
+        }
+        if (action.type === 'MELODY_COMPLETE' && ocarinaPerformerId === playerId) {
+          setFinale(nextFinaleState(finale));
+        }
+        return;
+      }
+
+      if (finale === 'MELODY_ACCEPTED' && action.type === 'MELODY_AUDIO_COMPLETE') {
+        if (ocarinaPerformerId === playerId) setFinale(nextFinaleState(finale));
+        return;
+      }
+
+      if (finale === 'FINAL_STANDOFF' && action.type === 'FINAL_STANDOFF_AUDIO_COMPLETE') {
+        setFinale(nextFinaleState(finale));
+        return;
+      }
+
       // WAITING_FOR_MELODY も含め、最終演出中に受ける通常入力は進行へ渡さない。
       // オカリナは後続Phaseで NoteEvent の専用経路から受ける。
       if (isFinaleInputLocked(finale)) return;
@@ -279,27 +349,17 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         return;
       }
 
-      if (isBarrierAction(action)) {
-        syncBarrierChallenge();
-        if (barrierChallenge !== null) {
-          const result = barrierChallenge.submit(toBarrierParticipant(player), action);
-          if (result.completed) {
-            boss.breakBarrier();
-            syncBarrierChallenge();
-          }
-          return;
-        }
-      }
-
       player.submit(action);
     },
 
     update(deltaSeconds) {
       syncFinale();
+      syncFinalePresentation();
       if (isBossAiLockedByFinale(finale)) return;
 
       for (const player of players) player.update(deltaSeconds);
       syncBarrierChallenge();
+      evaluateBarrier();
       boss.update(activeTargets(players, clock.now()));
       syncBarrierChallenge();
       syncFinale();
@@ -318,7 +378,7 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
     advanceFinale() {
       syncFinale();
       if (finale === 'NONE') return finale;
-      finale = nextFinaleState(finale);
+      setFinale(nextFinaleState(finale));
       return finale;
     },
 
@@ -335,6 +395,8 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
       });
       barrierChallenge = null;
       finale = 'NONE';
+      finaleStartedAt = null;
+      ocarinaPerformerId = null;
       noSleepModeStartedAt = clock.now();
     },
 
@@ -348,14 +410,8 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         players: players.map((player) => player.snapshot()),
         barrier: barrierChallenge?.snapshot() ?? null,
         finale,
+        ocarinaPerformerId,
       };
-    },
-
-    barrierViewFor(playerId) {
-      syncBarrierChallenge();
-      const player = byId.get(playerId);
-      if (player === undefined || barrierChallenge === null) return null;
-      return barrierChallenge.viewFor(toBarrierParticipant(player));
     },
   };
 }

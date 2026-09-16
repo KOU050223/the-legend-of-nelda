@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { attachKeyboardInput } from '@/input/keyboard/keyboard-adapter';
 import { readPresentationSettings } from '@/presentation/presentation-store';
 import { GameScene } from '@/rendering/scene/GameScene';
+import { BarrierPresentation } from '@/rendering/boss/BarrierPresentation';
 import { FinalePresentation } from '@/rendering/boss/FinalePresentation';
 import { FirstPersonHealthHud } from '@/rendering/camera/FirstPersonHealthHud';
 import { VfxOverlay } from '@/rendering/vfx/VfxOverlay';
@@ -25,6 +26,7 @@ import { IntroCutscene } from '@/intro/IntroCutscene';
 import { useScreenStore } from './screen';
 import { currentRoute, subscribeToRoute, type AppRoute } from './route';
 import { createCombatSession } from './combat-session';
+import { createFutonBlowAway } from '@/game/attacks/fluffy-futon';
 import styles from './App.module.css';
 
 /**
@@ -126,6 +128,8 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
       <div className={styles.root}>
         <GameScene multiplayer />
         <FirstPersonHealthHud />
+        <BarrierPresentation />
+        <FinalePresentation />
         <VoiceHud />
         <OraStatusHud />
       </div>
@@ -140,6 +144,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
       <div className={styles.root}>
         <GameScene world />
         <FirstPersonHealthHud />
+        <BarrierPresentation />
         <FinalePresentation />
         <WorldTutorialGuide />
         <PlayerSwitch />
@@ -202,7 +207,11 @@ function Battle({ onRestart }: { onRestart: () => void }): React.JSX.Element {
   useEffect(() => {
     // 戦闘一式はこの Effect の中で作って同じ Effect で捨てる。StrictMode の
     // 二重マウントでもループと購読が二重に残らないようにするため。
-    const session = createCombatSession();
+    // Intentional Bug「布団に入らず吹き飛ぶ」は本番だけで有効にする
+    // (Issue #140 / #42)。ゲームロジック側の既定を確率にすると、乱数を
+    // 固定しただけの既存テストまでこの抽選に巻き込まれるため、
+    // 合成点であるここで入れる。
+    const session = createCombatSession({ blowAway: createFutonBlowAway() });
     const { recordAction } = useGameStore.getState();
 
     const detachKeyboard = attachKeyboardInput((action) => {

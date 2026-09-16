@@ -7,6 +7,7 @@ import { MathUtils, Vector3, type Group } from 'three';
 import { createAudioManager } from '@/audio/audio-manager';
 import { createHtmlAudioOutput } from '@/audio/audio-output';
 import { BOSS_ANCHOR, SPAWN_POINTS } from '@/game/arena/arena';
+import type { BarrierChallengeSnapshot } from '@/game/barrier/barrier-challenge';
 import type { DangerZone } from '@/game/boss/attacks/danger-zone';
 import { createHoriBoss } from '@/game/boss/hori-boss';
 import { createRealClock } from '@/game/clock';
@@ -27,6 +28,7 @@ import { toCameraRelativeMovement } from '@/input/keyboard/camera-relative-movem
 import { isFromInteractiveElement } from '@/input/keyboard/interactive-element';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
+import { FINALE_OCARINA_MELODY } from '@/game/ocarina/finale-ocarina-melody';
 import { createOraProductionInput } from '@/input/ora/ora-production-input';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 import type { PlanarPosition } from '@/game/movement/types';
@@ -72,11 +74,16 @@ import {
 } from '../character/HoriDaisukeModel';
 import type { MotionContext } from '../character/motion-manifest';
 import { World } from '../world/World';
+import { BarrierCircles } from './BarrierCircles';
 import { DangerZoneMarks } from './DangerZoneMarks';
 import { DumbbellSlam, type DumbbellSlamFrame } from './DumbbellSlam';
+import { publishBarrierPresentation, resetBarrierPresentation } from './barrier-presentation-store';
 import {
   publishFinalePresentation,
   resetFinalePresentation,
+  setMelodyAudioCompleteHandler,
+  setFinalStandoffAudioCompleteHandler,
+  setOcarinaClaimHandler,
   type PlayedMelodyNote,
 } from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
@@ -215,6 +222,10 @@ function isSameView(a: View, b: View): boolean {
   if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
   if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
   if (a.snapshot.finale !== b.snapshot.finale) return false;
+  // 結界の進行はフェーズを変えずに進む。ここで比べないと、円を埋めても
+  // View が作り直されず、表示が発動時のまま止まる。
+  if (!isSameBarrier(a.snapshot.barrier, b.snapshot.barrier)) return false;
+  if (a.snapshot.ocarinaPerformerId !== b.snapshot.ocarinaPerformerId) return false;
   if (a.snapshot.players.length !== b.snapshot.players.length) return false;
   if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
 
@@ -230,6 +241,22 @@ function isSameView(a: View, b: View): boolean {
       // 解決後の条件で比べると、変わるのは1回の振りにつき2回で済む。
       isSameMotionContext(a.playerMotionContexts[index] ?? {}, b.playerMotionContexts[index] ?? {})
     );
+  });
+}
+
+/** 結界の進行が前フレームと同じか。 */
+function isSameBarrier(
+  a: BarrierChallengeSnapshot | null,
+  b: BarrierChallengeSnapshot | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.phase !== b.phase) return false;
+  if (a.occupiedCount !== b.occupiedCount) return false;
+  if (a.devices.length !== b.devices.length) return false;
+
+  return a.devices.every((device, index) => {
+    const other = b.devices[index];
+    return other !== undefined && device.id === other.id && device.status === other.status;
   });
 }
 
@@ -481,7 +508,9 @@ export function BossArenaScene({
   const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
-  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
+  const melody = useRef(
+    createMelodyRecognizer({ notes: FINALE_OCARINA_MELODY, ignoreAccidentals: true }),
+  );
 
   const bossPhase = view?.snapshot.boss.phase ?? null;
 
@@ -490,6 +519,8 @@ export function BossArenaScene({
     publishFinalePresentation({
       phase: bossPhase,
       finale,
+      localPlayerId,
+      ocarinaPerformerId: view?.snapshot.ocarinaPerformerId ?? null,
       zeroDamageSequence,
       microphoneStatus,
       playedMelodyNotes,
@@ -500,6 +531,8 @@ export function BossArenaScene({
   }, [
     bossPhase,
     finale,
+    localPlayerId,
+    view?.snapshot.ocarinaPerformerId,
     zeroDamageSequence,
     microphoneStatus,
     playedMelodyNotes,
@@ -509,6 +542,19 @@ export function BossArenaScene({
   ]);
 
   useEffect(() => resetFinalePresentation, []);
+
+  // 結界の表示。ソロでは BossBattle が結界を自動解除するので barrier は常に
+  // null になり、ここから何も出ない (GAME でだけ動く)。
+  const barrier = view?.snapshot.barrier ?? null;
+
+  useEffect(() => {
+    publishBarrierPresentation({
+      challenge: barrier,
+      localCharacterId: localPlayer?.characterId ?? null,
+    });
+  }, [barrier, localPlayer]);
+
+  useEffect(() => resetBarrierPresentation, []);
 
   // source が流す STATE を受ける。ローカルは tick() が、リモートは
   // サーバーが流す。描画ループはここで置かれた snapshot を読む。
@@ -554,17 +600,13 @@ export function BossArenaScene({
   useEffect(() => {
     if (battle === null) return undefined;
     const delayMs =
-      finale === 'FINAL_STANDOFF'
-        ? 7_500
-        : finale === 'OCARINA_APPEARING'
-          ? 5_200
-          : finale === 'MELODY_ACCEPTED'
-            ? 2_700
-            : finale === 'MEMORY'
-              ? 14_500
-              : finale === 'HORI_FALLING_ASLEEP'
-                ? 5_000
-                : null;
+      finale === 'OCARINA_APPEARING'
+        ? 5_200
+        : finale === 'MEMORY'
+          ? 14_500
+          : finale === 'HORI_FALLING_ASLEEP'
+            ? 5_000
+            : null;
     if (delayMs === null) return undefined;
     const timer = window.setTimeout(() => battle.advanceFinale(), delayMs);
     return () => window.clearTimeout(timer);
@@ -582,12 +624,17 @@ export function BossArenaScene({
   }, []);
 
   useEffect(() => {
-    if (battle === null) return undefined;
-    // コールバックの中から読むので、narrow 済みの参照を掴んでおく。
-    const localBattleForMelody = battle;
+    // ローカルとリモートで同じ入力経路を通す。リモートはBattleSourceが
+    // Authorityへ送信し、Authorityだけが最終演出を進める。
+    const sourceForMelody = activeSource;
     let disposed = false;
     function startMelody(): void {
-      if (microphoneStop.current !== null || finale !== 'WAITING_FOR_MELODY') return;
+      if (
+        microphoneStop.current !== null ||
+        finale !== 'WAITING_FOR_MELODY' ||
+        view?.snapshot.ocarinaPerformerId !== localPlayerId
+      )
+        return;
       setMelodyStarted(true);
       setMicrophoneStatus('requesting-permission');
       setMelodyExpected(melody.current.snapshot().expected);
@@ -617,7 +664,7 @@ export function BossArenaScene({
           if (result === 'COMPLETE') {
             microphoneStop.current?.();
             microphoneStop.current = null;
-            localBattleForMelody.advanceFinale();
+            sourceForMelody.submit({ type: 'MELODY_COMPLETE' });
           }
         },
         { onStatusChange: setMicrophoneStatus },
@@ -628,14 +675,32 @@ export function BossArenaScene({
         })
         .catch(() => undefined);
     }
+    function claimOcarina(): void {
+      if (finale === 'WAITING_FOR_MELODY') sourceForMelody.submit({ type: 'INTERACT' });
+    }
+    function completeMelodyAudio(): void {
+      if (finale === 'MELODY_ACCEPTED' && view?.snapshot.ocarinaPerformerId === localPlayerId) {
+        sourceForMelody.submit({ type: 'MELODY_AUDIO_COMPLETE' });
+      }
+    }
+    function completeFinalStandoffAudio(): void {
+      if (finale === 'FINAL_STANDOFF')
+        sourceForMelody.submit({ type: 'FINAL_STANDOFF_AUDIO_COMPLETE' });
+    }
     window.addEventListener('finale:melody-start', startMelody);
+    setOcarinaClaimHandler(claimOcarina);
+    setMelodyAudioCompleteHandler(completeMelodyAudio);
+    setFinalStandoffAudioCompleteHandler(completeFinalStandoffAudio);
     return () => {
       disposed = true;
       window.removeEventListener('finale:melody-start', startMelody);
+      setOcarinaClaimHandler(null);
+      setMelodyAudioCompleteHandler(null);
+      setFinalStandoffAudioCompleteHandler(null);
       microphoneStop.current?.();
       microphoneStop.current = null;
     };
-  }, [battle, finale]);
+  }, [activeSource, finale, localPlayerId, view?.snapshot.ocarinaPerformerId]);
 
   useEffect(() => {
     if (!melodyStarted || finale !== 'WAITING_FOR_MELODY') return undefined;
@@ -647,29 +712,27 @@ export function BossArenaScene({
   }, [melodyActivitySequence, melodyStarted, finale]);
 
   useEffect(() => {
-    if (battle === null) return undefined;
-    const completeEnding = () => {
-      if (finale === 'ENDING') battle.advanceFinale();
-    };
-    window.addEventListener('finale:ending-complete', completeEnding);
-    return () => window.removeEventListener('finale:ending-complete', completeEnding);
-  }, [battle, finale]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || battle === null) return undefined;
+    if (!import.meta.env.DEV) return undefined;
     const onDebugFinale = (event: KeyboardEvent) => {
       if (event.repeat) return;
-      if (event.code === 'KeyZ') battle.debugEnterNoSleepMode();
-      if (event.code === 'KeyM' && finale === 'WAITING_FOR_MELODY') {
+      if (event.code === 'KeyZ') {
+        if (battle === null) activeSource.submit({ type: 'DEBUG_ENTER_NO_SLEEP' });
+        else battle.debugEnterNoSleepMode();
+      }
+      if (
+        event.code === 'KeyM' &&
+        finale === 'WAITING_FOR_MELODY' &&
+        view?.snapshot.ocarinaPerformerId === localPlayerId
+      ) {
         melody.current.forceComplete();
         microphoneStop.current?.();
         microphoneStop.current = null;
-        battle.advanceFinale();
+        activeSource.submit({ type: 'MELODY_COMPLETE' });
       }
     };
     window.addEventListener('keydown', onDebugFinale);
     return () => window.removeEventListener('keydown', onDebugFinale);
-  }, [battle, finale]);
+  }, [activeSource, battle, finale, localPlayerId, view?.snapshot.ocarinaPerformerId]);
 
   useEffect(() => {
     // 入力はこのEffectの中で繋いで同じEffectで捨てる。StrictModeの
@@ -961,6 +1024,8 @@ export function BossArenaScene({
 
       {/* 危険範囲は草の上へ描く。地面より手前に出さないと草に埋もれる。 */}
       <DangerZoneMarks zones={zones} imminent={imminent} />
+      {/* 結界の解除サークル。判定と同じ半径を描き、入る場所を地面で示す。 */}
+      <BarrierCircles barrier={barrier} />
 
       {/* 絶対起床アラームのダンベル投げと衝撃波 (#122)。判定は持たない飾りなので
           演出強度 0 では消える。危険範囲そのものは上の DangerZoneMarks が描く。 */}

@@ -305,31 +305,60 @@ describe('回避', () => {
 });
 
 describe('キャラクターごとの性能差', () => {
-  it('オドルノは Pay より速く動く', () => {
-    const odoruno = setup({ characterId: 'ODORUNO' });
+  it('Pay は他の2人より速く動く (#147)', () => {
     const pay = setup({ characterId: 'PAY' });
+    const odoruno = setup({ characterId: 'ODORUNO' });
+    const ora = setup({ characterId: 'ORA' });
 
-    for (const target of [odoruno, pay]) {
+    for (const target of [pay, odoruno, ora]) {
       target.player.submit({ type: 'MOVE', input: { forward: 1, right: 0 } });
       target.player.update(1);
     }
 
-    expect(Math.abs(odoruno.player.snapshot().position.z)).toBeGreaterThan(
-      Math.abs(pay.player.snapshot().position.z),
-    );
+    const paidDistance = Math.abs(pay.player.snapshot().position.z);
+
+    expect(paidDistance).toBeGreaterThan(Math.abs(odoruno.player.snapshot().position.z));
+    expect(paidDistance).toBeGreaterThan(Math.abs(ora.player.snapshot().position.z));
   });
 
-  it('オドルノは Pay より攻撃が強く、回避の無敵が長い', () => {
-    expect(CHARACTER_STATS.ODORUNO.attackPower).toBeGreaterThan(CHARACTER_STATS.PAY.attackPower);
+  it('オドルノは他の2人より体力がある (#147)', () => {
+    expect(CHARACTER_STATS.ODORUNO.maxHp).toBeGreaterThan(CHARACTER_STATS.PAY.maxHp);
+    expect(CHARACTER_STATS.ODORUNO.maxHp).toBeGreaterThan(CHARACTER_STATS.ORA.maxHp);
+
+    // 数値だけでなく、実際に多く殴られても立っていられることまで見る。
+    const { player } = setup({ characterId: 'ODORUNO' });
+    player.takeDamage(CHARACTER_STATS.PAY.maxHp);
+
+    expect(player.snapshot().status).toBe('ACTIVE');
+  });
+
+  it('オラは他の2人より攻撃力が高い (#147)', () => {
+    expect(CHARACTER_STATS.ORA.attackPower).toBeGreaterThan(CHARACTER_STATS.PAY.attackPower);
+    expect(CHARACTER_STATS.ORA.attackPower).toBeGreaterThan(CHARACTER_STATS.ODORUNO.attackPower);
+  });
+
+  it('回避性能は #147 の対象外で、オドルノの優位を据え置く', () => {
     expect(CHARACTER_STATS.ODORUNO.dodgeInvulnerableMs).toBeGreaterThan(
       CHARACTER_STATS.PAY.dodgeInvulnerableMs,
     );
   });
 
   it('性能差が設定値だけで表現されている', () => {
-    // コード分岐ではなくデータで差を付けていることを、設定の差し替えで示す。
-    // オラへ Pay と同じ値が入っているので、挙動も一致する。
-    expect(CHARACTER_STATS.ORA).toEqual(CHARACTER_STATS.PAY);
+    // コード分岐ではなくデータで差を付けていることを、同じ値を持つ項目は
+    // 挙動も同じ、という形で示す。オラと Pay は攻撃力と移動速度で分かれるが、
+    // 同じ moveSpeed を持つオドルノとオラは同じだけ動く。キャラ名で分岐して
+    // いれば、設定値が同じでもここがずれる。
+    expect(CHARACTER_STATS.ODORUNO.moveSpeed).toBe(CHARACTER_STATS.ORA.moveSpeed);
+
+    const odoruno = setup({ characterId: 'ODORUNO' });
+    const ora = setup({ characterId: 'ORA' });
+
+    for (const target of [odoruno, ora]) {
+      target.player.submit({ type: 'MOVE', input: { forward: 1, right: 0 } });
+      target.player.update(1);
+    }
+
+    expect(odoruno.player.snapshot().position).toEqual(ora.player.snapshot().position);
   });
 });
 
