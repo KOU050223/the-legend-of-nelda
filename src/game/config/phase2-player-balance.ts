@@ -7,9 +7,9 @@
  * ロジック側は `CHARACTER_STATS[characterId]` を引くだけで、
  * `if (characterId === 'ODORUNO')` のような分岐を書かない。
  *
- * #45（三人の大輔の制約・強み）に「攻撃・回避性能の具体値」が保留として
- * 残っている。ここは仮値で、#45 の決定後に数値だけ差し替える
- * (#56「具体値が未決のまま実装を止めない」)。
+ * #45（三人の大輔の制約・強み）に保留されていた「どこを尖らせるか」は
+ * #147 で決まった (オド=体力 / オラ=攻撃力 / Pay=移動速度)。細かい数値は
+ * 引き続きプレイテストで調整する。
  */
 
 /** プレイアブルキャラクター。docs/phase2-role-design-spec.md。 */
@@ -40,24 +40,35 @@ export interface CharacterStats {
 }
 
 /**
- * キャラごとの性能。
+ * キャラごとの性能。#147 で3人の尖らせ方を決めた。
  *
- * オドルノは「攻撃性能が高い / 回避性能が高い / 移動速度・機動力が高い」
- * (role-design-spec)。Pay を標準 (1.0) とし、オドルノをその上へ置く。
- * オラは入力方式が特殊なぶん、性能そのものは標準に寄せる。ARマーカーの
- * 精度で不利になる側へさらに低い数値を乗せると二重の罰になる。
+ * - オドルノ (オド大輔): 体力がある。前線で殴られ続けても立っていられる側。
+ * - オラ大輔: 攻撃力が高い。
+ * - Pay大輔: 移動速度が速い。ほかは標準 (1.0) の基準点。
+ *
+ * オラの attackPower を最高にしつつ 12 に留めたのは、オラだけ
+ * `startVoiceAttack` がコンボ受付 (`nextComboStep`) を通らず、「オラ」と
+ * 言うたびにクールダウン無しで即命中するため。同じ 1 段あたりの数値でも
+ * 実際に出る DPS は他の2人より高く出る。ここへ旧オドルノの 14 を乗せると
+ * ボスHP (HORI_INITIAL_HP = 1000) に対して一人だけ桁が変わる。
+ *
+ * 回避性能 (dodge*) は #147 の対象外なので現状維持。オドルノに残した優位は
+ * 「前線・タンク」という体力の尖らせ方と向きが揃っている。
+ *
+ * #45 の役割設計はオドルノを「攻撃・回避・機動すべて高い」としているが、
+ * #147 は攻撃をオラへ、機動を Pay へ配り直す決定なので、そちらを採る。
  */
 export const CHARACTER_STATS: Readonly<Record<CharacterId, CharacterStats>> = {
   ODORUNO: {
-    moveSpeed: 9,
-    maxHp: 100,
-    attackPower: 14,
+    moveSpeed: 7,
+    maxHp: 200,
+    attackPower: 10,
     dodgeInvulnerableMs: 400,
     dodgeDistance: 5,
     dodgeCooldownMs: 600,
   },
   PAY: {
-    moveSpeed: 7,
+    moveSpeed: 10,
     maxHp: 100,
     attackPower: 10,
     dodgeInvulnerableMs: 300,
@@ -67,7 +78,7 @@ export const CHARACTER_STATS: Readonly<Record<CharacterId, CharacterStats>> = {
   ORA: {
     moveSpeed: 7,
     maxHp: 100,
-    attackPower: 10,
+    attackPower: 15,
     dodgeInvulnerableMs: 300,
     dodgeDistance: 4,
     dodgeCooldownMs: 800,
@@ -101,6 +112,10 @@ export const COMBO_STEPS: readonly ComboStep[] = [
   { windupMs: 250, activeMs: 150, recoverMs: 550, damageScale: 1.8 },
 ];
 
+/** オラ大輔の音声ATTACKで使うダメージ倍率の下限・上限。 */
+export const ORA_VOICE_DAMAGE_MULTIPLIER_MIN = 0.85;
+export const ORA_VOICE_DAMAGE_MULTIPLIER_MAX = 1.3;
+
 /**
  * 連撃が途切れるまでの猶予 (ms)。
  * この時間内に次の攻撃入力が来なければ1段目へ戻る。
@@ -117,7 +132,7 @@ export const ATTACK_REACH = 3;
  * (§5.3「数値はプレイテストで調整する」)。
  */
 export interface RevivalBalance {
-  /** HP0から完全に寝てしまうまで (ms)。仕様は8〜10秒。 */
+  /** HP0から完全に寝てしまうまで (ms)。 */
   sleepCountdownMs: number;
   /** 1人で起こしたときに必要な時間 (ms)。仕様は3〜4秒。 */
   soloReviveMs: number;
@@ -130,7 +145,7 @@ export interface RevivalBalance {
 }
 
 export const DEFAULT_REVIVAL: RevivalBalance = {
-  sleepCountdownMs: 9000,
+  sleepCountdownMs: 30_000,
   soloReviveMs: 3500,
   reviveRange: 3,
   revivedHpRatio: 0.3,
