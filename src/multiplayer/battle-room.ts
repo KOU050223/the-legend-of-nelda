@@ -24,6 +24,8 @@ export interface BattleRoom {
   publishState(): void;
   /** Pay大輔のWasshoiEventを他のプレイヤーへ配送する。 */
   publishWasshoi(fromParticipantId: string, event: WasshoiEvent): void;
+  /** participantが別roomへ移動・再接続猶予切れした時、server側から退出させる。 */
+  removeParticipant(participantId: string): void;
 }
 
 export interface LegacyBattleRoomOptions {
@@ -211,6 +213,10 @@ function createLegacyBattleRoom(options: LegacyBattleRoomOptions): BattleRoom {
         sendSafely(transport, connectionId, { type: 'WASSHOI', event });
       }
     },
+
+    removeParticipant() {
+      // Legacy modeは固定player rosterのため、room registryからは使わない。
+    },
   };
 }
 
@@ -359,6 +365,33 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     return participantId === undefined ? undefined : participantById.get(participantId);
   }
 
+  function removeParticipant(participantId: string): void {
+    const participant = participantById.get(participantId);
+    if (participant === undefined) return;
+
+    if (participant.connectionId !== null) {
+      connectionToParticipant.delete(participant.connectionId);
+      const state = connectionStates.get(participant.connectionId);
+      if (state !== undefined) {
+        connectionStates.set(participant.connectionId, { participantId: null, full: true });
+      }
+    }
+    participantById.delete(participantId);
+    epochs.delete(participantId);
+    lastAcceptedSeq.delete(participantId);
+    const index = participants.indexOf(participant);
+    if (index >= 0) participants.splice(index, 1);
+
+    // 開始済みbattleから1人だけを安全に取り除くAPIは無いため、残った参加者を
+    // MATCHINGへ戻して新しい3人でbattleを作り直す。幽霊playerを残さない。
+    if (started) {
+      started = false;
+      frozenRoles = null;
+      battle = null;
+    }
+    publishLobby();
+  }
+
   function handleSelectCharacter(connectionId: string, message: SelectCharacterMessage): void {
     const participant = participantForConnection(connectionId);
     if (participant === undefined) {
@@ -467,10 +500,7 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     const participant = participantById.get(state.participantId);
     if (participant?.connectionId !== connectionId) return;
     participant.connectionId = null;
-    if (!started && participantById.delete(state.participantId)) {
-      const index = participants.indexOf(participant);
-      if (index >= 0) participants.splice(index, 1);
-    }
+    if (!started) removeParticipant(state.participantId);
     publishLobby();
   });
 
@@ -507,6 +537,8 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
         sendSafely(transport, connectionId, { type: 'WASSHOI', event });
       }
     },
+
+    removeParticipant,
   };
 }
 

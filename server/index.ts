@@ -7,7 +7,8 @@ import { createGameEventBus } from '../src/game/events/game-event';
 import { createBossBattle, type PlayerSeed } from '../src/game/session/boss-battle';
 import type { CharacterId } from '../src/game/config/phase2-player-balance';
 import type { PlanarPosition } from '../src/game/movement/types';
-import { createBattleRoom, type BattleRoom } from '../src/multiplayer/battle-room';
+import { type BattleRoom } from '../src/multiplayer/battle-room';
+import { createBattleRoomRegistry } from '../src/multiplayer/battle-room-registry';
 import { createNodeAuthorityTransport } from './node-authority-transport';
 
 /**
@@ -120,7 +121,7 @@ export function createAuthorityServer(options: AuthorityServerOptions): Authorit
         autoAdvanceFinale: true,
       });
     });
-  const battleRoom = createBattleRoom({
+  const battleRoom = createBattleRoomRegistry({
     transport,
     ...(options.tokenToRoomId === undefined ? {} : { tokenToRoomId: options.tokenToRoomId }),
     ...(options.tokenToPlayerId === undefined ? {} : { tokenToPlayerId: options.tokenToPlayerId }),
@@ -206,7 +207,6 @@ if (isDirectEntryPoint()) {
   const roomToken = roomTokenFromEnv(process.env);
   const server = createAuthorityServer({
     port,
-    tokenToPlayerId: new Map(),
     ...(roomToken === undefined ? {} : { roomToken }),
   });
   const shutdown = (): void => {

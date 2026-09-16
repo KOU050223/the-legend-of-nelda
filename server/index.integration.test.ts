@@ -151,6 +151,55 @@ afterEach(async () => {
 });
 
 describe('createAuthorityServer', () => {
+  it('tokenToRoomIdごとにlobbyと開始済みBattleを分離する', async () => {
+    const server = createAuthorityServer({
+      port: 0,
+      stateBroadcastIntervalMs: 10_000,
+      tokenToRoomId: new Map([
+        ['team-a', 'room-a'],
+        ['team-b', 'room-b'],
+      ]),
+    });
+    servers.push(server);
+
+    const teamA = await Promise.all(
+      ['participant-a1', 'participant-a2', 'participant-a3'].map((participantId) =>
+        connectClient(server, 'team-a', participantId),
+      ),
+    );
+    const teamB = await Promise.all(
+      ['participant-b1', 'participant-b2', 'participant-b3'].map((participantId) =>
+        connectClient(server, 'team-b', participantId),
+      ),
+    );
+    const [aOdoruno, aPay, aOra] = teamA;
+    const [bOdoruno] = teamB;
+    if (
+      aOdoruno === undefined ||
+      aPay === undefined ||
+      aOra === undefined ||
+      bOdoruno === undefined
+    ) {
+      throw new Error('expected three clients in each room');
+    }
+
+    await selectAndStart(aOdoruno, aPay, aOra);
+    await waitFor(() => lobbyMessages(aOdoruno).some(({ started }) => started));
+
+    expect(lobbyMessages(bOdoruno).at(-1)).toMatchObject({
+      started: false,
+      slots: expect.arrayContaining([
+        expect.objectContaining({ participantId: 'participant-b1' }),
+        expect.objectContaining({ participantId: 'participant-b2' }),
+        expect.objectContaining({ participantId: 'participant-b3' }),
+      ]),
+    });
+
+    server.battleRoom.publishState();
+    await waitFor(() => stateMessages(aOdoruno).length > 0);
+    expect(stateMessages(bOdoruno)).toHaveLength(0);
+  });
+
   it('3人揃うまでSTATEのboss.hpを固定し、started後のACTIONでboss.hpを変化させる', async () => {
     const server = createAuthorityServer({
       port: 0,
@@ -305,9 +354,9 @@ describe('createAuthorityServer', () => {
     expect(fourth.messages.filter((message) => message.type === 'STATE')).toHaveLength(0);
   });
 
-  it('token設定なしで起動したserverは誰でもJOINでき、3人は異なる位置へspawnする', async () => {
+  it('token設定なしでも同じ共有tokenの3人はJOINでき、異なる位置へspawnする', async () => {
     // roomToken/tokenToPlayerId/tokenToRoomIdのいずれも渡さない
-    // = NELDA_ROOM_TOKEN未設定のデフォルト起動と同じ状態 (token方式廃止)。
+    // = NELDA_ROOM_TOKEN未設定のデフォルト起動と同じ状態。tokenがroomを分ける。
     const server = createAuthorityServer({
       port: 0,
       gameUpdateIntervalMs: 5,
@@ -315,9 +364,9 @@ describe('createAuthorityServer', () => {
     });
     servers.push(server);
 
-    const odoruno = await connectClient(server, 'arbitrary-value-a', 'participant-open-a');
-    const pay = await connectClient(server, 'completely-different-b', 'participant-open-b');
-    const ora = await connectClient(server, 'yet-another-c', 'participant-open-c');
+    const odoruno = await connectClient(server, 'open-room', 'participant-open-a');
+    const pay = await connectClient(server, 'open-room', 'participant-open-b');
+    const ora = await connectClient(server, 'open-room', 'participant-open-c');
 
     await selectAndStart(odoruno, pay, ora);
     await waitFor(() => lobbyMessages(odoruno).some(({ started }) => started));
