@@ -34,6 +34,10 @@ export const DISCRETE_GAME_ACTIONS = [
   'ATTACK',
   'DODGE',
   'INTERACT',
+  /** 最終演出の演奏担当者が、ローカルでの旋律認識完了をAuthorityへ伝える。 */
+  'MELODY_COMPLETE',
+  /** 開発環境でAuthorityの最終局面を開始する。 */
+  'DEBUG_ENTER_NO_SLEEP',
   /** 倒れた仲間を起こす連打入力。docs/phase2-gameplay-spec.md §5.3。 */
   'REVIVE',
   /**

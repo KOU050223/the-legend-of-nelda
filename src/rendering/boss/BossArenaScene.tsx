@@ -26,6 +26,7 @@ import { toCameraRelativeMovement } from '@/input/keyboard/camera-relative-movem
 import { isFromInteractiveElement } from '@/input/keyboard/interactive-element';
 import { attachMicrophoneNoteInput } from '@/input/microphone/microphone-adapter';
 import type { MicrophoneInputStatus, NoteName } from '@/input/microphone/types';
+import { FINALE_OCARINA_MELODY } from '@/game/ocarina/finale-ocarina-melody';
 import { createMelodyRecognizer } from '@/game/ocarina/melody-recognizer';
 import type { PlanarPosition } from '@/game/movement/types';
 import { readPresentationSettings } from '@/presentation/presentation-store';
@@ -74,6 +75,7 @@ import { DumbbellSlam, type DumbbellSlamFrame } from './DumbbellSlam';
 import {
   publishFinalePresentation,
   resetFinalePresentation,
+  setOcarinaClaimHandler,
   type PlayedMelodyNote,
 } from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
@@ -212,6 +214,7 @@ function isSameView(a: View, b: View): boolean {
   if (a.snapshot.boss.hp !== b.snapshot.boss.hp) return false;
   if (a.snapshot.boss.phase !== b.snapshot.boss.phase) return false;
   if (a.snapshot.finale !== b.snapshot.finale) return false;
+  if (a.snapshot.ocarinaPerformerId !== b.snapshot.ocarinaPerformerId) return false;
   if (a.snapshot.players.length !== b.snapshot.players.length) return false;
   if (!isSameMotionContext(a.bossMotionContext, b.bossMotionContext)) return false;
 
@@ -450,7 +453,9 @@ export function BossArenaScene({
   const [melodyActivitySequence, setMelodyActivitySequence] = useState(0);
   const microphoneStop = useRef<(() => void) | null>(null);
   const melodyNoteSequence = useRef(0);
-  const melody = useRef(createMelodyRecognizer({ notes: ['C', 'E', 'G', 'E', 'C', 'G'] }));
+  const melody = useRef(
+    createMelodyRecognizer({ notes: FINALE_OCARINA_MELODY, ignoreAccidentals: true }),
+  );
 
   const bossPhase = view?.snapshot.boss.phase ?? null;
 
@@ -459,6 +464,8 @@ export function BossArenaScene({
     publishFinalePresentation({
       phase: bossPhase,
       finale,
+      localPlayerId,
+      ocarinaPerformerId: view?.snapshot.ocarinaPerformerId ?? null,
       zeroDamageSequence,
       microphoneStatus,
       playedMelodyNotes,
@@ -469,6 +476,8 @@ export function BossArenaScene({
   }, [
     bossPhase,
     finale,
+    localPlayerId,
+    view?.snapshot.ocarinaPerformerId,
     zeroDamageSequence,
     microphoneStatus,
     playedMelodyNotes,
@@ -551,12 +560,17 @@ export function BossArenaScene({
   }, []);
 
   useEffect(() => {
-    if (battle === null) return undefined;
-    // コールバックの中から読むので、narrow 済みの参照を掴んでおく。
-    const localBattleForMelody = battle;
+    // ローカルとリモートで同じ入力経路を通す。リモートはBattleSourceが
+    // Authorityへ送信し、Authorityだけが最終演出を進める。
+    const sourceForMelody = activeSource;
     let disposed = false;
     function startMelody(): void {
-      if (microphoneStop.current !== null || finale !== 'WAITING_FOR_MELODY') return;
+      if (
+        microphoneStop.current !== null ||
+        finale !== 'WAITING_FOR_MELODY' ||
+        view?.snapshot.ocarinaPerformerId !== localPlayerId
+      )
+        return;
       setMelodyStarted(true);
       setMicrophoneStatus('requesting-permission');
       setMelodyExpected(melody.current.snapshot().expected);
@@ -586,7 +600,7 @@ export function BossArenaScene({
           if (result === 'COMPLETE') {
             microphoneStop.current?.();
             microphoneStop.current = null;
-            localBattleForMelody.advanceFinale();
+            sourceForMelody.submit({ type: 'MELODY_COMPLETE' });
           }
         },
         { onStatusChange: setMicrophoneStatus },
@@ -597,14 +611,19 @@ export function BossArenaScene({
         })
         .catch(() => undefined);
     }
+    function claimOcarina(): void {
+      if (finale === 'WAITING_FOR_MELODY') sourceForMelody.submit({ type: 'INTERACT' });
+    }
     window.addEventListener('finale:melody-start', startMelody);
+    setOcarinaClaimHandler(claimOcarina);
     return () => {
       disposed = true;
       window.removeEventListener('finale:melody-start', startMelody);
+      setOcarinaClaimHandler(null);
       microphoneStop.current?.();
       microphoneStop.current = null;
     };
-  }, [battle, finale]);
+  }, [activeSource, finale, localPlayerId, view?.snapshot.ocarinaPerformerId]);
 
   useEffect(() => {
     if (!melodyStarted || finale !== 'WAITING_FOR_MELODY') return undefined;
@@ -625,20 +644,27 @@ export function BossArenaScene({
   }, [battle, finale]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || battle === null) return undefined;
+    if (!import.meta.env.DEV) return undefined;
     const onDebugFinale = (event: KeyboardEvent) => {
       if (event.repeat) return;
-      if (event.code === 'KeyZ') battle.debugEnterNoSleepMode();
-      if (event.code === 'KeyM' && finale === 'WAITING_FOR_MELODY') {
+      if (event.code === 'KeyZ') {
+        if (battle === null) activeSource.submit({ type: 'DEBUG_ENTER_NO_SLEEP' });
+        else battle.debugEnterNoSleepMode();
+      }
+      if (
+        event.code === 'KeyM' &&
+        finale === 'WAITING_FOR_MELODY' &&
+        view?.snapshot.ocarinaPerformerId === localPlayerId
+      ) {
         melody.current.forceComplete();
         microphoneStop.current?.();
         microphoneStop.current = null;
-        battle.advanceFinale();
+        activeSource.submit({ type: 'MELODY_COMPLETE' });
       }
     };
     window.addEventListener('keydown', onDebugFinale);
     return () => window.removeEventListener('keydown', onDebugFinale);
-  }, [battle, finale]);
+  }, [activeSource, battle, finale, localPlayerId, view?.snapshot.ocarinaPerformerId]);
 
   useEffect(() => {
     // 入力はこの Effect の中で繋いで同じ Effect で捨てる。StrictMode の

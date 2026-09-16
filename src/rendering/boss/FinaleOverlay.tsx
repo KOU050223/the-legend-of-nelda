@@ -11,12 +11,14 @@ import horiMemory4 from '../../../assets/character/hori-daisuke-v1/source/daisuk
 import horiSleepingMovie from '../../../assets/character/hori-daisuke-v1/source/daisuke_hori_SleepingMovie.mov';
 import { useScreenStore } from '@/app/screen';
 
-import type { PlayedMelodyNote } from './finale-presentation-store';
+import { requestOcarinaClaim, type PlayedMelodyNote } from './finale-presentation-store';
 import styles from './FinaleOverlay.module.css';
 
 export interface FinaleOverlayProps {
   readonly phase: BossPhase;
   readonly finale: FinaleState;
+  readonly localPlayerId: string;
+  readonly ocarinaPerformerId: string | null;
   /** 同じ文言を再生し直すための連番。0なら表示しない。 */
   readonly zeroDamageSequence: number;
   readonly microphoneStatus: MicrophoneInputStatus;
@@ -30,6 +32,8 @@ export interface FinaleOverlayProps {
 export function FinaleOverlay({
   phase,
   finale,
+  localPlayerId,
+  ocarinaPerformerId,
   zeroDamageSequence,
   microphoneStatus,
   playedMelodyNotes,
@@ -109,7 +113,7 @@ export function FinaleOverlay({
             </div>
           ) : (
             <>
-              {performing ? (
+              {performing && ocarinaPerformerId === localPlayerId ? (
                 <SheetMusic
                   microphoneStatus={microphoneStatus}
                   playedNotes={playedMelodyNotes}
@@ -117,13 +121,26 @@ export function FinaleOverlay({
                   expectedNote={melodyExpected}
                   showNextHint={showMelodyHint}
                 />
-              ) : (
+              ) : ocarinaPerformerId === null ? (
                 <div className={styles.ocarinaPrompt}>
                   <p>
                     伝説のオカリナが
                     <br />
                     あなたたちに応えている……
                   </p>
+                  <strong>最初にオカリナを取れ</strong>
+                  <button
+                    className={styles.startMelody}
+                    type="button"
+                    onClick={() => {
+                      requestOcarinaClaim();
+                    }}
+                  >
+                    オカリナを取る
+                  </button>
+                </div>
+              ) : ocarinaPerformerId === localPlayerId ? (
+                <div className={styles.ocarinaPrompt}>
                   <strong>伝説のオカリナを奏でよ</strong>
                   <button
                     className={styles.startMelody}
@@ -135,6 +152,11 @@ export function FinaleOverlay({
                   >
                     演奏を始める
                   </button>
+                </div>
+              ) : (
+                <div className={styles.ocarinaPrompt}>
+                  <p>仲間が伝説のオカリナを手に取った。</p>
+                  <strong>演奏を見守ろう</strong>
                 </div>
               )}
             </>

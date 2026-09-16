@@ -315,6 +315,28 @@ describe('勝敗', () => {
 });
 
 describe('最終局面のBossBattle統合', () => {
+  it('最初にオカリナを取った参加者だけが旋律を完了できる', () => {
+    const { battle, clock } = setup();
+    battle.debugEnterNoSleepMode();
+    clock.advance(4_000);
+    battle.update(0.016);
+    battle.advanceFinale();
+    battle.advanceFinale();
+
+    battle.submit('pay', { type: 'INTERACT' });
+    battle.submit('odoruno', { type: 'INTERACT' });
+    battle.submit('odoruno', { type: 'MELODY_COMPLETE' });
+
+    expect(battle.snapshot()).toMatchObject({
+      finale: 'WAITING_FOR_MELODY',
+      ocarinaPerformerId: 'pay',
+    });
+
+    battle.submit('pay', { type: 'MELODY_COMPLETE' });
+
+    expect(battle.snapshot().finale).toBe('MELODY_ACCEPTED');
+  });
+
   it('デバッグ操作では、結界を経ずにHP10%の最終形態直後へ移れる', () => {
     const { battle } = setup();
 

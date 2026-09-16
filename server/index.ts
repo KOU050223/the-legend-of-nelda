@@ -116,6 +116,8 @@ export function createAuthorityServer(options: AuthorityServerOptions): Authorit
         clock: { now: () => Date.now() },
         events: createGameEventBus(),
         roster,
+        allowDebugFinaleSkip: process.env.NODE_ENV !== 'production',
+        autoAdvanceFinale: true,
       });
     });
   const battleRoom = createBattleRoom({

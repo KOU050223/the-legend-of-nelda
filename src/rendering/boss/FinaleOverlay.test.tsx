@@ -9,6 +9,8 @@ describe('FinaleOverlay', () => {
       <FinaleOverlay
         phase="NO_SLEEP_MODE"
         finale="ENDING"
+        localPlayerId="odoruno"
+        ocarinaPerformerId={null}
         zeroDamageSequence={0}
         microphoneStatus="idle"
         playedMelodyNotes={[]}

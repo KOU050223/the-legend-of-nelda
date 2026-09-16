@@ -124,6 +124,7 @@ function AppScreen({ screen }: { screen: ReturnType<typeof useScreenStore.getSta
       <div className={styles.root}>
         <GameScene multiplayer />
         <FirstPersonHealthHud />
+        <FinalePresentation />
         <VoiceHud />
       </div>
     );
