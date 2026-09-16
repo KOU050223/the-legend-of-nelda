@@ -7,6 +7,7 @@ import type {
   AuthorityToClientMessage,
   ClientToAuthorityMessage,
   JoinMessage,
+  LeaveMessage,
   LobbyMessage,
   LobbySlot,
   RejectionReason,
@@ -24,6 +25,8 @@ export interface BattleRoom {
   publishState(): void;
   /** Pay大輔のWasshoiEventを他のプレイヤーへ配送する。 */
   publishWasshoi(fromParticipantId: string, event: WasshoiEvent): void;
+  /** participantが別roomへ移動・再接続猶予切れした時、server側から退出させる。 */
+  removeParticipant(participantId: string): void;
 }
 
 export interface LegacyBattleRoomOptions {
@@ -211,6 +214,10 @@ function createLegacyBattleRoom(options: LegacyBattleRoomOptions): BattleRoom {
         sendSafely(transport, connectionId, { type: 'WASSHOI', event });
       }
     },
+
+    removeParticipant() {
+      // Legacy modeは固定player rosterのため、room registryからは使わない。
+    },
   };
 }
 
@@ -359,6 +366,35 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     return participantId === undefined ? undefined : participantById.get(participantId);
   }
 
+  function removeParticipant(participantId: string): void {
+    const participant = participantById.get(participantId);
+    if (participant === undefined) return;
+
+    if (participant.connectionId !== null) {
+      connectionToParticipant.delete(participant.connectionId);
+      const state = connectionStates.get(participant.connectionId);
+      if (state !== undefined) {
+        connectionStates.set(participant.connectionId, { participantId: null, full: true });
+      }
+    }
+    participantById.delete(participantId);
+    epochs.delete(participantId);
+    lastAcceptedSeq.delete(participantId);
+    const index = participants.indexOf(participant);
+    if (index >= 0) participants.splice(index, 1);
+
+    // BossBattleのrosterは開始時に凍結される。参加者が残る間にbattle全体を破棄すると
+    // 残りの参加者までMATCHINGへ落ち、進行中のEND演出を中断してしまうため、
+    // 開始済みのroomはそのまま継続する。最後の1人も退出してroomが空になった時だけ
+    // battleを破棄し、次の3人を新しい募集として受け入れる。
+    if (started && participants.length === 0) {
+      started = false;
+      frozenRoles = null;
+      battle = null;
+    }
+    publishLobby();
+  }
+
   function handleSelectCharacter(connectionId: string, message: SelectCharacterMessage): void {
     const participant = participantForConnection(connectionId);
     if (participant === undefined) {
@@ -428,6 +464,17 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     publishLobby();
   }
 
+  function handleLeave(connectionId: string, _message: LeaveMessage): void {
+    const participant = participantForConnection(connectionId);
+    if (participant === undefined) return;
+    removeParticipant(participant.participantId);
+    try {
+      transport.disconnectClient(connectionId);
+    } catch (error) {
+      reportRoomError(error);
+    }
+  }
+
   function handleAction(connectionId: string, message: ActionMessage): void {
     if (!started || battle === null) return;
     const participant = participantForConnection(connectionId);
@@ -448,6 +495,8 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
         handleSelectCharacter(connectionId, message);
       } else if (message.type === 'START') {
         handleStart(connectionId, message);
+      } else if (message.type === 'LEAVE') {
+        handleLeave(connectionId, message);
       } else {
         handleAction(connectionId, message);
       }
@@ -467,10 +516,7 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
     const participant = participantById.get(state.participantId);
     if (participant?.connectionId !== connectionId) return;
     participant.connectionId = null;
-    if (!started && participantById.delete(state.participantId)) {
-      const index = participants.indexOf(participant);
-      if (index >= 0) participants.splice(index, 1);
-    }
+    if (!started) removeParticipant(state.participantId);
     publishLobby();
   });
 
@@ -507,6 +553,8 @@ function createAnonymousBattleRoom(options: LobbyBattleRoomOptions): BattleRoom 
         sendSafely(transport, connectionId, { type: 'WASSHOI', event });
       }
     },
+
+    removeParticipant,
   };
 }
 

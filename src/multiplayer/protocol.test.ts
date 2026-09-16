@@ -99,6 +99,7 @@ describe('isClientToAuthorityMessage', () => {
   it('JOINとACTIONの正しいエンベロープを受理する', () => {
     const messages = [
       { type: 'JOIN', token: 'token-pay', participantId: 'participant-pay' },
+      { type: 'LEAVE' },
       { type: 'ACTION', epoch: 1, seq: 0, action: { type: 'ATTACK' } },
       {
         type: 'ACTION',

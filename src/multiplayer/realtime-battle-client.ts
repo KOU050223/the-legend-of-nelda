@@ -17,6 +17,7 @@ export function createRealtimeBattleClient(options: {
   readonly submit: (action: GameAction) => void;
   readonly selectCharacter: (characterId: CharacterId) => void;
   readonly requestStart: () => void;
+  readonly leave?: () => void;
   readonly onWelcome: (
     handler: (info: { playerId: string; participantId?: string; epoch: number }) => void,
   ) => () => void;
@@ -175,6 +176,19 @@ export function createRealtimeBattleClient(options: {
       } catch (error) {
         reportClientError(error);
       }
+    },
+
+    leave() {
+      if (!connected || playerId === null) return;
+      try {
+        transport.sendToAuthority({ type: 'LEAVE' });
+      } catch (error) {
+        reportClientError(error);
+      }
+      connected = false;
+      playerId = null;
+      epoch = null;
+      transport.disconnect?.();
     },
 
     onWelcome(handler) {

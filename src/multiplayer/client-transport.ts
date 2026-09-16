@@ -6,6 +6,7 @@ import {
 
 export interface ClientTransport {
   sendToAuthority(msg: ClientToAuthorityMessage): void;
+  disconnect?(): void;
   onMessage(handler: (msg: AuthorityToClientMessage) => void): () => void;
   onDisconnected(handler: () => void): () => void;
 }
@@ -91,6 +92,15 @@ export function createWebSocketClientTransport(url: string): ClientTransport {
       }
 
       if (socket.readyState === WebSocket.CONNECTING) pendingMessages.push(serialized);
+    },
+
+    disconnect() {
+      if (disconnected || socket.readyState === WebSocket.CLOSED) return;
+      try {
+        socket.close();
+      } catch (error) {
+        reportTransportError(error);
+      }
     },
 
     onMessage(handler) {

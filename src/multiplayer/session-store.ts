@@ -46,6 +46,7 @@ interface MultiplayerSessionStore {
   connect: () => void;
   selectCharacter: (characterId: CharacterId) => void;
   requestStart: () => void;
+  leave: () => void;
 }
 
 function reportSessionError(error: unknown): void {
@@ -224,6 +225,12 @@ export const useMultiplayerSessionStore = create<MultiplayerSessionStore>((set, 
       const client = get().client;
       if (get().status !== 'CONNECTED' || client === null) return;
       client.requestStart();
+    },
+
+    leave: () => {
+      connectionGeneration += 1;
+      get().client?.leave?.();
+      resetConnectionState('NO_TOKEN');
     },
   };
 });
