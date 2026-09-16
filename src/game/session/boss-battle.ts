@@ -38,7 +38,6 @@ export const FINALE_STANDOFF_FALLBACK_MS = 4_000;
 const FINALE_AUTO_ADVANCE_MS: Partial<Record<FinaleState, number>> = {
   FINAL_STANDOFF: 7_500,
   OCARINA_APPEARING: 5_200,
-  MELODY_ACCEPTED: 2_700,
   MEMORY: 14_500,
   HORI_FALLING_ASLEEP: 5_000,
 };
@@ -315,6 +314,11 @@ export function createBossBattle(options: BossBattleOptions): BossBattle {
         if (action.type === 'MELODY_COMPLETE' && ocarinaPerformerId === playerId) {
           setFinale(nextFinaleState(finale));
         }
+        return;
+      }
+
+      if (finale === 'MELODY_ACCEPTED' && action.type === 'MELODY_AUDIO_COMPLETE') {
+        if (ocarinaPerformerId === playerId) setFinale(nextFinaleState(finale));
         return;
       }
 
