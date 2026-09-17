@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Billboard, Html, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
@@ -20,6 +20,7 @@ import {
   type BattleSnapshot,
   type BossBattle,
 } from '@/game/session/boss-battle';
+import { createNpcDriver } from '@/game/npc/npc-driver';
 import { createLocalBattleSource, type BattleSource } from '@/game/session/battle-source';
 import type { GameAction, InputAdapter } from '@/game/types/game-action';
 import { dangerZonesOfActiveAttack } from '@/game/boss/attacks/hori-attacks';
@@ -87,7 +88,7 @@ import {
   type PlayedMelodyNote,
 } from './finale-presentation-store';
 import { LegendaryOcarina } from './LegendaryOcarina';
-import { isOutcomeRestartAllowed } from './outcome-restart';
+import { isBattleSettled, isOutcomeRestartAllowed } from './outcome-restart';
 
 /**
  * ワールドの中身。草原に堀大輔が居て、その場で戦う。(#55 / #56 / #58)
@@ -361,6 +362,22 @@ export function BossArenaScene({
   const battle = localBattle?.battle ?? null;
   const events = localBattle?.events ?? null;
 
+  /**
+   * 人間が操作していない2キャラを動かす NPC (Issue #158)。
+   *
+   * ローカル戦闘のときだけ持つ。リモートでは全員が実プレイヤーで、
+   * NPC を走らせると Authority の状態と二重に動かすことになる。
+   * 担当は毎フレーム `readLocalPlayerId` から引き直すので、
+   * 操作キャラを切り替えても追従する。
+   */
+  const npcDriver = useMemo(
+    () =>
+      localBattle === null
+        ? null
+        : createNpcDriver({ rosterIds: LOCAL_PLAYER_IDS, readLocalPlayerId }),
+    [localBattle],
+  );
+
   // 操作キャラ。ローカルは画面から切り替えられ (Issue #106)、リモートは
   // Authority が WELCOME で決めた1人に固定される。混ぜないよう分けて持つ。
   const localPlayerId = providedSource === undefined ? switchedLocalPlayerId : source.localPlayerId;
@@ -384,7 +401,10 @@ export function BossArenaScene({
   const resultStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
-    if (outcome === 'ONGOING') {
+    // `LOCAL_DOWN` は決着ではない。結果画面 (BAD END) を出すと、NPC が
+    // 起こしに来る前にゲームが終わったように見える (#158)。倒れている表示は
+    // OutcomeBanner 側の ZZZ が担う。
+    if (outcome === 'ONGOING' || outcome === 'LOCAL_DOWN') {
       resultStartedAt.current = null;
       useGameStore.setState({ result: null });
       return;
@@ -882,7 +902,10 @@ export function BossArenaScene({
 
   useFrame((_, delta) => {
     // 決着後は戦闘時間を進めず、結果ムービーの経過時間だけを更新する。
-    if (outcome !== 'ONGOING') {
+    //
+    // `LOCAL_DOWN` (操作キャラが倒れただけ) は含めない。判定は
+    // isBattleSettled が持つ (#158)。
+    if (isBattleSettled(outcome)) {
       // 技の演出はここで捨てる。この先で ref を更新しないまま
       // DumbbellSlam が自分の useFrame で読み続けるため、消さないと
       // 決着ムービーのあいだ中ダンベルと衝撃波が止まったまま残る。
@@ -919,6 +942,10 @@ export function BossArenaScene({
         input: toCameraRelativeMovement(move.input, cameraInputYawRef.current),
       });
     }
+
+    // 人間が操作していないキャラへ NPC の入力を流す。時間を進める前に
+    // 送るので、人間の入力と同じフレームで処理される。
+    if (battle !== null && npcDriver !== null) npcDriver.tick(battle);
 
     // ローカルはここで時間が進み、その場で STATE が流れる。リモートは
     // サーバーが進めるので tick() は何もしない。
